@@ -2,7 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:beat_that/services/auth_service.dart';
 import 'package:beat_that/service_locator.dart';
+import 'package:beat_that/screens/navigation_shell.dart';
 import 'package:beat_that/screens/home_screen.dart';
+import 'package:beat_that/screens/explore/explore_screen.dart';
+import 'package:beat_that/screens/stats/stats_screen.dart';
+import 'package:beat_that/screens/profile/profile_screen.dart';
 import 'package:beat_that/screens/auth/login_screen.dart';
 import 'package:beat_that/screens/auth/signup_screen.dart';
 
@@ -136,29 +140,76 @@ class AppRouter {
         ),
 
         /// Protected routes (require logged in)
-        /// Home uses Fade Through with Z-axis hierarchy: shows app structure change
-        GoRoute(
-          path: AppRoutes.home,
-          name: 'home',
-          pageBuilder: (context, state) {
-            return CustomTransitionPage(
-              key: state.pageKey,
-              child: const HomeScreen(),
-              transitionsBuilder: (context, animation, secondaryAnimation, child) {
-                // Fade Through Z-axis: fade in + scale to show hierarchy elevation
-                final scaleTween = Tween(begin: 0.92, end: 1.0);
-                final fadeTween = CurveTween(curve: Curves.easeInOutCirc);
-                
-                return FadeTransition(
-                  opacity: fadeTween.animate(animation),
-                  child: ScaleTransition(
-                    scale: animation.drive(scaleTween),
-                    child: child,
-                  ),
-                );
-              },
-            );
+        /// Home navigation shell with persistent bottom navigation bar using StatefulShellRoute
+        StatefulShellRoute.indexedStack(
+          builder: (context, state, navigationShell) {
+            return NavigationShell(navigationShell: navigationShell);
           },
+          branches: [
+            /// Home Tab Branch
+            StatefulShellBranch(
+              routes: [
+                GoRoute(
+                  path: AppRoutes.home,
+                  name: 'home',
+                  pageBuilder: (context, state) {
+                    return NoTransitionPage(
+                      key: state.pageKey,
+                      child: const HomeScreen(),
+                    );
+                  },
+                ),
+              ],
+            ),
+            
+            /// Explore Tab Branch
+            StatefulShellBranch(
+              routes: [
+                GoRoute(
+                  path: '/explore',
+                  name: 'explore',
+                  pageBuilder: (context, state) {
+                    return NoTransitionPage(
+                      key: state.pageKey,
+                      child: const ExploreScreen(),
+                    );
+                  },
+                ),
+              ],
+            ),
+            
+            /// Stats Tab Branch
+            StatefulShellBranch(
+              routes: [
+                GoRoute(
+                  path: '/stats',
+                  name: 'stats',
+                  pageBuilder: (context, state) {
+                    return NoTransitionPage(
+                      key: state.pageKey,
+                      child: const StatsScreen(),
+                    );
+                  },
+                ),
+              ],
+            ),
+            
+            /// Profile Tab Branch
+            StatefulShellBranch(
+              routes: [
+                GoRoute(
+                  path: '/profile',
+                  name: 'profile',
+                  pageBuilder: (context, state) {
+                    return NoTransitionPage(
+                      key: state.pageKey,
+                      child: const ProfileScreen(),
+                    );
+                  },
+                ),
+              ],
+            ),
+          ],
         ),
       ],
 

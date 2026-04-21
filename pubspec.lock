@@ -448,6 +448,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.3.0"
+  persistent_bottom_nav_bar_v2:
+    dependency: "direct main"
+    description:
+      name: persistent_bottom_nav_bar_v2
+      sha256: f81677c2988d2d373dce0a67e02adfacc2ce8f7dbddb3340676418b440ce7537
+      url: "https://pub.dev"
+    source: hosted
+    version: "6.3.2"
   platform:
     dependency: transitive
     description:
@@ -521,7 +529,7 @@ packages:
     source: hosted
     version: "0.28.0"
   shared_preferences:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: shared_preferences
       sha256: c3025c5534b01739267eb7d76959bbc25a6d10f6988e1c2a3036940133dd10bf

@@ -1,8 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:beat_that/services/auth_service.dart';
+import 'package:beat_that/services/theme_service.dart';
+import 'package:beat_that/constants/app_enums.dart';
 import 'package:beat_that/routes/app_router.dart';
 import 'package:beat_that/service_locator.dart';
+import 'package:beat_that/bloc/theme_bloc.dart';
+import 'package:beat_that/constants/app_themes.dart';
 
 // It's handy to then extract the Supabase client in a variable for later uses
 final supabase = Supabase.instance.client;
@@ -15,8 +20,11 @@ void main() async {
     anonKey: 'sb_publishable_uSCOer4EsaTo9eDc-TedqQ_bIGWkULu',
   );
 
-  // Register services with GetIt
-  setupServiceLocator();
+  // Initialize async services
+  final preferencesService = await initializeAsyncServices();
+
+  // Register all services with initialized dependencies
+  setupServiceLocator(preferencesService);
 
   runApp(const MyApp());
 }
@@ -29,13 +37,14 @@ class MyApp extends StatefulWidget {
 }
 
 /// App state for managing authentication and routing
-/// 
+///
 /// Following GoRouter best practices:
 /// - Listens to authentication state changes
 /// - Calls router.refresh() to re-evaluate redirect logic when auth state changes
 /// - Uses debouncing to prevent excessive route refresh cycles
 class _MyAppState extends State<MyApp> {
   late final AppRouter _appRouter;
+  late final ThemeBloc _themeBloc;
   DateTime? _lastRefreshTime;
 
   @override
@@ -43,7 +52,11 @@ class _MyAppState extends State<MyApp> {
     super.initState();
     // Get AppRouter from service locator
     _appRouter = getIt<AppRouter>();
-    
+
+    // Create ThemeBloc with ThemeService from service locator
+    _themeBloc = ThemeBloc(themeService: getIt<ThemeService>());
+    _themeBloc.add(const LoadThemeEvent());
+
     // Get AuthService from service locator to listen to auth state changes
     final authService = getIt<AuthService>();
 
@@ -57,7 +70,7 @@ class _MyAppState extends State<MyApp> {
       if (_lastRefreshTime == null ||
           now.difference(_lastRefreshTime!).inMilliseconds > 500) {
         _lastRefreshTime = now;
-        
+
         // Trigger GoRouter's redirect logic
         // The top-level redirect in AppRouter will evaluate the new auth state
         // and navigate to the appropriate route (login, home, etc.)
@@ -68,13 +81,22 @@ class _MyAppState extends State<MyApp> {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp.router(
-      title: 'Beat That',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-        useMaterial3: true,
+    return BlocProvider<ThemeBloc>.value(
+      value: _themeBloc,
+      child: BlocBuilder<ThemeBloc, ThemeState>(
+        bloc: _themeBloc,
+        builder: (context, themeState) {
+          return MaterialApp.router(
+            title: 'Beat That',
+            theme: AppThemes.lightTheme,
+            darkTheme: AppThemes.darkTheme,
+            themeMode: themeState.themeMode.isDark
+                ? ThemeMode.dark
+                : ThemeMode.light,
+            routerConfig: _appRouter.router,
+          );
+        },
       ),
-      routerConfig: _appRouter.router,
     );
   }
 }

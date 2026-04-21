@@ -14,7 +14,7 @@ TextStyle getAuthTextFormFieldStyle() {
 ButtonStyle getAuthElevatedButtonStyle() {
   return ElevatedButton.styleFrom(
     padding: const EdgeInsets.symmetric(vertical: 12),
-    backgroundColor: AppColors.blue,
+    backgroundColor: AppColors.electricMagenta,
     disabledBackgroundColor: AppColors.greyMedium,
     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
     elevation: 4,

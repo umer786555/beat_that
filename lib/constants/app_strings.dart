@@ -51,4 +51,9 @@ class AppStrings {
 
   // Success Messages
   static const String accountCreatedSuccessfullyPleaseCheckYourEmailToConfirm = 'Account created successfully! Please check your email to confirm.';
+
+  // Profile Screen
+  static const String failedToLoadProfile = 'Failed to load profile';
+  static const String failedToChangeTheme = 'Failed to change theme';
+  static const String logoutFailed = 'Logout failed';
 }

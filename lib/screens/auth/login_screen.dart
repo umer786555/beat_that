@@ -67,10 +67,10 @@ class LoginScreen extends StatelessWidget {
                       AppStrings.beatThat,
                       textAlign: TextAlign.center,
                       style: TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.w800,
+                        fontSize: 28,
+                        fontWeight: FontWeight.w900,
                         letterSpacing: -0.5,
-                        color: AppColors.yellow,
+                        color: AppColors.electricMagenta,
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -80,7 +80,7 @@ class LoginScreen extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.w500,
-                        color: AppColors.yellow,
+                        color: AppColors.white,
                         letterSpacing: 0.3,
                       ),
                     ),
@@ -129,7 +129,7 @@ class LoginScreen extends StatelessWidget {
                             obscurePassword
                                 ? Icons.visibility_off_outlined
                                 : Icons.visibility_outlined,
-                            color: AppColors.blue,
+                            color: AppColors.electricMagenta,
                             size: 20,
                           ),
                           onPressed: isLoading
@@ -199,7 +199,7 @@ class LoginScreen extends StatelessWidget {
                             style: TextStyle(
                               color: isLoading
                                   ? AppColors.white
-                                  : AppColors.blue,
+                                : AppColors.cyan,
                               fontWeight: FontWeight.w600,
                               fontSize: 14,
                               letterSpacing: 0.3,
@@ -238,7 +238,7 @@ class LoginScreen extends StatelessWidget {
                               style: TextStyle(
                                 color: isLoading
                                     ? AppColors.white
-                                    : AppColors.blue,
+                                    : AppColors.cyan,
                                 fontWeight: FontWeight.w700,
                                 fontSize: 14,
                                 letterSpacing: 0.3,

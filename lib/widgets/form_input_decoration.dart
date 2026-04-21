@@ -31,7 +31,7 @@ InputDecoration buildFormFieldDecoration({
       padding: const EdgeInsets.only(left: 16, right: 12),
       child: Icon(
         prefixIconData,
-        color: AppColors.blue,
+        color: AppColors.electricMagenta,
         size: prefixIconSize,
       ),
     ),
@@ -68,7 +68,7 @@ InputDecoration buildFormFieldDecoration({
     focusedBorder: OutlineInputBorder(
       borderRadius: borderRadius,
       borderSide: const BorderSide(
-        color: AppColors.blue,
+        color: AppColors.cyan,
         width: 2.0,
       ),
       gapPadding: gapPadding,

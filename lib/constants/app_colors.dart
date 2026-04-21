@@ -8,6 +8,12 @@ class AppColors {
   static const Color purpleLight = Color(0xFF9C27B0);
   static const Color purpleDark = Color(0xFF512DA8);
 
+  // Electric Colors (modern, Gen Z appealing, 2026 trends)
+  static const Color electricMagenta = Color(0xFFE61E63);  // Vibrant magenta/pink for primary accent
+  static const Color electricPurple = Color(0xFF8B2BE2);   // Electric purple for dark theme
+  static const Color cyan = Color(0xFF00D9FF);             // Neon cyan for secondary/cyberpunk vibe
+  static const Color neonPink = Color(0xFFF011F0);         // Hot neon pink alternative
+
   // Neutral Colors
   static const Color white = Colors.white;
   static const Color black = Colors.black;
