@@ -8,14 +8,14 @@ part 'theme_state.dart';
 
 class ThemeBloc extends Bloc<ThemeEvent, ThemeState> {
   final ThemeService _themeService;
+  AppThemeMode savedTheme = AppThemeMode.dark;
 
   ThemeBloc({required ThemeService themeService})
-      : _themeService = themeService,
-        super(const ThemeState(themeMode: AppThemeMode.dark)) {
+    : _themeService = themeService,
+      super(const ThemeState(themeMode: AppThemeMode.dark)) {
     // Register event handlers
     on<LoadThemeEvent>(_onLoadTheme);
     on<ToggleThemeEvent>(_onToggleTheme);
-    on<SetThemeEvent>(_onSetTheme);
   }
 
   /// Load saved theme preference on app startup
@@ -25,6 +25,7 @@ class ThemeBloc extends Bloc<ThemeEvent, ThemeState> {
   ) async {
     try {
       final savedTheme = await _themeService.getThemeMode();
+      this.savedTheme = savedTheme;
       emit(ThemeState(themeMode: savedTheme));
     } catch (e) {
       // Default to dark theme on error
@@ -40,14 +41,5 @@ class ThemeBloc extends Bloc<ThemeEvent, ThemeState> {
     final newMode = state.themeMode.toggle();
     await _themeService.setThemeMode(newMode);
     emit(state.copyWith(themeMode: newMode));
-  }
-
-  /// Set a specific theme mode
-  Future<void> _onSetTheme(
-    SetThemeEvent event,
-    Emitter<ThemeState> emit,
-  ) async {
-    await _themeService.setThemeMode(event.themeMode);
-    emit(ThemeState(themeMode: event.themeMode));
   }
 }

@@ -45,4 +45,11 @@
     </queries>
     <!-- Required to fetch data from the internet. -->
     <uses-permission android:name="android.permission.INTERNET" />
+    
+    <!-- Required for video recording -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    
+    <!-- Required for video uploading -->
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
 </manifest>

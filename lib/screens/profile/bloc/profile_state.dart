@@ -10,15 +10,26 @@ sealed class ProfileState extends Equatable {
 final class ProfileInitial extends ProfileState {}
 
 final class ProfileLoaded extends ProfileState {
-  final AppThemeMode currentTheme;
+  final bool cameraPermissionEnabled;
+  final bool galleryPermissionEnabled;
 
-  const ProfileLoaded({required this.currentTheme});
+  const ProfileLoaded({
+    required this.cameraPermissionEnabled,
+    required this.galleryPermissionEnabled,
+  });
 
   @override
-  List<Object> get props => [currentTheme];
+  List<Object> get props => [cameraPermissionEnabled, galleryPermissionEnabled];
 
-  ProfileLoaded copyWith({AppThemeMode? currentTheme}) {
-    return ProfileLoaded(currentTheme: currentTheme ?? this.currentTheme);
+  ProfileLoaded copyWith({
+    AppThemeMode? currentTheme,
+    bool? cameraPermissionEnabled,
+    bool? galleryPermissionEnabled,
+  }) {
+    return ProfileLoaded(
+      cameraPermissionEnabled: cameraPermissionEnabled ?? this.cameraPermissionEnabled,
+      galleryPermissionEnabled: galleryPermissionEnabled ?? this.galleryPermissionEnabled,
+    );
   }
 }
 
@@ -32,3 +43,27 @@ final class ProfileError extends ProfileState {
   @override
   List<Object> get props => [message];
 }
+
+
+final class CameraPermissionDenied extends ProfileState {
+  final bool isPermanentlyDenied;
+
+  const CameraPermissionDenied({
+    this.isPermanentlyDenied = false,
+  });
+
+  @override
+  List<Object> get props => [ isPermanentlyDenied];
+}
+
+
+// Video upload states
+final class RecordVideoMode extends ProfileState {
+  const RecordVideoMode();
+}
+
+final class UploadFromGalleryMode extends ProfileState {
+  const UploadFromGalleryMode();
+}
+
+

@@ -1,11 +1,16 @@
+import 'package:beat_that/widgets/permission_denied_card.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:app_settings/app_settings.dart';
 import 'package:beat_that/constants/app_colors.dart';
 import 'package:beat_that/constants/app_enums.dart';
-import 'package:beat_that/service_locator.dart';
+import 'package:beat_that/constants/app_strings.dart';
 import 'package:beat_that/services/auth_service.dart';
 import 'package:beat_that/bloc/theme_bloc.dart';
 import 'package:beat_that/screens/profile/bloc/profile_bloc.dart';
+import 'package:beat_that/screens/profile/widgets/upload_video_bottom_sheet.dart';
 
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
@@ -17,76 +22,162 @@ class ProfileScreen extends StatelessWidget {
 
     return BlocProvider<ProfileBloc>(
       create: (context) => ProfileBloc()..add(const LoadProfileEvent()),
-      child: BlocListener<ProfileBloc, ProfileState>(
-        listenWhen: (prev, curr) {
-          // Only listen when theme changes
-          if (prev is ProfileLoaded && curr is ProfileLoaded) {
-            return prev.currentTheme != curr.currentTheme;
-          }
-          return false;
-        },
-        listener: (context, state) {
-          if (state is ProfileLoaded) {
-            // Update ThemeBloc when theme changes in ProfileBloc
-            context.read<ThemeBloc>().add(SetThemeEvent(state.currentTheme));
-          }
-        },
-        child: Scaffold(
-          appBar: AppBar(
-            title: const Text('Profile'),
-            actions: [
-              BlocBuilder<ProfileBloc, ProfileState>(
-                builder: (context, state) {
-                  if (state is ProfileLoaded) {
-                    final isDarkMode = state.currentTheme.isDark;
-                    return IconButton(
-                      icon: Icon(
-                        isDarkMode ? Icons.light_mode : Icons.dark_mode,
-                      ),
-                      onPressed: () {
-                        final newTheme = state.currentTheme.toggle();
-                        context.read<ProfileBloc>().add(
-                          ChangeThemeEvent(themeMode: newTheme),
-                        );
-                      },
-                    );
-                  }
-                  return const SizedBox.shrink();
+      child: BlocConsumer<ProfileBloc, ProfileState>(
+        listener: (context, state) {},
+        // Build UI based on state
+        builder: (context, state) {
+          final isDark = context.watch<ThemeBloc>().state.themeMode.isDark;
+          if (state is CameraPermissionDenied) {
+            return Scaffold(
+              appBar: AppBar(title: const Text(AppStrings.profile)),
+              body: PermissionDeniedCard(
+                icon: Icons.camera_alt,
+                title: AppStrings.cameraAccessRequired,
+                body: AppStrings.cameraPermissionBody,
+                buttonText: AppStrings.openSettings,
+                onButtonPressed: () {
+                  AppSettings.openAppSettings(type: AppSettingsType.camera);
                 },
               ),
-            ],
-          ),
-          body: Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.max,
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                const Icon(Icons.person, color: AppColors.green, size: 80),
-                const SizedBox(height: 24),
-                const Text(
-                  'Profile',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+            );
+          }
+          if (state is ProfileLoaded) {
+            return GestureDetector(
+              onTap: () {
+                HapticFeedback.mediumImpact();
+              },
+              child: Scaffold(
+                appBar: AppBar(
+                  title: const Text(AppStrings.profile),
+                  actions: [
+                    IconButton(
+                      icon: Icon(isDark ? Icons.light_mode : Icons.dark_mode),
+                      onPressed: () {
+                        context.read<ThemeBloc>().add(ToggleThemeEvent());
+                      },
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 12),
-                if (user?.email != null)
-                  Text(
-                    user!.email!,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(fontSize: 16, color: AppColors.grey),
+                body: Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.max,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      const Text(
+                        AppStrings.profile,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
                   ),
-
-                // Settings Section
-                const Text(
-                  'Settings',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
-                const SizedBox(height: 32),
-              ],
-            ),
-          ),
-        ),
+                floatingActionButton: FloatingActionButton.extended(
+                  onPressed: () async {
+                    HapticFeedback.mediumImpact();
+                    // Show upload options bottom sheet
+
+                    if (state.cameraPermissionEnabled == true) {
+                      await showModalBottomSheet(
+                        context: context,
+                        builder: (context) => UploadVideoBottomSheet(
+                          onRecordVideoSelected: () async =>
+                              await _openCameraAndHandleVideo(context),
+                          onUploadFromGallerySelected: () async =>
+                              await _openGalleryAndHandleVideo(context),
+                        ),
+                        isScrollControlled: true,
+                        shape: const RoundedRectangleBorder(
+                          borderRadius: BorderRadius.vertical(
+                            top: Radius.circular(20),
+                          ),
+                        ),
+                      );
+                      return;
+                    } else {
+                      // Request camera permission
+                      context.read<ProfileBloc>().add(
+                        const RequestCameraPermissionEvent(),
+                      );
+                    }
+                  },
+                  backgroundColor: isDark
+                      ? AppColors.cyan.withValues(
+                          alpha: 0.9,
+                        ) // Neon cyan for dark theme
+                      : AppColors
+                            .electricMagenta, // Vibrant magenta for light theme
+                  foregroundColor: isDark
+                      ? AppColors
+                            .white // High contrast with bright cyan
+                      : AppColors.white, // Elegant contrast with magenta
+                  icon: const Icon(Icons.videocam),
+                  label: const Text(AppStrings.recordVideo),
+                  tooltip: AppStrings.recordVideo,
+                ),
+              ),
+            );
+          }
+
+          // Loading state
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        },
       ),
     );
+  }
+
+  static Future<void> _openCameraAndHandleVideo(BuildContext context) async {
+    final video = await _openCamera(context);
+
+    if (video != null && context.mounted) {
+      // TODO: Handle the recorded video
+      // e.g., navigate to processing screen, upload, save, etc.
+      print('Video recorded: ${video.path}');
+    }
+  }
+
+  static Future<void> _openGalleryAndHandleVideo(BuildContext context) async {
+    final video = await _openGallery(context);
+
+    if (video != null && context.mounted) {
+      // TODO: Handle the uploaded video
+      // e.g., navigate to processing screen, upload, save, etc.
+      print('Video uploaded: ${video.path}');
+    }
+  }
+
+  static Future<XFile?> _openCamera(BuildContext context) async {
+    final ImagePicker picker = ImagePicker();
+
+    try {
+      // Open camera to record video
+      // Note: Videos are saved to app cache and only persist temporarily.
+      // If you need to keep the video, move it to a permanent location.
+      final XFile? video = await picker.pickVideo(
+        source: ImageSource.camera,
+        maxDuration: const Duration(minutes: 3), // Optional: set max duration
+      );
+      return video;
+    } catch (e) {
+      print('Error opening camera: $e');
+      return null;
+    }
+  }
+
+  static Future<XFile?> _openGallery(BuildContext context) async {
+    final ImagePicker picker = ImagePicker();
+
+    try {
+      // Open gallery to select video
+      final XFile? video = await picker.pickVideo(source: ImageSource.gallery);
+      return video;
+    } catch (e) {
+      print('Error opening gallery: $e');
+      return null;
+    }
   }
 }

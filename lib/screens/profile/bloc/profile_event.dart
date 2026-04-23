@@ -11,15 +11,22 @@ class LoadProfileEvent extends ProfileEvent {
   const LoadProfileEvent();
 }
 
-class ChangeThemeEvent extends ProfileEvent {
-  final AppThemeMode themeMode;
-
-  const ChangeThemeEvent({required this.themeMode});
-
-  @override
-  List<Object> get props => [themeMode];
-}
-
 class LogoutEvent extends ProfileEvent {
   const LogoutEvent();
+}
+
+class RequestCameraPermissionEvent extends ProfileEvent {
+  const RequestCameraPermissionEvent();
+}
+
+class RequestGalleryPermissionEvent extends ProfileEvent {
+  const RequestGalleryPermissionEvent();
+}
+
+class RecordVideoSelected extends ProfileEvent {
+  const RecordVideoSelected();
+}
+
+class UploadFromGallerySelected extends ProfileEvent {
+  const UploadFromGallerySelected();
 }

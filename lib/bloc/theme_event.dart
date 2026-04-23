@@ -16,10 +16,9 @@ class ToggleThemeEvent extends ThemeEvent {
 }
 
 class SetThemeEvent extends ThemeEvent {
-  final AppThemeMode themeMode;
 
-  const SetThemeEvent(this.themeMode);
+  const SetThemeEvent();
 
   @override
-  List<Object?> get props => [themeMode];
+  List<Object?> get props => [];
 }

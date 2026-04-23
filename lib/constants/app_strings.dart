@@ -56,4 +56,12 @@ class AppStrings {
   static const String failedToLoadProfile = 'Failed to load profile';
   static const String failedToChangeTheme = 'Failed to change theme';
   static const String logoutFailed = 'Logout failed';
+  static const String profile = 'Profile';
+  static const String settings = 'Settings';
+  static const String recordVideo = 'Record Video';
+
+  // Camera Permission Strings
+  static const String cameraAccessRequired = 'Camera Access Required';
+  static const String cameraPermissionBody = 'To record videos, we need access to your camera. Please enable camera permissions in app settings.';
+  static const String openSettings = 'Open Settings';
 }

@@ -46,10 +46,10 @@ class AppThemes {
         fontWeight: FontWeight.bold,
       ),
       bodyLarge: TextStyle(
-        color: AppColors.textDarkGray,
+        color: AppColors.black,
       ),
       bodyMedium: TextStyle(
-        color: AppColors.textDarkGray,
+        color: AppColors.black,
       ),
     ),
     inputDecorationTheme: InputDecorationTheme(
@@ -79,14 +79,14 @@ class AppThemes {
     appBarTheme: AppBarTheme(
       backgroundColor: AppColors.black,
       foregroundColor: AppColors.white,
-      elevation: 0,
+      elevation: 1,
       centerTitle: true,
     ),
     cardTheme: CardThemeData(
       color: AppColors.black,
-      elevation: 0,
+      elevation: 1,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(8),
         side: BorderSide(color: AppColors.electricPurple.withValues(alpha: 0.3), width: 1),
       ),
     ),
@@ -110,10 +110,10 @@ class AppThemes {
         fontWeight: FontWeight.bold,
       ),
       bodyLarge: TextStyle(
-        color: Color(0xFFBDBDBD),
+        color: AppColors.white,
       ),
       bodyMedium: TextStyle(
-        color: Color(0xFFBDBDBD),
+        color: AppColors.white,
       ),
     ),
     inputDecorationTheme: InputDecorationTheme(

@@ -26,21 +26,18 @@ class AppRoutes {
 /// - Top-level redirect for app-wide authentication checks
 /// - Returns null to allow navigation, or a location string to redirect
 /// - Uses fullPath as the source of truth during route transitions
-/// 
+///
 /// See: https://pub.dev/packages/go_router
 class AppRouter {
   AppRouter();
 
   /// List of public (authentication) routes that don't require login
-  static const List<String> _publicRoutes = [
-    AppRoutes.login,
-    AppRoutes.signup,
-  ];
+  static const List<String> _publicRoutes = [AppRoutes.login, AppRoutes.signup];
 
   GoRouter? _routerInstance;
 
   /// Get or create the GoRouter instance
-  /// 
+  ///
   /// The router is lazily initialized on first access to ensure that
   /// the service locator is fully set up before the router accesses dependencies.
   GoRouter get router {
@@ -49,23 +46,25 @@ class AppRouter {
       debugLogDiagnostics: true,
 
       /// Top-level redirect logic for authentication state
-      /// 
+      ///
       /// This is called on every route change before any route-level redirects.
       /// It's the single source of truth for authentication-based navigation decisions.
-      /// 
+      ///
       /// Returns:
       /// - null: Allow navigation to the intended route
       /// - '/path': Redirect to a different route
       redirect: (BuildContext context, GoRouterState state) {
         final authService = getIt<AuthService>();
         final isLoggedIn = authService.isLoggedIn();
-        
+
         // Use fullPath as the source of truth during transitions (name may be null)
         // fullPath corresponds to the route path, not the name
         final currentPath = state.fullPath ?? '';
-        
+
         // Determine if the current route is a public authentication route
-        final isPublicRoute = _publicRoutes.any((route) => currentPath.startsWith(route));
+        final isPublicRoute = _publicRoutes.any(
+          (route) => currentPath.startsWith(route),
+        );
 
         // Rule 1: If not logged in and trying to access a protected route, redirect to login
         if (!isLoggedIn && !isPublicRoute) {
@@ -97,19 +96,20 @@ class AppRouter {
             return CustomTransitionPage(
               key: state.pageKey,
               child: const LoginScreen(),
-              transitionsBuilder: (context, animation, secondaryAnimation, child) {
-                // Fade + Scale transition: 80% → 100%
-                final scaleTween = Tween(begin: 0.8, end: 1.0);
-                final fadeTween = CurveTween(curve: Curves.easeInOutCirc);
-                
-                return FadeTransition(
-                  opacity: fadeTween.animate(animation),
-                  child: ScaleTransition(
-                    scale: animation.drive(scaleTween),
-                    child: child,
-                  ),
-                );
-              },
+              transitionsBuilder:
+                  (context, animation, secondaryAnimation, child) {
+                    // Fade + Scale transition: 80% → 100%
+                    final scaleTween = Tween(begin: 0.8, end: 1.0);
+                    final fadeTween = CurveTween(curve: Curves.easeInOutCirc);
+
+                    return FadeTransition(
+                      opacity: fadeTween.animate(animation),
+                      child: ScaleTransition(
+                        scale: animation.drive(scaleTween),
+                        child: child,
+                      ),
+                    );
+                  },
             );
           },
         ),
@@ -126,7 +126,7 @@ class AppRouter {
                 // Fade Through: outgoing fades out, incoming fades in + scales (92% → 100%)
                 final scaleTween = Tween(begin: 0.92, end: 1.0);
                 final fadeTween = Tween(begin: 0.0, end: 1.0);
-                
+
                 return FadeTransition(
                   opacity: fadeTween.animate(animation),
                   child: ScaleTransition(
@@ -161,7 +161,7 @@ class AppRouter {
                 ),
               ],
             ),
-            
+
             /// Explore Tab Branch
             StatefulShellBranch(
               routes: [
@@ -177,7 +177,7 @@ class AppRouter {
                 ),
               ],
             ),
-            
+
             /// Stats Tab Branch
             StatefulShellBranch(
               routes: [
@@ -193,7 +193,7 @@ class AppRouter {
                 ),
               ],
             ),
-            
+
             /// Profile Tab Branch
             StatefulShellBranch(
               routes: [
@@ -216,9 +216,7 @@ class AppRouter {
       /// Error handling for undefined routes
       errorBuilder: (context, state) => Scaffold(
         appBar: AppBar(title: const Text('Error')),
-        body: Center(
-          child: Text('Page not found: ${state.error}'),
-        ),
+        body: Center(child: Text('Page not found: ${state.error}')),
       ),
     );
     return _routerInstance!;
