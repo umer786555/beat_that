@@ -26,7 +26,7 @@ class SignupBloc extends Bloc<SignupEvent, SignupState> {
 
   SignupBloc() : super(const SignupInitial()) {
     // Get AuthService from service locator
-    authService = getIt<AuthService>();
+    authService = locator<AuthService>();
     // Register event handlers
     on<EmailChanged>(_onEmailChanged);
     on<PasswordChanged>(_onPasswordChanged);

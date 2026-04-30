@@ -1,3 +1,4 @@
+import 'package:beat_that/screens/edit_uploaded_video.dart/edit_uploaded_video_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:beat_that/services/auth_service.dart';
@@ -18,6 +19,9 @@ class AppRoutes {
 
   // App routes
   static const String home = '/home';
+
+  // Profile routes
+  static const String editUploadedVideo = '/profile/edit-uploaded-video';
 }
 
 /// GoRouter configuration for the application
@@ -54,7 +58,7 @@ class AppRouter {
       /// - null: Allow navigation to the intended route
       /// - '/path': Redirect to a different route
       redirect: (BuildContext context, GoRouterState state) {
-        final authService = getIt<AuthService>();
+        final authService = locator<AuthService>();
         final isLoggedIn = authService.isLoggedIn();
 
         // Use fullPath as the source of truth during transitions (name may be null)
@@ -203,9 +207,37 @@ class AppRouter {
                   pageBuilder: (context, state) {
                     return NoTransitionPage(
                       key: state.pageKey,
-                      child: const ProfileScreen(),
+                      child: ProfileScreen(),
                     );
                   },
+                  routes: [
+                    /// Edit Uploaded Video Child Route
+                    GoRoute(
+                      path: 'edit-uploaded-video',
+                      name: 'edit-uploaded-video',
+                      pageBuilder: (context, state) {
+                        final videoPath = state.extra as String;
+                        return CustomTransitionPage(
+                          key: state.pageKey,
+                          child: EditUploadedVideoScreen(videoPath: videoPath),
+                          transitionsBuilder:
+                              (context, animation, secondaryAnimation, child) {
+                                const begin = Offset(0.0, 1.0);
+                                const end = Offset.zero;
+                                final tween = Tween(begin: begin, end: end);
+                                final curvedAnimation = CurvedAnimation(
+                                  parent: animation,
+                                  curve: Curves.easeInOut,
+                                );
+                                return SlideTransition(
+                                  position: tween.animate(curvedAnimation),
+                                  child: child,
+                                );
+                              },
+                        );
+                      },
+                    ),
+                  ],
                 ),
               ],
             ),

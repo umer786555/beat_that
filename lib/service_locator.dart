@@ -4,22 +4,24 @@ import 'package:beat_that/services/auth_service.dart';
 import 'package:beat_that/services/theme_service.dart';
 import 'package:beat_that/services/preferences_service.dart';
 import 'package:beat_that/services/permission_service.dart';
+import 'package:beat_that/services/video_picker_service.dart';
+import 'package:beat_that/services/supabase_service.dart';
 import 'package:beat_that/routes/app_router.dart';
 
 /// Service Locator instance for dependency injection
-final getIt = GetIt.instance;
+final locator = GetIt.instance;
 
 /// Initialize async services that need to be ready before app runs
 /// Returns the initialized PreferencesService for registration in setupServiceLocator
 /// This should be called once during app initialization before setupServiceLocator()
-/// 
+///
 /// Throws exceptions if initialization fails (e.g., SharedPreferences access issues)
 Future<PreferencesService> initializeAsyncServices() async {
   try {
     // Initialize PreferencesService with SharedPreferences
     final preferencesService = PreferencesService();
     await preferencesService.init();
-    
+
     return preferencesService;
   } catch (e, stackTrace) {
     debugPrintStack(
@@ -31,37 +33,38 @@ Future<PreferencesService> initializeAsyncServices() async {
 }
 
 /// Set up the service locator (dependency injection)
-/// 
+///
 /// Register all application services here (synchronously).
 /// This function should be called once during app initialization, after initializeAsyncServices().
-/// 
+///
 /// Throws exceptions if service registration fails.
 void setupServiceLocator(PreferencesService preferencesService) {
   try {
     // Register PreferencesService (already initialized)
-    getIt.registerSingleton<PreferencesService>(preferencesService);
+    locator.registerSingleton<PreferencesService>(preferencesService);
 
     // Register ThemeService (depends on PreferencesService)
-    getIt.registerSingleton<ThemeService>(
+    locator.registerSingleton<ThemeService>(
       SharedPreferencesThemeService(
-        preferencesService: getIt<PreferencesService>(),
+        preferencesService: locator<PreferencesService>(),
       ),
     );
 
     // Register AuthService
-    getIt.registerSingleton<AuthService>(
-      AuthService(),
-    );
+    locator.registerSingleton<AuthService>(AuthService());
+
+    // Register SupabaseService
+    locator.registerSingleton<SupabaseService>(SupabaseService());
 
     // Register AppRouter
-    getIt.registerSingleton<AppRouter>(
-      AppRouter(),
-    );
+    locator.registerSingleton<AppRouter>(AppRouter());
 
     // Register PermissionService
-    getIt.registerSingleton<PermissionService>(
-      PermissionService(),
-    );
+    locator.registerSingleton<PermissionService>(PermissionService());
+
+    // Register VideoPickerService
+    locator.registerSingleton<VideoPickerService>(VideoPickerService());
+
   } catch (e, stackTrace) {
     debugPrintStack(
       label: 'ERROR: Failed to register services in service locator',

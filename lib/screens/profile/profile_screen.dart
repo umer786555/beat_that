@@ -1,13 +1,15 @@
 import 'package:beat_that/widgets/permission_denied_card.dart';
+import 'package:beat_that/service_locator.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:app_settings/app_settings.dart';
+import 'package:go_router/go_router.dart';
 import 'package:beat_that/constants/app_colors.dart';
 import 'package:beat_that/constants/app_enums.dart';
 import 'package:beat_that/constants/app_strings.dart';
 import 'package:beat_that/services/auth_service.dart';
+import 'package:beat_that/services/video_picker_service.dart';
 import 'package:beat_that/bloc/theme_bloc.dart';
 import 'package:beat_that/screens/profile/bloc/profile_bloc.dart';
 import 'package:beat_that/screens/profile/widgets/upload_video_bottom_sheet.dart';
@@ -17,7 +19,8 @@ class ProfileScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final authService = getIt<AuthService>();
+    final authService = locator<AuthService>();
+    final videoPickerService = locator<VideoPickerService>();
     final user = authService.getCurrentUser();
 
     return BlocProvider<ProfileBloc>(
@@ -82,11 +85,24 @@ class ProfileScreen extends StatelessWidget {
                     if (state.cameraPermissionEnabled == true) {
                       await showModalBottomSheet(
                         context: context,
-                        builder: (context) => UploadVideoBottomSheet(
+                        builder: (_) => UploadVideoBottomSheet(
                           onRecordVideoSelected: () async =>
-                              await _openCameraAndHandleVideo(context),
+                              await videoPickerService.openCameraAndHandleVideo(
+                                (video) {
+                                  GoRouter.of(context).pushNamed(
+                                    'edit-uploaded-video',
+                                    extra: video.path,
+                                  );
+                                },
+                              ),
                           onUploadFromGallerySelected: () async =>
-                              await _openGalleryAndHandleVideo(context),
+                              await videoPickerService
+                                  .openGalleryAndHandleVideo((video) {
+                                    GoRouter.of(context).pushNamed(
+                                      'edit-uploaded-video',
+                                      extra: video.path,
+                                    );
+                                  }),
                         ),
                         isScrollControlled: true,
                         shape: const RoundedRectangleBorder(
@@ -128,56 +144,5 @@ class ProfileScreen extends StatelessWidget {
         },
       ),
     );
-  }
-
-  static Future<void> _openCameraAndHandleVideo(BuildContext context) async {
-    final video = await _openCamera(context);
-
-    if (video != null && context.mounted) {
-      // TODO: Handle the recorded video
-      // e.g., navigate to processing screen, upload, save, etc.
-      print('Video recorded: ${video.path}');
-    }
-  }
-
-  static Future<void> _openGalleryAndHandleVideo(BuildContext context) async {
-    final video = await _openGallery(context);
-
-    if (video != null && context.mounted) {
-      // TODO: Handle the uploaded video
-      // e.g., navigate to processing screen, upload, save, etc.
-      print('Video uploaded: ${video.path}');
-    }
-  }
-
-  static Future<XFile?> _openCamera(BuildContext context) async {
-    final ImagePicker picker = ImagePicker();
-
-    try {
-      // Open camera to record video
-      // Note: Videos are saved to app cache and only persist temporarily.
-      // If you need to keep the video, move it to a permanent location.
-      final XFile? video = await picker.pickVideo(
-        source: ImageSource.camera,
-        maxDuration: const Duration(minutes: 3), // Optional: set max duration
-      );
-      return video;
-    } catch (e) {
-      print('Error opening camera: $e');
-      return null;
-    }
-  }
-
-  static Future<XFile?> _openGallery(BuildContext context) async {
-    final ImagePicker picker = ImagePicker();
-
-    try {
-      // Open gallery to select video
-      final XFile? video = await picker.pickVideo(source: ImageSource.gallery);
-      return video;
-    } catch (e) {
-      print('Error opening gallery: $e');
-      return null;
-    }
   }
 }

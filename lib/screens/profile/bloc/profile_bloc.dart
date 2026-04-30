@@ -14,6 +14,7 @@ final getIt = GetIt.instance;
 class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
   
   final permissionService = getIt<PermissionService>();
+  
   ProfileBloc() : super(ProfileInitial()) {
     on<LoadProfileEvent>(_onLoadProfile);
     on<LogoutEvent>(_onLogout);

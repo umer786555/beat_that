@@ -51,14 +51,14 @@ class _MyAppState extends State<MyApp> {
   void initState() {
     super.initState();
     // Get AppRouter from service locator
-    _appRouter = getIt<AppRouter>();
+    _appRouter = locator<AppRouter>();
 
     // Create ThemeBloc with ThemeService from service locator
-    _themeBloc = ThemeBloc(themeService: getIt<ThemeService>());
+    _themeBloc = ThemeBloc(themeService: locator<ThemeService>());
     _themeBloc.add(const LoadThemeEvent());
 
     // Get AuthService from service locator to listen to auth state changes
-    final authService = getIt<AuthService>();
+    final authService = locator<AuthService>();
 
     // Listen to authentication state changes from Supabase
     // When auth state changes (login, logout, session expired, etc.),

@@ -6,7 +6,7 @@ import 'login_event.dart';
 import 'login_state.dart';
 
 /// Bloc for managing login screen state and logic
-/// 
+///
 /// Handles:
 /// - Email and password input
 /// - Form validation
@@ -23,7 +23,7 @@ class LoginBloc extends Bloc<LoginEvent, LoginState> {
 
   LoginBloc() : super(const LoginInitial()) {
     // Get AuthService from service locator
-    authService = getIt<AuthService>();
+    authService = locator<AuthService>();
     // Register event handlers
     on<EmailChanged>(_onEmailChanged);
     on<PasswordChanged>(_onPasswordChanged);

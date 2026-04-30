@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:persistent_bottom_nav_bar_v2/components/animated_icon_wrapper.dart';
 import 'package:persistent_bottom_nav_bar_v2/persistent_bottom_nav_bar_v2.dart';
@@ -68,6 +69,11 @@ class NavigationShell extends StatelessWidget {
 
       // Pass the navigation shell from GoRouter
       navigationShell: navigationShell,
+
+      // Trigger haptic feedback when switching tabs
+      onTabChanged: (index) {
+        HapticFeedback.mediumImpact();
+      },
 
       // Configure the navigation bar appearance with Style1
       navBarBuilder: (navBarConfig) => Style1BottomNavBar(

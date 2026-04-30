@@ -9,52 +9,38 @@ class HomeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final authService = getIt<AuthService>();
+    final authService = locator<AuthService>();
     final user = authService.getCurrentUser();
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Home'),
-        elevation: 0,
-      ),
+      appBar: AppBar(title: const Text('Home'), elevation: 0),
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(
-              Icons.check_circle,
-              color: AppColors.green,
-              size: 80,
-            ),
+            const Icon(Icons.check_circle, color: AppColors.green, size: 80),
             const SizedBox(height: 24),
             const Text(
               'Welcome to Beat That!',
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-              ),
+              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 12),
             if (user?.email != null)
               Text(
                 'Logged in as: ${user?.email}',
-                style: const TextStyle(
-                  fontSize: 16,
-                  color: AppColors.grey,
-                ),
+                style: const TextStyle(fontSize: 16, color: AppColors.grey),
               ),
             const SizedBox(height: 48),
             ElevatedButton.icon(
               onPressed: () async {
                 // Show loading dialog
                 if (!context.mounted) return;
-                
+
                 showDialog(
                   context: context,
                   barrierDismissible: false,
-                  builder: (dialogContext) => const Center(
-                    child: CircularProgressIndicator(),
-                  ),
+                  builder: (dialogContext) =>
+                      const Center(child: CircularProgressIndicator()),
                 );
 
                 try {
