@@ -6,17 +6,17 @@ import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:video_player/video_player.dart';
 
-part 'edit_uploaded_video_event.dart';
-part 'edit_uploaded_video_state.dart';
+part 'play_uploaded_video_event.dart';
+part 'play_uploaded_video_state.dart';
 
-class EditUploadedVideoBloc
-    extends Bloc<EditUploadedVideoEvent, EditUploadedVideoState> {
+class PlayUploadedVideoBloc
+    extends Bloc<PlayUploadedVideoEvent, PlayUploadedVideoState> {
   final supabaseService = locator<SupabaseService>();
   VideoPlayerController? _videoController;
   final String videoPath;
 
-  EditUploadedVideoBloc({required this.videoPath})
-    : super(EditUploadedVideoInitial()) {
+  PlayUploadedVideoBloc({required this.videoPath})
+    : super(PlayUploadedVideoInitial()) {
     on<InitializeVideoEvent>(_onInitializeVideo);
     on<PlayVideoEvent>(_onPlayVideo);
     on<PauseVideoEvent>(_onPauseVideo);
@@ -27,10 +27,10 @@ class EditUploadedVideoBloc
   /// Initialize video player with the given video path
   Future<void> _onInitializeVideo(
     InitializeVideoEvent event,
-    Emitter<EditUploadedVideoState> emit,
+    Emitter<PlayUploadedVideoState> emit,
   ) async {
     try {
-      emit(EditUploadedVideoLoading());
+      emit(PlayUploadedVideoLoading());
 
       // Dispose old controller if exists
       await _videoController?.dispose();
@@ -43,21 +43,21 @@ class EditUploadedVideoBloc
 
       // Emit initial ready state - only once
       emit(
-        EditUploadedVideoReady(
+        PlayUploadedVideoReady(
           duration: _videoController!.value.duration,
           currentPosition: Duration.zero,
           isPlaying: false,
         ),
       );
     } catch (e) {
-      emit(EditUploadedVideoError('Failed to initialize video: $e'));
+      emit(PlayUploadedVideoError('Failed to initialize video: $e'));
     }
   }
 
   /// Play video
   Future<void> _onPlayVideo(
     PlayVideoEvent event,
-    Emitter<EditUploadedVideoState> emit,
+    Emitter<PlayUploadedVideoState> emit,
   ) async {
     if (_videoController == null) return;
 
@@ -65,20 +65,20 @@ class EditUploadedVideoBloc
       await _videoController!.play();
 
       emit(
-        EditUploadedVideoPlaying(
+        PlayUploadedVideoPlaying(
           duration: _videoController!.value.duration,
           currentPosition: _videoController!.value.position,
         ),
       );
     } catch (e) {
-      emit(EditUploadedVideoError('Failed to play video: $e'));
+      emit(PlayUploadedVideoError('Failed to play video: $e'));
     }
   }
 
   /// Pause video
   Future<void> _onPauseVideo(
     PauseVideoEvent event,
-    Emitter<EditUploadedVideoState> emit,
+    Emitter<PlayUploadedVideoState> emit,
   ) async {
     if (_videoController == null) return;
 
@@ -86,20 +86,20 @@ class EditUploadedVideoBloc
       await _videoController!.pause();
 
       emit(
-        EditUploadedVideoPaused(
+        PlayUploadedVideoPaused(
           duration: _videoController!.value.duration,
           currentPosition: _videoController!.value.position,
         ),
       );
     } catch (e) {
-      emit(EditUploadedVideoError('Failed to pause video: $e'));
+      emit(PlayUploadedVideoError('Failed to pause video: $e'));
     }
   }
 
   /// Seek to a specific position
   Future<void> _onSeekVideo(
     SeekVideoEvent event,
-    Emitter<EditUploadedVideoState> emit,
+    Emitter<PlayUploadedVideoState> emit,
   ) async {
     if (_videoController == null) return;
 
@@ -107,30 +107,30 @@ class EditUploadedVideoBloc
       await _videoController!.seekTo(event.position);
 
       final currentState = state;
-      if (currentState is EditUploadedVideoPlaying) {
+      if (currentState is PlayUploadedVideoPlaying) {
         emit(
-          EditUploadedVideoPlaying(
+          PlayUploadedVideoPlaying(
             duration: _videoController!.value.duration,
             currentPosition: event.position,
           ),
         );
-      } else if (currentState is EditUploadedVideoPaused) {
+      } else if (currentState is PlayUploadedVideoPaused) {
         emit(
-          EditUploadedVideoPaused(
+          PlayUploadedVideoPaused(
             duration: _videoController!.value.duration,
             currentPosition: event.position,
           ),
         );
       }
     } catch (e) {
-      emit(EditUploadedVideoError('Failed to seek video: $e'));
+      emit(PlayUploadedVideoError('Failed to seek video: $e'));
     }
   }
 
   /// Dispose video controller
   Future<void> _onDisposeVideo(
     DisposeVideoEvent event,
-    Emitter<EditUploadedVideoState> emit,
+    Emitter<PlayUploadedVideoState> emit,
   ) async {
     await _videoController?.dispose();
     _videoController = null;

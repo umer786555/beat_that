@@ -1,4 +1,5 @@
-import 'package:beat_that/screens/edit_uploaded_video.dart/edit_uploaded_video_screen.dart';
+import 'package:beat_that/screens/play_uploaded_video.dart/play_uploaded_video_screen.dart';
+import 'package:beat_that/screens/edit_thumbnail/edit_thumbnail_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:beat_that/services/auth_service.dart';
@@ -22,6 +23,7 @@ class AppRoutes {
 
   // Profile routes
   static const String editUploadedVideo = '/profile/edit-uploaded-video';
+  static const String editThumbnail = '/profile/edit-thumbnail';
 }
 
 /// GoRouter configuration for the application
@@ -219,7 +221,34 @@ class AppRouter {
                         final videoPath = state.extra as String;
                         return CustomTransitionPage(
                           key: state.pageKey,
-                          child: EditUploadedVideoScreen(videoPath: videoPath),
+                          child: PlayUploadedVideoScreen(videoPath: videoPath),
+                          transitionsBuilder:
+                              (context, animation, secondaryAnimation, child) {
+                                const begin = Offset(0.0, 1.0);
+                                const end = Offset.zero;
+                                final tween = Tween(begin: begin, end: end);
+                                final curvedAnimation = CurvedAnimation(
+                                  parent: animation,
+                                  curve: Curves.easeInOut,
+                                );
+                                return SlideTransition(
+                                  position: tween.animate(curvedAnimation),
+                                  child: child,
+                                );
+                              },
+                        );
+                      },
+                    ),
+
+                    /// Edit Thumbnail Child Route
+                    GoRoute(
+                      path: 'edit-thumbnail',
+                      name: 'edit-thumbnail',
+                      pageBuilder: (context, state) {
+                        final (videoPath, videoDuration) = state.extra as (String, Duration);
+                        return CustomTransitionPage(
+                          key: state.pageKey,
+                          child: EditThumbnailScreen(videoPath: videoPath, videoDuration: videoDuration),
                           transitionsBuilder:
                               (context, animation, secondaryAnimation, child) {
                                 const begin = Offset(0.0, 1.0);

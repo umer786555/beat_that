@@ -1,25 +1,25 @@
-part of 'edit_uploaded_video_bloc.dart';
+part of 'play_uploaded_video_bloc.dart';
 
-sealed class EditUploadedVideoState extends Equatable {
-  const EditUploadedVideoState();
+sealed class PlayUploadedVideoState extends Equatable {
+  const PlayUploadedVideoState();
 
   @override
   List<Object?> get props => [];
 }
 
 /// Initial state
-final class EditUploadedVideoInitial extends EditUploadedVideoState {}
+final class PlayUploadedVideoInitial extends PlayUploadedVideoState {}
 
 /// Loading state - video is initializing
-final class EditUploadedVideoLoading extends EditUploadedVideoState {}
+final class PlayUploadedVideoLoading extends PlayUploadedVideoState {}
 
 /// Video ready and can be played
-final class EditUploadedVideoReady extends EditUploadedVideoState {
+final class PlayUploadedVideoReady extends PlayUploadedVideoState {
   final Duration duration;
   final Duration currentPosition;
   final bool isPlaying;
 
-  const EditUploadedVideoReady({
+  const PlayUploadedVideoReady({
     required this.duration,
     required this.currentPosition,
     required this.isPlaying,
@@ -30,11 +30,11 @@ final class EditUploadedVideoReady extends EditUploadedVideoState {
 }
 
 /// Video is playing
-final class EditUploadedVideoPlaying extends EditUploadedVideoState {
+final class PlayUploadedVideoPlaying extends PlayUploadedVideoState {
   final Duration duration;
   final Duration currentPosition;
 
-  const EditUploadedVideoPlaying({
+  const PlayUploadedVideoPlaying({
     required this.duration,
     required this.currentPosition,
   });
@@ -44,11 +44,11 @@ final class EditUploadedVideoPlaying extends EditUploadedVideoState {
 }
 
 /// Video is paused
-final class EditUploadedVideoPaused extends EditUploadedVideoState {
+final class PlayUploadedVideoPaused extends PlayUploadedVideoState {
   final Duration duration;
   final Duration currentPosition;
 
-  const EditUploadedVideoPaused({
+  const PlayUploadedVideoPaused({
     required this.duration,
     required this.currentPosition,
   });
@@ -58,10 +58,10 @@ final class EditUploadedVideoPaused extends EditUploadedVideoState {
 }
 
 /// Error state
-final class EditUploadedVideoError extends EditUploadedVideoState {
+final class PlayUploadedVideoError extends PlayUploadedVideoState {
   final String message;
 
-  const EditUploadedVideoError(this.message);
+  const PlayUploadedVideoError(this.message);
 
   @override
   List<Object?> get props => [message];

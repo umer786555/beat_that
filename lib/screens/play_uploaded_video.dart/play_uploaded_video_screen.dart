@@ -6,20 +6,21 @@ import 'package:beat_that/widgets/interactive_button.dart';
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:beat_that/screens/edit_uploaded_video.dart/bloc/edit_uploaded_video_bloc.dart';
+import 'package:go_router/go_router.dart';
+import 'package:beat_that/screens/play_uploaded_video.dart/bloc/play_uploaded_video_bloc.dart';
 
-/// Screen for editing uploaded videos
-class EditUploadedVideoScreen extends StatefulWidget {
+/// Screen for playing uploaded videos
+class PlayUploadedVideoScreen extends StatefulWidget {
   final String videoPath;
 
-  const EditUploadedVideoScreen({super.key, required this.videoPath});
+  const PlayUploadedVideoScreen({super.key, required this.videoPath});
 
   @override
-  State<EditUploadedVideoScreen> createState() =>
-      _EditUploadedVideoScreenState();
+  State<PlayUploadedVideoScreen> createState() =>
+      _PlayUploadedVideoScreenState();
 }
 
-class _EditUploadedVideoScreenState extends State<EditUploadedVideoScreen> {
+class _PlayUploadedVideoScreenState extends State<PlayUploadedVideoScreen> {
   // Duration & timing
   static const Duration _controlsHideDuration = Duration(seconds: 3);
 
@@ -45,12 +46,12 @@ class _EditUploadedVideoScreenState extends State<EditUploadedVideoScreen> {
   Widget build(BuildContext context) {
     return BlocProvider(
       create: (context) =>
-          EditUploadedVideoBloc(videoPath: widget.videoPath)
+          PlayUploadedVideoBloc(videoPath: widget.videoPath)
             ..add(InitializeVideoEvent(widget.videoPath)),
-      child: BlocConsumer<EditUploadedVideoBloc, EditUploadedVideoState>(
+      child: BlocConsumer<PlayUploadedVideoBloc, PlayUploadedVideoState>(
         listener: (context, state) {
           // Hide controls when video starts playing
-          if (state is EditUploadedVideoPlaying) {
+          if (state is PlayUploadedVideoPlaying) {
             _cancelControlsHide();
             if (mounted) {
               setState(() => _showControls = false);
@@ -58,8 +59,8 @@ class _EditUploadedVideoScreenState extends State<EditUploadedVideoScreen> {
           }
 
           // Show controls when video pauses or loads
-          if (state is EditUploadedVideoPaused ||
-              state is EditUploadedVideoReady) {
+          if (state is PlayUploadedVideoPaused ||
+              state is PlayUploadedVideoReady) {
             _cancelControlsHide();
             if (mounted) {
               setState(() => _showControls = true);
@@ -73,7 +74,7 @@ class _EditUploadedVideoScreenState extends State<EditUploadedVideoScreen> {
               leading: IconButton(
                 icon: const Icon(Icons.arrow_back_ios),
                 onPressed: () {
-                  context.read<EditUploadedVideoBloc>().add(
+                  context.read<PlayUploadedVideoBloc>().add(
                     const DisposeVideoEvent(),
                   );
 
@@ -88,12 +89,12 @@ class _EditUploadedVideoScreenState extends State<EditUploadedVideoScreen> {
     );
   }
 
-  Widget _buildBody(BuildContext context, EditUploadedVideoState state) {
-    if (state is EditUploadedVideoLoading) {
+  Widget _buildBody(BuildContext context, PlayUploadedVideoState state) {
+    if (state is PlayUploadedVideoLoading) {
       return MissileLoadingScreen(message: 'Loading video...');
     }
 
-    if (state is EditUploadedVideoError) {
+    if (state is PlayUploadedVideoError) {
       return ErrorScreen(
         message: 'Unable to load video',
         primaryButtonText: 'Retry',
@@ -107,7 +108,7 @@ class _EditUploadedVideoScreenState extends State<EditUploadedVideoScreen> {
       );
     }
 
-    final bloc = context.read<EditUploadedVideoBloc>();
+    final bloc = context.read<PlayUploadedVideoBloc>();
     final videoController = bloc.videoController;
 
     if (videoController == null) {
@@ -134,13 +135,11 @@ class _EditUploadedVideoScreenState extends State<EditUploadedVideoScreen> {
           ),
         ),
 
-        if (state is EditUploadedVideoReady ||
-            state is EditUploadedVideoPlaying ||
-            state is EditUploadedVideoPaused)
+        if (state is PlayUploadedVideoReady ||
+            state is PlayUploadedVideoPlaying ||
+            state is PlayUploadedVideoPaused)
           Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: _padding16,
-            ),
+            padding: const EdgeInsets.symmetric(horizontal: _padding16),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -185,9 +184,9 @@ class _EditUploadedVideoScreenState extends State<EditUploadedVideoScreen> {
         const Spacer(),
 
         // Action buttons at bottom
-        if (state is EditUploadedVideoReady ||
-            state is EditUploadedVideoPlaying ||
-            state is EditUploadedVideoPaused)
+        if (state is PlayUploadedVideoReady ||
+            state is PlayUploadedVideoPlaying ||
+            state is PlayUploadedVideoPaused)
           Padding(
             padding: const EdgeInsets.all(_padding16),
             child: Row(
@@ -195,7 +194,7 @@ class _EditUploadedVideoScreenState extends State<EditUploadedVideoScreen> {
                 Expanded(
                   child: InteractiveButton(
                     onTap: () {
-                      context.read<EditUploadedVideoBloc>().add(
+                      context.read<PlayUploadedVideoBloc>().add(
                         const DisposeVideoEvent(),
                       );
                       Navigator.pop(context);
@@ -221,7 +220,11 @@ class _EditUploadedVideoScreenState extends State<EditUploadedVideoScreen> {
                 Expanded(
                   child: InteractiveButton(
                     onTap: () {
-                      // TODO: Implement continue action
+                      final duration = videoController.value.duration;
+                      context.goNamed(
+                        'edit-thumbnail',
+                        extra: (widget.videoPath, duration),
+                      );
                     },
                     child: Container(
                       padding: const EdgeInsets.symmetric(vertical: _padding16),
@@ -256,41 +259,26 @@ class _EditUploadedVideoScreenState extends State<EditUploadedVideoScreen> {
   }
 
   Widget _buildVideoPlayer(
-    EditUploadedVideoState state,
+    PlayUploadedVideoState state,
     VideoPlayerController videoController, {
     required VoidCallback onPlay,
     required VoidCallback onPause,
   }) {
     return ClipRRect(
       borderRadius: BorderRadius.circular(_radius8),
-      child: Stack(
-        children: [
-          GestureDetector(
-            onTap: state is EditUploadedVideoPlaying
-                ? () => _showControlsTemporarily()
-                : null,
-            child: VideoPlayer(videoController),
-          ),
-          if (state is EditUploadedVideoPaused ||
-              state is EditUploadedVideoReady)
-            Center(
-              child: Container(
-                decoration: BoxDecoration(
-                  color: AppColors.black.withValues(alpha: 0.5),
-                  shape: BoxShape.circle,
-                ),
-                child: IconButton(
-                  iconSize: _iconSize64,
-                  icon: const Icon(Icons.play_arrow, color: Colors.white),
-                  onPressed: onPlay,
-                ),
-              ),
+      child: AspectRatio(
+        aspectRatio: videoController.value.aspectRatio,
+        child: Stack(
+          children: [
+            GestureDetector(
+              onTap: state is PlayUploadedVideoPlaying
+                  ? () => _showControlsTemporarily()
+                  : null,
+              child: VideoPlayer(videoController),
             ),
-          if (state is EditUploadedVideoPlaying && _showControls)
-            Center(
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: onPause,
+            if (state is PlayUploadedVideoPaused ||
+                state is PlayUploadedVideoReady)
+              Center(
                 child: Container(
                   decoration: BoxDecoration(
                     color: AppColors.black.withValues(alpha: 0.5),
@@ -298,13 +286,31 @@ class _EditUploadedVideoScreenState extends State<EditUploadedVideoScreen> {
                   ),
                   child: IconButton(
                     iconSize: _iconSize64,
-                    icon: const Icon(Icons.pause, color: Colors.white),
-                    onPressed: null,
+                    icon: const Icon(Icons.play_arrow, color: Colors.white),
+                    onPressed: onPlay,
                   ),
                 ),
               ),
-            ),
-        ],
+            if (state is PlayUploadedVideoPlaying && _showControls)
+              Center(
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: onPause,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: AppColors.black.withValues(alpha: 0.5),
+                      shape: BoxShape.circle,
+                    ),
+                    child: IconButton(
+                      iconSize: _iconSize64,
+                      icon: const Icon(Icons.pause, color: Colors.white),
+                      onPressed: null,
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
