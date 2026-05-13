@@ -13,6 +13,7 @@ import 'package:beat_that/services/video_picker_service.dart';
 import 'package:beat_that/bloc/theme_bloc.dart';
 import 'package:beat_that/screens/profile/bloc/profile_bloc.dart';
 import 'package:beat_that/screens/profile/widgets/upload_video_bottom_sheet.dart';
+import 'package:beat_that/routes/app_router.dart';
 
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
@@ -86,23 +87,30 @@ class ProfileScreen extends StatelessWidget {
                       await showModalBottomSheet(
                         context: context,
                         builder: (_) => UploadVideoBottomSheet(
-                          onRecordVideoSelected: () async =>
-                              await videoPickerService.openCameraAndHandleVideo(
-                                (video) {
-                                  GoRouter.of(context).pushNamed(
-                                    'edit-uploaded-video',
-                                    extra: video.path,
-                                  );
-                                },
-                              ),
-                          onUploadFromGallerySelected: () async =>
-                              await videoPickerService
-                                  .openGalleryAndHandleVideo((video) {
-                                    GoRouter.of(context).pushNamed(
-                                      'edit-uploaded-video',
-                                      extra: video.path,
-                                    );
-                                  }),
+                          onRecordVideoSelected: () async {
+                            final video = await videoPickerService.pickCameraVideo();
+                            if (video != null && context.mounted) {
+                              GoRouter.of(context).pushNamed(
+                                'edit-uploaded-video',
+                                extra: PlayUploadedVideoExtra(
+                                  videoPath: video.path,
+                                  shouldShowEditButtons: true,
+                                ),
+                              );
+                            }
+                          },
+                          onUploadFromGallerySelected: () async {
+                            final video = await videoPickerService.pickGalleryVideo();
+                            if (video != null && context.mounted) {
+                              GoRouter.of(context).pushNamed(
+                                'edit-uploaded-video',
+                                extra: PlayUploadedVideoExtra(
+                                  videoPath: video.path,
+                                  shouldShowEditButtons: true,
+                                ),
+                              );
+                            }
+                          },
                         ),
                         isScrollControlled: true,
                         shape: const RoundedRectangleBorder(
@@ -120,17 +128,18 @@ class ProfileScreen extends StatelessWidget {
                     }
                   },
                   backgroundColor: isDark
-                      ? AppColors.cyan.withValues(
-                          alpha: 0.9,
-                        ) // Neon cyan for dark theme
+                      ? AppColors.cyan
                       : AppColors
                             .electricMagenta, // Vibrant magenta for light theme
                   foregroundColor: isDark
                       ? AppColors
                             .white // High contrast with bright cyan
                       : AppColors.white, // Elegant contrast with magenta
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                   icon: const Icon(Icons.videocam),
-                  label: const Text(AppStrings.recordVideo),
+                  label: const Text('Upload'),
                   tooltip: AppStrings.recordVideo,
                 ),
               ),

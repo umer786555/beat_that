@@ -19,3 +19,20 @@ final class ThumbnailSelectedEvent extends EditThumbnailEvent {
   @override
   List<Object> get props => [selectedIndex];
 }
+
+class CustomThumbnailSelectedEvent extends EditThumbnailEvent {
+
+  const CustomThumbnailSelectedEvent();
+
+  @override
+  List<Object> get props => [];
+}
+
+final class SaveEvent extends EditThumbnailEvent {
+  final String title;
+
+  const SaveEvent({required this.title});
+
+  @override
+  List<Object> get props => [title];
+}

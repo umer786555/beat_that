@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -9,16 +10,21 @@ import 'package:beat_that/service_locator.dart';
 import 'package:beat_that/bloc/theme_bloc.dart';
 import 'package:beat_that/constants/app_themes.dart';
 
-// It's handy to then extract the Supabase client in a variable for later uses
-final supabase = Supabase.instance.client;
-
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  await Supabase.initialize(
-    url: 'https://ahrpqdjrnriugjdxqkfy.supabase.co',
-    anonKey: 'sb_publishable_uSCOer4EsaTo9eDc-TedqQ_bIGWkULu',
-  );
+  // In main.dart
+  if (kDebugMode) {
+    await Supabase.initialize(
+      url: 'https://hsyqamsignfrbsifrkmu.supabase.co',
+      anonKey: 'sb_publishable_0fYQfoXXyTq7Oexc54H_-A_lPipG7MW',
+    );
+  } else {
+    await Supabase.initialize(
+      url: 'https://ahrpqdjrnriugjdxqkfy.supabase.co',
+      anonKey: 'sb_publishable_uSCOer4EsaTo9eDc-TedqQ_bIGWkULu',
+    );
+  }
 
   // Initialize async services
   final preferencesService = await initializeAsyncServices();

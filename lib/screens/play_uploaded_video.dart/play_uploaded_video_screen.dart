@@ -2,18 +2,28 @@ import 'dart:async';
 import 'package:beat_that/constants/app_colors.dart';
 import 'package:beat_that/widgets/error_screen.dart';
 import 'package:beat_that/widgets/loading_screen.dart';
-import 'package:beat_that/widgets/interactive_button.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:beat_that/screens/play_uploaded_video.dart/bloc/play_uploaded_video_bloc.dart';
+import 'package:beat_that/routes/app_router.dart';
 
 /// Screen for playing uploaded videos
+/// 
+/// Can be used in two modes:
+/// - Edit mode (shouldShowEditButtons=true): Shows video with edit/continue buttons
+/// - View mode (shouldShowEditButtons=false): Full-screen video playback
 class PlayUploadedVideoScreen extends StatefulWidget {
   final String videoPath;
+  final bool shouldShowEditButtons;
 
-  const PlayUploadedVideoScreen({super.key, required this.videoPath});
+  const PlayUploadedVideoScreen({
+    super.key,
+    required this.videoPath,
+    this.shouldShowEditButtons = true,
+  });
 
   @override
   State<PlayUploadedVideoScreen> createState() =>
@@ -68,9 +78,12 @@ class _PlayUploadedVideoScreenState extends State<PlayUploadedVideoScreen> {
           }
         },
         builder: (context, state) {
+          final bloc = context.read<PlayUploadedVideoBloc>();
+          final videoController = bloc.videoController;
+          
           return Scaffold(
             appBar: AppBar(
-              title: const Text('Edit Video'),
+              title: Text(widget.shouldShowEditButtons ? 'Edit Video' : 'Play Video'),
               leading: IconButton(
                 icon: const Icon(Icons.arrow_back_ios),
                 onPressed: () {
@@ -83,6 +96,33 @@ class _PlayUploadedVideoScreenState extends State<PlayUploadedVideoScreen> {
               ),
             ),
             body: _buildBody(context, state),
+            // Floating action button for continue (only in edit mode)
+            floatingActionButton: widget.shouldShowEditButtons &&
+                    videoController != null &&
+                    (state is PlayUploadedVideoReady ||
+                        state is PlayUploadedVideoPlaying ||
+                        state is PlayUploadedVideoPaused)
+                ? FloatingActionButton.extended(
+                    onPressed: () {
+                      HapticFeedback.mediumImpact();
+                      final duration = videoController.value.duration;
+                      context.goNamed(
+                        'edit-thumbnail',
+                        extra: EditThumbnailExtra(
+                          videoPath: widget.videoPath,
+                          videoDuration: duration,
+                        ),
+                      );
+                    },
+                    backgroundColor: AppColors.cyan,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    icon: const Icon(Icons.arrow_forward),
+                    label: const Text('Next'),
+                  )
+                : null,
           );
         },
       ),
@@ -91,7 +131,7 @@ class _PlayUploadedVideoScreenState extends State<PlayUploadedVideoScreen> {
 
   Widget _buildBody(BuildContext context, PlayUploadedVideoState state) {
     if (state is PlayUploadedVideoLoading) {
-      return MissileLoadingScreen(message: 'Loading video...');
+      return BeatLoadingScreen(message: 'Loading video...');
     }
 
     if (state is PlayUploadedVideoError) {
@@ -115,8 +155,24 @@ class _PlayUploadedVideoScreenState extends State<PlayUploadedVideoScreen> {
       return const Center(child: Text('Failed to load video'));
     }
 
+    // Different layouts for edit mode vs view mode
+    if (widget.shouldShowEditButtons) {
+      return _buildEditModeLayout(context, state, videoController, bloc);
+    } else {
+      return _buildViewModeLayout(context, state, videoController, bloc);
+    }
+  }
+
+  /// Edit mode: Video with slider
+  Widget _buildEditModeLayout(
+    BuildContext context,
+    PlayUploadedVideoState state,
+    VideoPlayerController videoController,
+    PlayUploadedVideoBloc bloc,
+  ) {
     return Column(
       children: [
+        // Video player takes 75% of screen
         Flexible(
           flex: 3,
           child: Padding(
@@ -135,11 +191,90 @@ class _PlayUploadedVideoScreenState extends State<PlayUploadedVideoScreen> {
           ),
         ),
 
+        // Progress slider and time display (25% of screen)
+        if (state is PlayUploadedVideoReady ||
+            state is PlayUploadedVideoPlaying ||
+            state is PlayUploadedVideoPaused)
+          Flexible(
+            flex: 1,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: _padding16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  ValueListenableBuilder<VideoPlayerValue>(
+                    valueListenable: videoController,
+                    builder: (context, value, child) {
+                      return Slider(
+                        value: value.position.inMilliseconds.toDouble(),
+                        min: 0.0,
+                        max: value.duration.inMilliseconds.toDouble(),
+                        activeColor: AppColors.electricMagenta,
+                        inactiveColor: AppColors.greyMedium,
+                        thumbColor: AppColors.electricMagenta,
+                        overlayColor: WidgetStateProperty.all(Colors.transparent),
+                        onChanged: (newValue) {
+                          videoController.seekTo(
+                            Duration(milliseconds: newValue.toInt()),
+                          );
+                        },
+                      );
+                    },
+                  ),
+                  ValueListenableBuilder<VideoPlayerValue>(
+                    valueListenable: videoController,
+                    builder: (context, value, child) {
+                      return Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(_formatDuration(value.position)),
+                          Text(_formatDuration(value.duration)),
+                        ],
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  /// View mode: Full-screen video playback with minimal controls
+  Widget _buildViewModeLayout(
+    BuildContext context,
+    PlayUploadedVideoState state,
+    VideoPlayerController videoController,
+    PlayUploadedVideoBloc bloc,
+  ) {
+    return Column(
+      children: [
+        // Full-screen video player
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.all(_padding12),
+            child: Center(
+              child: _buildVideoPlayer(
+                state,
+                videoController,
+                onPlay: () => bloc.add(const PlayVideoEvent()),
+                onPause: () => bloc.add(const PauseVideoEvent()),
+              ),
+            ),
+          ),
+        ),
+
+        // Progress slider and time display at bottom
         if (state is PlayUploadedVideoReady ||
             state is PlayUploadedVideoPlaying ||
             state is PlayUploadedVideoPaused)
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: _padding16),
+            padding: const EdgeInsets.symmetric(
+              horizontal: _padding16,
+              vertical: _padding12,
+            ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -169,79 +304,17 @@ class _PlayUploadedVideoScreenState extends State<PlayUploadedVideoScreen> {
                     return Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(_formatDuration(value.position)),
-                        Text(_formatDuration(value.duration)),
+                        Text(
+                          _formatDuration(value.position),
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                        Text(
+                          _formatDuration(value.duration),
+                          style: const TextStyle(fontSize: 12),
+                        ),
                       ],
                     );
                   },
-                ),
-                const SizedBox(height: _padding12),
-              ],
-            ),
-          ),
-
-        // Spacer to push buttons to bottom
-        const Spacer(),
-
-        // Action buttons at bottom
-        if (state is PlayUploadedVideoReady ||
-            state is PlayUploadedVideoPlaying ||
-            state is PlayUploadedVideoPaused)
-          Padding(
-            padding: const EdgeInsets.all(_padding16),
-            child: Row(
-              children: [
-                Expanded(
-                  child: InteractiveButton(
-                    onTap: () {
-                      context.read<PlayUploadedVideoBloc>().add(
-                        const DisposeVideoEvent(),
-                      );
-                      Navigator.pop(context);
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: _padding16),
-                      decoration: BoxDecoration(
-                        border: Border.all(color: AppColors.electricMagenta),
-                        borderRadius: BorderRadius.circular(_radius8),
-                      ),
-                      child: const Text(
-                        'Back',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: AppColors.electricMagenta,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: _padding16),
-                Expanded(
-                  child: InteractiveButton(
-                    onTap: () {
-                      final duration = videoController.value.duration;
-                      context.goNamed(
-                        'edit-thumbnail',
-                        extra: (widget.videoPath, duration),
-                      );
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: _padding16),
-                      decoration: BoxDecoration(
-                        color: AppColors.electricMagenta,
-                        borderRadius: BorderRadius.circular(_radius8),
-                      ),
-                      child: const Text(
-                        'Continue',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                  ),
                 ),
               ],
             ),

@@ -1,7 +1,5 @@
 import 'dart:async';
 import 'dart:io';
-import 'package:beat_that/service_locator.dart';
-import 'package:beat_that/services/supabase_service.dart';
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:video_player/video_player.dart';
@@ -11,7 +9,6 @@ part 'play_uploaded_video_state.dart';
 
 class PlayUploadedVideoBloc
     extends Bloc<PlayUploadedVideoEvent, PlayUploadedVideoState> {
-  final supabaseService = locator<SupabaseService>();
   VideoPlayerController? _videoController;
   final String videoPath;
 

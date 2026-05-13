@@ -6,6 +6,7 @@ import 'package:beat_that/services/preferences_service.dart';
 import 'package:beat_that/services/permission_service.dart';
 import 'package:beat_that/services/video_picker_service.dart';
 import 'package:beat_that/services/supabase_service.dart';
+import 'package:beat_that/services/dio_upload_service.dart';
 import 'package:beat_that/routes/app_router.dart';
 
 /// Service Locator instance for dependency injection
@@ -53,7 +54,13 @@ void setupServiceLocator(PreferencesService preferencesService) {
     // Register AuthService
     locator.registerSingleton<AuthService>(AuthService());
 
+    // Register DioUploadService (must be before SupabaseService)
+    // SupabaseService depends on DioUploadService in its constructor
+    locator.registerSingleton<DioUploadService>(DioUploadService());
+
     // Register SupabaseService
+    // Note: SupabaseService accesses Supabase.instance.client directly,
+    // which is initialized in main.dart before this function is called
     locator.registerSingleton<SupabaseService>(SupabaseService());
 
     // Register AppRouter

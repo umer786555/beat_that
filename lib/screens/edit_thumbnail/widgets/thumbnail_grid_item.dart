@@ -43,46 +43,54 @@ class ThumbnailGridItem extends StatelessWidget {
             Positioned.fill(
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(borderRadius ?? 8),
-                child: AnimatedCrossFade(
-                  firstChild: SizedBox.expand(
-                    child: Shimmer.fromColors(
-                      baseColor: Colors.grey[300]!,
-                      highlightColor: Colors.grey[100]!,
-                      child: Container(
-                        color: Colors.white,
-                      ),
-                    ),
-                  ),
-                  secondChild: SizedBox.expand(
-                    child: Image.memory(
-                      thumbnailData!,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) {
-                        return Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.image_not_supported,
-                                color: Colors.grey[400],
-                                size: 32,
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                'Failed to load',
-                                style: TextStyle(
-                                  color: Colors.grey[600],
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ],
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    return AnimatedCrossFade(
+                      firstChild: SizedBox(
+                        width: constraints.maxWidth,
+                        height: constraints.maxHeight,
+                        child: Shimmer.fromColors(
+                          baseColor: Colors.grey[300]!,
+                          highlightColor: Colors.grey[100]!,
+                          child: Container(
+                            color: Colors.white,
                           ),
-                        );
-                      },
-                    ),
-                  ),
-                  crossFadeState: isLoading ? CrossFadeState.showFirst : CrossFadeState.showSecond,
-                  duration: const Duration(milliseconds: 400),
+                        ),
+                      ),
+                      secondChild: SizedBox(
+                        width: constraints.maxWidth,
+                        height: constraints.maxHeight,
+                        child: Image.memory(
+                          thumbnailData!,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) {
+                            return Center(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.image_not_supported,
+                                    color: Colors.grey[400],
+                                    size: 32,
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    'Failed to load',
+                                    style: TextStyle(
+                                      color: Colors.grey[600],
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                      crossFadeState: isLoading ? CrossFadeState.showFirst : CrossFadeState.showSecond,
+                      duration: const Duration(milliseconds: 400),
+                    );
+                  },
                 ),
               ),
             ),

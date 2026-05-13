@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:beat_that/screens/play_uploaded_video.dart/play_uploaded_video_screen.dart';
 import 'package:beat_that/screens/edit_thumbnail/edit_thumbnail_screen.dart';
 import 'package:flutter/material.dart';
@@ -11,6 +13,88 @@ import 'package:beat_that/screens/stats/stats_screen.dart';
 import 'package:beat_that/screens/profile/profile_screen.dart';
 import 'package:beat_that/screens/auth/login_screen.dart';
 import 'package:beat_that/screens/auth/signup_screen.dart';
+
+/// Extra data for PlayUploadedVideo route
+class PlayUploadedVideoExtra {
+  final String videoPath;
+  final bool shouldShowEditButtons;
+
+  PlayUploadedVideoExtra({
+    required this.videoPath,
+    required this.shouldShowEditButtons,
+  });
+}
+
+/// Extra data for EditThumbnail route
+class EditThumbnailExtra {
+  final String videoPath;
+  final Duration videoDuration;
+
+  EditThumbnailExtra({required this.videoPath, required this.videoDuration});
+}
+
+/// Custom codec for serializing/deserializing route extras
+class _RouteExtraCodec extends Codec<Object?, Object?> {
+  const _RouteExtraCodec();
+
+  @override
+  Converter<Object?, Object?> get decoder => const _RouteExtraDecoder();
+
+  @override
+  Converter<Object?, Object?> get encoder => const _RouteExtraEncoder();
+}
+
+class _RouteExtraEncoder extends Converter<Object?, Object?> {
+  const _RouteExtraEncoder();
+
+  @override
+  Object? convert(Object? input) {
+    if (input == null) {
+      return null;
+    }
+    switch (input) {
+      case PlayUploadedVideoExtra _:
+        return <Object?>[
+          'PlayUploadedVideoExtra',
+          input.videoPath,
+          input.shouldShowEditButtons,
+        ];
+      case EditThumbnailExtra _:
+        return <Object?>[
+          'EditThumbnailExtra',
+          input.videoPath,
+          input.videoDuration.inMilliseconds,
+        ];
+      default:
+        throw FormatException('Cannot encode type ${input.runtimeType}');
+    }
+  }
+}
+
+class _RouteExtraDecoder extends Converter<Object?, Object?> {
+  const _RouteExtraDecoder();
+
+  @override
+  Object? convert(Object? input) {
+    if (input == null) {
+      return null;
+    }
+    final inputAsList = input as List<Object?>;
+    if (inputAsList[0] == 'PlayUploadedVideoExtra') {
+      return PlayUploadedVideoExtra(
+        videoPath: inputAsList[1]! as String,
+        shouldShowEditButtons: inputAsList[2]! as bool,
+      );
+    }
+    if (inputAsList[0] == 'EditThumbnailExtra') {
+      return EditThumbnailExtra(
+        videoPath: inputAsList[1]! as String,
+        videoDuration: Duration(milliseconds: inputAsList[2]! as int),
+      );
+    }
+    throw FormatException('Unable to parse input: $input');
+  }
+}
 
 /// Route paths for the application
 class AppRoutes {
@@ -50,6 +134,10 @@ class AppRouter {
     _routerInstance ??= GoRouter(
       // Set to true to enable detailed logging for debugging
       debugLogDiagnostics: true,
+
+      /// Custom codec for handling route extras
+      /// Converts complex types to/from serializable objects
+      extraCodec: const _RouteExtraCodec(),
 
       /// Top-level redirect logic for authentication state
       ///
@@ -218,10 +306,13 @@ class AppRouter {
                       path: 'edit-uploaded-video',
                       name: 'edit-uploaded-video',
                       pageBuilder: (context, state) {
-                        final videoPath = state.extra as String;
+                        final extra = state.extra as PlayUploadedVideoExtra;
                         return CustomTransitionPage(
                           key: state.pageKey,
-                          child: PlayUploadedVideoScreen(videoPath: videoPath),
+                          child: PlayUploadedVideoScreen(
+                            videoPath: extra.videoPath,
+                            shouldShowEditButtons: extra.shouldShowEditButtons,
+                          ),
                           transitionsBuilder:
                               (context, animation, secondaryAnimation, child) {
                                 const begin = Offset(0.0, 1.0);
@@ -245,10 +336,13 @@ class AppRouter {
                       path: 'edit-thumbnail',
                       name: 'edit-thumbnail',
                       pageBuilder: (context, state) {
-                        final (videoPath, videoDuration) = state.extra as (String, Duration);
+                        final extra = state.extra as EditThumbnailExtra;
                         return CustomTransitionPage(
                           key: state.pageKey,
-                          child: EditThumbnailScreen(videoPath: videoPath, videoDuration: videoDuration),
+                          child: EditThumbnailScreen(
+                            videoPath: extra.videoPath,
+                            videoDuration: extra.videoDuration,
+                          ),
                           transitionsBuilder:
                               (context, animation, secondaryAnimation, child) {
                                 const begin = Offset(0.0, 1.0);
