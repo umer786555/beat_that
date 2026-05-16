@@ -12,23 +12,27 @@ final class ProfileInitial extends ProfileState {}
 final class ProfileLoaded extends ProfileState {
   final bool cameraPermissionEnabled;
   final bool galleryPermissionEnabled;
+  final List<Map<String, dynamic>> thumbnails;
 
   const ProfileLoaded({
     required this.cameraPermissionEnabled,
     required this.galleryPermissionEnabled,
+    this.thumbnails = const [],
   });
 
   @override
-  List<Object> get props => [cameraPermissionEnabled, galleryPermissionEnabled];
+  List<Object> get props => [cameraPermissionEnabled, galleryPermissionEnabled, thumbnails];
 
   ProfileLoaded copyWith({
     AppThemeMode? currentTheme,
     bool? cameraPermissionEnabled,
     bool? galleryPermissionEnabled,
+    List<Map<String, dynamic>>? thumbnails,
   }) {
     return ProfileLoaded(
       cameraPermissionEnabled: cameraPermissionEnabled ?? this.cameraPermissionEnabled,
       galleryPermissionEnabled: galleryPermissionEnabled ?? this.galleryPermissionEnabled,
+      thumbnails: thumbnails ?? this.thumbnails,
     );
   }
 }

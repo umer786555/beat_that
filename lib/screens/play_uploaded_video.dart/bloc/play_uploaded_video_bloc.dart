@@ -21,7 +21,8 @@ class PlayUploadedVideoBloc
     on<DisposeVideoEvent>(_onDisposeVideo);
   }
 
-  /// Initialize video player with the given video path
+  /// Initialize video player with the given video path or URL
+  /// Supports both local file paths and remote URLs from Supabase
   Future<void> _onInitializeVideo(
     InitializeVideoEvent event,
     Emitter<PlayUploadedVideoState> emit,
@@ -32,8 +33,18 @@ class PlayUploadedVideoBloc
       // Dispose old controller if exists
       await _videoController?.dispose();
 
-      // Create new controller with file path
-      _videoController = VideoPlayerController.file(File(event.videoPath));
+      // Determine if the path is a URL or a local file
+      final isUrl = event.videoPath.startsWith('http://') ||
+          event.videoPath.startsWith('https://');
+
+      // Create new controller - use networkUrl for URLs, file for local paths
+      if (isUrl) {
+        _videoController = VideoPlayerController.networkUrl(
+          Uri.parse(event.videoPath),
+        );
+      } else {
+        _videoController = VideoPlayerController.file(File(event.videoPath));
+      }
 
       // Initialize the controller
       await _videoController!.initialize();

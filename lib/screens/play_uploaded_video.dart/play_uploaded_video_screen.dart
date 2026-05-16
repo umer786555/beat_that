@@ -27,6 +27,7 @@ class PlayUploadedVideoScreen extends StatefulWidget {
 
   @override
   State<PlayUploadedVideoScreen> createState() =>
+  
       _PlayUploadedVideoScreenState();
 }
 

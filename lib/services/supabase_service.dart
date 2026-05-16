@@ -268,9 +268,7 @@ class SupabaseService {
 
     final sizeInBytes = file.lengthSync();
     final sizeInMB = sizeInBytes / (1000 * 1000);
-    print(
-      'Step $stepNumber: Uploading thumbnail: $path (MIME: $mimeType)',
-    );
+    print('Step $stepNumber: Uploading thumbnail: $path (MIME: $mimeType)');
     print('Thumbnail size: ${sizeInMB.toStringAsFixed(2)} MB');
 
     // Use class-level DioUploadService (no progress tracking - instant upload)
@@ -316,6 +314,99 @@ class SupabaseService {
   }
 
   // ==================== UTILITY OPERATIONS ====================
+
+  /// Fetch all thumbnail URLs for the current user's videos
+  ///
+  /// Retrieves all video records from the database and generates signed URLs
+  /// for each thumbnail. Returns video metadata for display in the UI.
+  ///
+  /// Only fetches necessary columns for better performance:
+  /// - id, thumbnail_url, video_url, title, description, view_count, created_at
+  ///
+  /// Returns a list of maps containing:
+  /// - id: Unique video identifier
+  /// - thumbnail_url: Signed URL for the thumbnail image (7 days expiry)
+  /// - video_url: Signed URL for the video file (7 days expiry)
+  /// - title: Video title
+  /// - description: Video description
+  /// - view_count: Number of views
+  /// - created_at: When the video was created
+  ///
+  /// Returns empty list if user not authenticated or no videos found.
+  /// Throws exception on database query errors.
+  Future<List<Map<String, dynamic>>> getAllThumbnailUrls() async {
+    try {
+      final userId = getCurrentUserId();
+      if (userId == null) {
+        print('Error: User not authenticated');
+        return [];
+      }
+
+      final videos = await client
+          .from('my_videos')
+          .select(
+            'id, thumbnail_url, video_url, title, description, view_count, created_at',
+          )
+          .eq('user_id', userId)
+          .order('created_at', ascending: false);
+
+      final thumbnailData = <Map<String, dynamic>>[];
+      for (final video in videos) {
+        thumbnailData.add(await _buildVideoUrlData(video));
+      }
+
+      return thumbnailData;
+    } catch (e) {
+      print('Error fetching thumbnails: $e');
+      rethrow;
+    }
+  }
+
+  /// Helper method to convert a storage path to a URL
+  /// Tries signed URL first (works with private buckets), falls back to public URL
+  Future<String> _pathToUrl(String bucketName, String path) async {
+    try {
+      return await client.storage
+          .from(bucketName)
+          .createSignedUrl(path, 604800);
+    } catch (e) {
+      print(
+        'Could not create signed URL for $bucketName/$path, using public URL',
+      );
+      return client.storage.from(bucketName).getPublicUrl(path);
+    }
+  }
+
+  /// Helper method to build video data with URLs
+  /// Converts storage paths to accessible URLs and creates final data map
+  Future<Map<String, dynamic>> _buildVideoUrlData(
+    Map<String, dynamic> video,
+  ) async {
+    final thumbnailPath = video['thumbnail_url'] as String;
+    final videoPath = video['video_url'] as String;
+
+    final thumbnailUrl = await _pathToUrl('my-thumbnails', thumbnailPath);
+    final videoUrl = await _pathToUrl('my_videos', videoPath);
+
+    return _createVideoDataMap(video, thumbnailUrl, videoUrl);
+  }
+
+  /// Helper method to create video data map
+  Map<String, dynamic> _createVideoDataMap(
+    Map<String, dynamic> video,
+    String thumbnailUrl,
+    String videoUrl,
+  ) {
+    return {
+      'id': video['id'] as String,
+      'thumbnail_url': thumbnailUrl,
+      'video_url': videoUrl,
+      'title': video['title'] as String? ?? 'Untitled',
+      'description': video['description'] as String? ?? '',
+      'view_count': video['view_count'] as int? ?? 0,
+      'created_at': video['created_at'] as String,
+    };
+  }
 
   /// Check if user is authenticated
   bool isAuthenticated() {

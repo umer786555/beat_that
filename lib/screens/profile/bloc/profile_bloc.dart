@@ -1,19 +1,20 @@
+import 'package:beat_that/service_locator.dart';
 import 'package:equatable/equatable.dart';
 import 'package:beat_that/constants/app_enums.dart';
 import 'package:beat_that/constants/app_strings.dart';
 import 'package:beat_that/services/auth_service.dart';
 import 'package:beat_that/services/permission_service.dart';
+import 'package:beat_that/services/supabase_service.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:get_it/get_it.dart';
 import 'package:permission_handler/permission_handler.dart';
 part 'profile_event.dart';
 part 'profile_state.dart';
 
-final getIt = GetIt.instance;
-
 class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
   
-  final permissionService = getIt<PermissionService>();
+  final permissionService = locator<PermissionService>();
+  final supabaseService = locator<SupabaseService>();
+  final authService = locator<AuthService>();
   
   ProfileBloc() : super(ProfileInitial()) {
     on<LoadProfileEvent>(_onLoadProfile);
@@ -25,23 +26,33 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
     // on<CloseUploadModal>(_onCloseUploadModal);
   }
 
-  /// Load profile data
+  /// Load profile data and fetch thumbnail URLs
+  /// 
+  /// This event performs two sequential operations:
+  /// 1. Check camera and gallery permissions
+  /// 2. Fetch all thumbnail URLs for the current user's videos
   Future<void> _onLoadProfile(
     LoadProfileEvent event,
     Emitter<ProfileState> emit,
   ) async {
     try {
-      // Check if camera permission is enabled
+      emit(ProfileLoading());
+      
+      // Step 1: Check if camera and gallery permissions are enabled
       final cameraPermissionEnabled = await permissionService
           .checkCameraPermissionOnLoad();
       final galleryPermissionEnabled = await permissionService
           .checkPhotosPermissionOnLoad();
 
-      // Initialize with default theme (dark)
+      // Step 2: Fetch all thumbnail URLs
+      final thumbnails = await supabaseService.getAllThumbnailUrls();
+
+      // Initialize with permissions and thumbnails
       emit(
         ProfileLoaded(
           cameraPermissionEnabled: cameraPermissionEnabled,
           galleryPermissionEnabled: galleryPermissionEnabled,
+          thumbnails: thumbnails,
         ),
       );
     } catch (e) {
@@ -53,7 +64,6 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
   Future<void> _onLogout(LogoutEvent event, Emitter<ProfileState> emit) async {
     try {
       emit(ProfileLoading());
-      final authService = getIt<AuthService>();
       await authService.logout();
     } catch (e) {
       emit(ProfileError(message: '${AppStrings.logoutFailed}: $e'));
