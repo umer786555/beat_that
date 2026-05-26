@@ -18,8 +18,13 @@ class UploadVideoBottomSheet extends StatelessWidget {
   });
 
   // Design Constants
-  static const BorderRadius _defaultBorderRadius = BorderRadius.all(Radius.circular(16));
-  static const EdgeInsets _optionPadding = EdgeInsets.symmetric(vertical: 20, horizontal: 20);
+  static const BorderRadius _defaultBorderRadius = BorderRadius.all(
+    Radius.circular(16),
+  );
+  static const EdgeInsets _optionPadding = EdgeInsets.symmetric(
+    vertical: 20,
+    horizontal: 20,
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -222,11 +227,7 @@ class UploadVideoBottomSheet extends StatelessWidget {
                       ),
                     ),
                     child: Center(
-                      child: Icon(
-                        icon,
-                        color: accentColor,
-                        size: 28,
-                      ),
+                      child: Icon(icon, color: accentColor, size: 28),
                     ),
                   ),
                   const SizedBox(width: 16),
@@ -312,14 +313,9 @@ class _ThemeColors {
       handleBarColor: isDarkMode
           ? colorScheme.onSurface.withValues(alpha: 0.25)
           : colorScheme.onSurface.withValues(alpha: 0.35),
-      cardBackgroundColor: isDarkMode
-          ? Colors.black
-          : const Color(0xFFFAFAFA),
-      subtitleColor: isDarkMode
-          ? Colors.white
-          : Colors.black,
+      cardBackgroundColor: isDarkMode ? Colors.black : const Color(0xFFFAFAFA),
+      subtitleColor: isDarkMode ? Colors.white : Colors.black,
       isDarkMode: isDarkMode,
     );
   }
 }
-  

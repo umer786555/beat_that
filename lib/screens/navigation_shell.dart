@@ -46,16 +46,6 @@ class NavigationShell extends StatelessWidget {
           ),
         ),
 
-        // Stats Tab
-        PersistentRouterTabConfig(
-          item: ItemConfig(
-            icon: const Icon(Icons.bar_chart),
-            title: 'Stats',
-            activeForegroundColor: AppColors.green,
-            inactiveForegroundColor: Colors.grey,
-          ),
-        ),
-
         // Profile Tab
         PersistentRouterTabConfig(
           item: ItemConfig(

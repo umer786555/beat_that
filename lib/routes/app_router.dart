@@ -1,16 +1,24 @@
 import 'dart:convert';
 
+import 'package:beat_that/models/sport.dart';
+import 'package:beat_that/models/sport_subcategory.dart';
+import 'package:beat_that/constants/sports_data.dart';
 import 'package:beat_that/screens/play_uploaded_video.dart/play_uploaded_video_screen.dart';
 import 'package:beat_that/screens/edit_thumbnail/edit_thumbnail_screen.dart';
+import 'package:beat_that/screens/sports_hub/sport_details_screen.dart';
+import 'package:beat_that/screens/username_setup/username_setup_screen.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:beat_that/services/auth_service.dart';
 import 'package:beat_that/service_locator.dart';
 import 'package:beat_that/screens/navigation_shell.dart';
-import 'package:beat_that/screens/home_screen.dart';
+import 'package:beat_that/screens/home/home_screen.dart';
+import 'package:beat_that/screens/home/bloc/home_bloc.dart';
 import 'package:beat_that/screens/explore/explore_screen.dart';
-import 'package:beat_that/screens/stats/stats_screen.dart';
+import 'package:beat_that/screens/sports_hub/sports_hub_screen.dart';
 import 'package:beat_that/screens/profile/profile_screen.dart';
+import 'package:beat_that/screens/profile/bloc/profile_bloc.dart';
 import 'package:beat_that/screens/auth/login_screen.dart';
 import 'package:beat_that/screens/auth/signup_screen.dart';
 
@@ -18,10 +26,14 @@ import 'package:beat_that/screens/auth/signup_screen.dart';
 class PlayUploadedVideoExtra {
   final String videoPath;
   final bool shouldShowEditButtons;
+  final Sport? sport;
+  final String? selectedSubcategory;
 
   PlayUploadedVideoExtra({
     required this.videoPath,
     required this.shouldShowEditButtons,
+    this.sport,
+    this.selectedSubcategory,
   });
 }
 
@@ -29,8 +41,22 @@ class PlayUploadedVideoExtra {
 class EditThumbnailExtra {
   final String videoPath;
   final Duration videoDuration;
+  final Sport sport;
+  final String? selectedSubcategory;
 
-  EditThumbnailExtra({required this.videoPath, required this.videoDuration});
+  EditThumbnailExtra({
+    required this.videoPath,
+    required this.videoDuration,
+    required this.sport,
+    this.selectedSubcategory,
+  });
+}
+
+/// Extra data for SportDetails route
+class SportDetailsExtra {
+  final Sport sport;
+
+  SportDetailsExtra({required this.sport});
 }
 
 /// Custom codec for serializing/deserializing route extras
@@ -58,12 +84,24 @@ class _RouteExtraEncoder extends Converter<Object?, Object?> {
           'PlayUploadedVideoExtra',
           input.videoPath,
           input.shouldShowEditButtons,
+          input.sport?.id,
+          input.selectedSubcategory,
         ];
       case EditThumbnailExtra _:
         return <Object?>[
           'EditThumbnailExtra',
           input.videoPath,
           input.videoDuration.inMilliseconds,
+          input.sport.id,
+          input.selectedSubcategory,
+        ];
+      case SportDetailsExtra _:
+        return <Object?>[
+          'SportDetailsExtra',
+          input.sport.id,
+          jsonEncode(
+            input.sport.subcategories.map((s) => s.toJson()).toList(),
+          ),
         ];
       default:
         throw FormatException('Cannot encode type ${input.runtimeType}');
@@ -81,16 +119,53 @@ class _RouteExtraDecoder extends Converter<Object?, Object?> {
     }
     final inputAsList = input as List<Object?>;
     if (inputAsList[0] == 'PlayUploadedVideoExtra') {
+      final sportId = inputAsList[3] as String?;
+      final selectedSubcategory = inputAsList[4] as String?;
       return PlayUploadedVideoExtra(
         videoPath: inputAsList[1]! as String,
         shouldShowEditButtons: inputAsList[2]! as bool,
+        sport: sportId != null
+            ? Sport(
+                id: sportId,
+                name: sportId,
+                displayName: getDisplayNameForSport(sportId),
+                icon: getIconForSport(sportId),
+                subcategories: [],
+              )
+            : null,
+        selectedSubcategory: selectedSubcategory,
       );
     }
     if (inputAsList[0] == 'EditThumbnailExtra') {
+      final sportId = inputAsList[3] as String;
+      final selectedSubcategory = inputAsList[4] as String?;
       return EditThumbnailExtra(
         videoPath: inputAsList[1]! as String,
         videoDuration: Duration(milliseconds: inputAsList[2]! as int),
+        sport: Sport(
+          id: sportId,
+          name: sportId,
+          displayName: getDisplayNameForSport(sportId),
+          icon: getIconForSport(sportId),
+          subcategories: [],
+        ),
+        selectedSubcategory: selectedSubcategory,
       );
+    }
+    if (inputAsList[0] == 'SportDetailsExtra') {
+      final sportId = inputAsList[1] as String;
+      final subcategoriesJson = inputAsList[2] as String;
+      final subcategories = (jsonDecode(subcategoriesJson) as List<dynamic>)
+          .map((item) => SportSubcategory.fromJson(item as Map<String, dynamic>))
+          .toList();
+      final sport = Sport(
+        id: sportId,
+        name: sportId,
+        displayName: getDisplayNameForSport(sportId),
+        icon: getIconForSport(sportId),
+        subcategories: subcategories,
+      );
+      return SportDetailsExtra(sport: sport);
     }
     throw FormatException('Unable to parse input: $input');
   }
@@ -233,11 +308,31 @@ class AppRouter {
           },
         ),
 
+        /// Username Setup (full-screen, no navigation bar)
+        GoRoute(
+          path: '/username-setup',
+          name: 'username-setup',
+          pageBuilder: (context, state) {
+            return NoTransitionPage(
+              key: state.pageKey,
+              child: const UsernameSetupScreen(),
+            );
+          },
+        ),
+
         /// Protected routes (require logged in)
         /// Home navigation shell with persistent bottom navigation bar using StatefulShellRoute
         StatefulShellRoute.indexedStack(
           builder: (context, state, navigationShell) {
-            return NavigationShell(navigationShell: navigationShell);
+            return MultiBlocProvider(
+              providers: [
+                BlocProvider(
+                  create: (context) =>
+                      ProfileBloc()..add(const LoadProfileEvent()),
+                ),
+              ],
+              child: NavigationShell(navigationShell: navigationShell),
+            );
           },
           branches: [
             /// Home Tab Branch
@@ -249,7 +344,11 @@ class AppRouter {
                   pageBuilder: (context, state) {
                     return NoTransitionPage(
                       key: state.pageKey,
-                      child: const HomeScreen(),
+                      child: BlocProvider(
+                        create: (context) =>
+                            HomeBloc()..add(const InitialEvent()),
+                        child: const HomeScreen(),
+                      ),
                     );
                   },
                 ),
@@ -266,22 +365,6 @@ class AppRouter {
                     return NoTransitionPage(
                       key: state.pageKey,
                       child: const ExploreScreen(),
-                    );
-                  },
-                ),
-              ],
-            ),
-
-            /// Stats Tab Branch
-            StatefulShellBranch(
-              routes: [
-                GoRoute(
-                  path: '/stats',
-                  name: 'stats',
-                  pageBuilder: (context, state) {
-                    return NoTransitionPage(
-                      key: state.pageKey,
-                      child: const StatsScreen(),
                     );
                   },
                 ),
@@ -312,6 +395,8 @@ class AppRouter {
                           child: PlayUploadedVideoScreen(
                             videoPath: extra.videoPath,
                             shouldShowEditButtons: extra.shouldShowEditButtons,
+                            sport: extra.sport,
+                            selectedSubcategory: extra.selectedSubcategory,
                           ),
                           transitionsBuilder:
                               (context, animation, secondaryAnimation, child) {
@@ -342,6 +427,8 @@ class AppRouter {
                           child: EditThumbnailScreen(
                             videoPath: extra.videoPath,
                             videoDuration: extra.videoDuration,
+                            sport: extra.sport,
+                            selectedSubcategory: extra.selectedSubcategory,
                           ),
                           transitionsBuilder:
                               (context, animation, secondaryAnimation, child) {
@@ -359,6 +446,67 @@ class AppRouter {
                               },
                         );
                       },
+                    ),
+
+                    /// Sports Hub Child Route
+                    GoRoute(
+                      path: 'sports-hub',
+                      name: 'sports-hub',
+                      pageBuilder: (context, state) {
+                        return CustomTransitionPage(
+                          key: state.pageKey,
+                          child: const SportsHubScreen(),
+                          transitionsBuilder:
+                              (context, animation, secondaryAnimation, child) {
+                                const begin = Offset(0.0, 1.0);
+                                const end = Offset.zero;
+                                final tween = Tween(begin: begin, end: end);
+                                final curvedAnimation = CurvedAnimation(
+                                  parent: animation,
+                                  curve: Curves.easeInOut,
+                                );
+                                return SlideTransition(
+                                  position: tween.animate(curvedAnimation),
+                                  child: child,
+                                );
+                              },
+                        );
+                      },
+                      routes: [
+                        /// Sport Details Child Route
+                        GoRoute(
+                          path: 'sport-details',
+                          name: 'sport-details',
+                          pageBuilder: (context, state) {
+                            final sportDetailsExtra =
+                                state.extra as SportDetailsExtra;
+                            final sport = sportDetailsExtra.sport;
+                            return CustomTransitionPage(
+                              key: state.pageKey,
+                              child: SportDetailsScreen(sport: sport),
+                              transitionsBuilder:
+                                  (
+                                    context,
+                                    animation,
+                                    secondaryAnimation,
+                                    child,
+                                  ) {
+                                    const begin = Offset(0.0, 1.0);
+                                    const end = Offset.zero;
+                                    final tween = Tween(begin: begin, end: end);
+                                    final curvedAnimation = CurvedAnimation(
+                                      parent: animation,
+                                      curve: Curves.easeInOut,
+                                    );
+                                    return SlideTransition(
+                                      position: tween.animate(curvedAnimation),
+                                      child: child,
+                                    );
+                                  },
+                            );
+                          },
+                        ),
+                      ],
                     ),
                   ],
                 ),

@@ -8,6 +8,7 @@ InputDecoration buildFormFieldDecoration({
   required String labelText,
   required IconData prefixIconData,
   Widget? suffixIcon,
+  Color prefixIconColor = AppColors.electricMagenta,
 }) {
   const borderRadius = BorderRadius.all(Radius.circular(8));
   const gapPadding = 8.0; // Increased gapPadding for better label gap rendering
@@ -23,7 +24,7 @@ InputDecoration buildFormFieldDecoration({
     labelStyle: const TextStyle(
       color: AppColors.grey,
       fontSize: 13,
-      fontWeight: FontWeight.w600,
+      fontWeight: FontWeight.w500,
       letterSpacing: 0.3,
     ),
     floatingLabelBehavior: FloatingLabelBehavior.auto,
@@ -31,7 +32,7 @@ InputDecoration buildFormFieldDecoration({
       padding: const EdgeInsets.only(left: 16, right: 12),
       child: Icon(
         prefixIconData,
-        color: AppColors.electricMagenta,
+        color: prefixIconColor,
         size: prefixIconSize,
       ),
     ),

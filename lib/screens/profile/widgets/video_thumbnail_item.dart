@@ -1,20 +1,24 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:beat_that/constants/app_colors.dart';
 import 'package:beat_that/widgets/thumbnail_error_widget.dart';
 
 /// Reusable widget for displaying a video thumbnail item in grid view
 /// Displays video thumbnail with YouTube-style loading shimmer and theme support
+/// Supports long-press for Instagram-style deletion
 class VideoThumbnailItem extends StatelessWidget {
   final Map<String, dynamic> thumbnail;
   final bool isDark;
   final VoidCallback onTap;
+  final Function(Map<String, dynamic>)? onLongPress;
 
   const VideoThumbnailItem({
     super.key,
     required this.thumbnail,
     required this.isDark,
     required this.onTap,
+    this.onLongPress,
   });
 
   /// YouTube-style shimmer colors for loading state
@@ -30,6 +34,12 @@ class VideoThumbnailItem extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
+      onLongPress: () {
+        HapticFeedback.heavyImpact();
+        if (onLongPress != null) {
+          onLongPress!(thumbnail);
+        }
+      },
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -92,19 +102,12 @@ class VideoThumbnailItem extends StatelessWidget {
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           color: Colors.white.withOpacity(0.7),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.3),
-                              blurRadius: 12,
-                              offset: const Offset(0, 3),
-                              spreadRadius: 2,
-                            ),
-                          ],
+
                         ),
                         padding: const EdgeInsets.all(11),
                         child: Icon(
                           Icons.play_arrow_rounded,
-                          size: 30,
+                          size: 20,
                           color: isDark
                               ? AppColors.electricPurple
                               : AppColors.electricMagenta,

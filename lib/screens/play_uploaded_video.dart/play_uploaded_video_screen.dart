@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:beat_that/constants/app_colors.dart';
+import 'package:beat_that/models/sport.dart';
 import 'package:beat_that/widgets/error_screen.dart';
 import 'package:beat_that/widgets/loading_screen.dart';
 import 'package:flutter/material.dart';
@@ -18,11 +19,15 @@ import 'package:beat_that/routes/app_router.dart';
 class PlayUploadedVideoScreen extends StatefulWidget {
   final String videoPath;
   final bool shouldShowEditButtons;
+  final Sport? sport;
+  final String? selectedSubcategory;
 
   const PlayUploadedVideoScreen({
     super.key,
     required this.videoPath,
     this.shouldShowEditButtons = true,
+    this.sport,
+    this.selectedSubcategory,
   });
 
   @override
@@ -112,6 +117,8 @@ class _PlayUploadedVideoScreenState extends State<PlayUploadedVideoScreen> {
                         extra: EditThumbnailExtra(
                           videoPath: widget.videoPath,
                           videoDuration: duration,
+                          sport: widget.sport!,
+                          selectedSubcategory: widget.selectedSubcategory,
                         ),
                       );
                     },

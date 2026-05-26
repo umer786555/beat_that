@@ -10,29 +10,23 @@ import 'package:go_router/go_router.dart';
 import 'package:beat_that/constants/app_colors.dart';
 import 'package:beat_that/constants/app_enums.dart';
 import 'package:beat_that/constants/app_strings.dart';
-import 'package:beat_that/services/auth_service.dart';
 import 'package:beat_that/services/video_picker_service.dart';
 import 'package:beat_that/bloc/theme_bloc.dart';
 import 'package:beat_that/screens/profile/bloc/profile_bloc.dart';
-import 'package:beat_that/screens/profile/widgets/upload_video_bottom_sheet.dart';
 import 'package:beat_that/screens/profile/widgets/video_thumbnail_item.dart';
+import 'package:beat_that/screens/profile/widgets/video_delete_menu.dart';
 import 'package:beat_that/routes/app_router.dart';
 
 class ProfileScreen extends StatelessWidget {
-  const ProfileScreen({super.key});
+  ProfileScreen({super.key});
+  final videoPickerService = locator<VideoPickerService>();
 
   @override
   Widget build(BuildContext context) {
-    final authService = locator<AuthService>();
-    final videoPickerService = locator<VideoPickerService>();
-    final user = authService.getCurrentUser();
-
-    return BlocProvider<ProfileBloc>(
-      create: (context) => ProfileBloc()..add(const LoadProfileEvent()),
-      child: BlocConsumer<ProfileBloc, ProfileState>(
-        listener: (context, state) {},
-        // Build UI based on state
-        builder: (context, state) {
+    return BlocConsumer<ProfileBloc, ProfileState>(
+      listener: (context, state) {},
+      // Build UI based on state
+      builder: (context, state) {
           final isDark = context.watch<ThemeBloc>().state.themeMode.isDark;
           if (state is CameraPermissionDenied) {
             return Scaffold(
@@ -63,11 +57,10 @@ class ProfileScreen extends StatelessWidget {
                         context.read<ThemeBloc>().add(ToggleThemeEvent());
                       },
                     ),
-                  ]   ,
+                  ],
                 ),
-                body:  state.thumbnails.isEmpty
+                body: state.thumbnails.isEmpty
                     ? Center(
-                    
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
@@ -97,100 +90,233 @@ class ProfileScreen extends StatelessWidget {
                           ],
                         ),
                       )
-                    : GridView.builder(
-                        padding: const EdgeInsets.all(16),
-                        gridDelegate:
-                            const SliverGridDelegateWithFixedCrossAxisCount(
-                              crossAxisCount: 2,
-                              mainAxisSpacing: 16,
-                              crossAxisSpacing: 12,
-                              childAspectRatio: 0.65,
+                    : CustomScrollView(
+                        slivers: [
+                          // Profile Header (Instagram-style)
+                          SliverToBoxAdapter(
+                            child: Padding(
+                              padding: const EdgeInsets.all(16),
+                              child: Column(
+                                children: [
+                                  // Profile Picture and Username Row
+                                  Row(
+                                    children: [
+                                      // Profile Picture Placeholder
+                                      GestureDetector(
+                                        onTap: () {
+                                          HapticFeedback.mediumImpact();
+                                          context.read<ProfileBloc>().add(
+                                            const AddProfileImageEvent(),
+                                          );
+                                        },
+                                        child: Container(
+                                          width: 80,
+                                          height: 80,
+                                          decoration: BoxDecoration(
+                                            shape: BoxShape.circle,
+                                            border: Border.all(
+                                              color: isDark
+                                                  ? AppColors.cyan
+                                                  : AppColors.electricMagenta,
+                                              width: 2,
+                                            ),
+                                          ),
+                                          child:
+                                              state.profileUrl != null &&
+                                                  state.profileUrl!.isNotEmpty
+                                              ? ClipOval(
+                                                  child: Image.network(
+                                                    state.profileUrl!,
+                                                    fit: BoxFit.cover,
+                                                    errorBuilder:
+                                                        (
+                                                          context,
+                                                          error,
+                                                          stackTrace,
+                                                        ) {
+                                                          print(
+                                                            'Image load failed: $error',
+                                                          ); // This will show the actual error
+                                                          return Icon(
+                                                            Icons.error_outline,
+                                                            size: 40,
+                                                            color: isDark
+                                                                ? AppColors.cyan
+                                                                : AppColors
+                                                                      .electricMagenta,
+                                                          );
+                                                        },
+                                                  ),
+                                                )
+                                              : Icon(
+                                                  Icons.person,
+                                                  size: 40,
+                                                  color: isDark
+                                                      ? AppColors.cyan
+                                                      : AppColors
+                                                            .electricMagenta,
+                                                ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 24),
+                                      // Username
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              state.username ??
+                                                  'Beat That User',
+                                              style: const TextStyle(
+                                                fontSize: 18,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 8),
+                                            Text(
+                                              '${state.thumbnails.length} ${state.thumbnails.length == 1 ? 'video' : 'videos'}',
+                                              style: const TextStyle(
+                                                fontSize: 14,
+                                                color: Colors.grey,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 24),
+                                  // Stats Row
+                                  Row(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceAround,
+                                    children: [
+                                      // Subscribers
+                                      Column(
+                                        children: [
+                                          Text(
+                                            '0',
+                                            style: TextStyle(
+                                              fontSize: 18,
+                                              fontWeight: FontWeight.w600,
+                                              color: isDark
+                                                  ? AppColors.cyan
+                                                  : AppColors.electricMagenta,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 4),
+                                          const Text(
+                                            'Subscribers',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: Colors.grey,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      // Followers
+                                      Column(
+                                        children: [
+                                          Text(
+                                            '0',
+                                            style: TextStyle(
+                                              fontSize: 18,
+                                              fontWeight: FontWeight.w600,
+                                              color: isDark
+                                                  ? AppColors.cyan
+                                                  : AppColors.electricMagenta,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 4),
+                                          const Text(
+                                            'Followers',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: Colors.grey,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 24),
+                                  // Divider
+                                  Divider(
+                                    color: isDark
+                                        ? Colors.grey[700]
+                                        : Colors.grey[300],
+                                  ),
+                                ],
+                              ),
                             ),
-                        itemCount: state.thumbnails.length,
-                        itemBuilder: (context, index) {
-                          final thumbnail = state.thumbnails[index];
-                          return VideoThumbnailItem(
-                            thumbnail: thumbnail,
-                            isDark: isDark,
-                            onTap: () {
-                              HapticFeedback.mediumImpact();
-                              // Navigate to video player with Supabase video URL
-                              GoRouter.of(context).pushNamed(
-                                'edit-uploaded-video',
-                                extra: PlayUploadedVideoExtra(
-                                  videoPath: thumbnail['video_url'] as String,
-                                  shouldShowEditButtons: false,
+                          ),
+                          // Videos Grid
+                          SliverGrid(
+                            gridDelegate:
+                                const SliverGridDelegateWithFixedCrossAxisCount(
+                                  crossAxisCount: 3,
+                                  mainAxisSpacing: 12,
+                                  crossAxisSpacing: 12,
+                                  childAspectRatio: 0.8,
                                 ),
+                            delegate: SliverChildBuilderDelegate((
+                              context,
+                              index,
+                            ) {
+                              final thumbnail = state.thumbnails[index];
+                              return VideoThumbnailItem(
+                                thumbnail: thumbnail,
+                                isDark: isDark,
+                                onTap: () {
+                                  HapticFeedback.mediumImpact();
+                                  // Navigate to video player with Supabase video URL
+                                  GoRouter.of(context).pushNamed(
+                                    'edit-uploaded-video',
+                                    extra: PlayUploadedVideoExtra(
+                                      videoPath:
+                                          thumbnail['video_url'] as String,
+                                      shouldShowEditButtons: false,
+                                    ),
+                                  );
+                                },
+                                onLongPress: (videoData) {
+                                  showVideoDeleteMenu(
+                                    context,
+                                    isDark: isDark,
+                                    videoTitle: videoData['title'] as String,
+                                    thumbnailUrl: videoData['thumbnail_url'] as String,
+                                    onDelete: () {
+                                      context.read<ProfileBloc>().add(
+                                        DeleteVideoEvent(
+                                          videoId: videoData['id'] as String,
+                                          videoPath: videoData['video_path'] as String,
+                                          thumbnailPath: videoData['thumbnail_path'] as String,
+                                        ),
+                                      );
+                                    },
+                                  );
+                                },
                               );
-                            },
-                          );
-                        },
+                            }, childCount: state.thumbnails.length),
+                          ),
+                        ],
                       ),
                 floatingActionButton: FloatingActionButton.extended(
                   onPressed: () async {
                     HapticFeedback.mediumImpact();
-                    // Show upload options bottom sheet
-
-                    if (state.cameraPermissionEnabled == true) {
-                      await showModalBottomSheet(
-                        context: context,
-                        builder: (_) => UploadVideoBottomSheet(
-                          onRecordVideoSelected: () async {
-                            final video = await videoPickerService
-                                .pickCameraVideo();
-                            if (video != null && context.mounted) {
-                              GoRouter.of(context).pushNamed(
-                                'edit-uploaded-video',
-                                extra: PlayUploadedVideoExtra(
-                                  videoPath: video.path,
-                                  shouldShowEditButtons: true,
-                                ),
-                              );
-                            }
-                          },
-                          onUploadFromGallerySelected: () async {
-                            final video = await videoPickerService
-                                .pickGalleryVideo();
-                            if (video != null && context.mounted) {
-                              GoRouter.of(context).pushNamed(
-                                'edit-uploaded-video',
-                                extra: PlayUploadedVideoExtra(
-                                  videoPath: video.path,
-                                  shouldShowEditButtons: true,
-                                ),
-                              );
-                            }
-                          },
-                        ),
-                        isScrollControlled: true,
-                        shape: const RoundedRectangleBorder(
-                          borderRadius: BorderRadius.vertical(
-                            top: Radius.circular(20),
-                          ),
-                        ),
-                      );
-                      return;
-                    } else {
-                      // Request camera permission
-                      context.read<ProfileBloc>().add(
-                        const RequestCameraPermissionEvent(),
-                      );
-                    }
+                    GoRouter.of(context).pushNamed('sports-hub');
                   },
                   backgroundColor: isDark
                       ? AppColors.cyan
-                      : AppColors
-                            .electricMagenta, // Vibrant magenta for light theme
-                  foregroundColor: isDark
-                      ? AppColors
-                            .white // High contrast with bright cyan
-                      : AppColors.white, // Elegant contrast with magenta
+                      : AppColors.electricMagenta,
+                  foregroundColor: isDark ? AppColors.white : AppColors.white,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  icon: const Icon(Icons.videocam),
-                  label: const Text('Upload'),
-                  tooltip: AppStrings.recordVideo,
+                  icon: const Icon(Icons.sports_cricket),
+                  label: const Text('Sports Hub'),
+                  tooltip: 'Browse Sports',
                 ),
               ),
             );
@@ -201,11 +327,55 @@ class ProfileScreen extends StatelessWidget {
             return const BeatLoadingScreen(message: 'Loading your profile...');
           }
 
-          return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
-          );
+          // Error state
+          if (state is ProfileError) {
+            return Scaffold(
+              appBar: AppBar(title: const Text(AppStrings.profile)),
+              body: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.error_outline,
+                      size: 64,
+                      color: isDark ? AppColors.cyan : AppColors.electricMagenta,
+                    ),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Error Loading Profile',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 32),
+                      child: Text(
+                        state.message,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          color: Colors.grey,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    ElevatedButton(
+                      onPressed: () {
+                        context.read<ProfileBloc>().add(const LoadProfileEvent());
+                      },
+                      child: const Text('Retry'),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }
+
+          // Initial state or unknown state - show loading screen
+          return const BeatLoadingScreen(message: 'Loading your profile...');
         },
-      ),
-    );
-  }
+      );
+    }
 }

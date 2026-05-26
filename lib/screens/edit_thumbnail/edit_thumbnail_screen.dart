@@ -1,11 +1,14 @@
+import 'package:beat_that/screens/profile/bloc/profile_bloc.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:bloc_presentation/bloc_presentation.dart';
 import 'package:beat_that/constants/app_colors.dart';
+import 'package:beat_that/models/sport.dart';
 import 'package:beat_that/widgets/interactive_button.dart';
 import 'package:beat_that/widgets/custom_snackbar.dart';
 import 'package:beat_that/widgets/title_input_bottom_sheet.dart';
+
 import 'package:go_router/go_router.dart';
 import 'bloc/edit_thumbnail_bloc.dart';
 import 'widgets/thumbnail_grid_item.dart';
@@ -14,91 +17,110 @@ import 'widgets/upload_progress_overlay.dart';
 class EditThumbnailScreen extends StatelessWidget {
   final String videoPath;
   final Duration videoDuration;
+  final Sport sport;
+  final String? selectedSubcategory;
 
   const EditThumbnailScreen({
     super.key,
     required this.videoPath,
     required this.videoDuration,
+    required this.sport,
+    this.selectedSubcategory,
   });
 
   @override
   Widget build(BuildContext context) {
     return BlocProvider(
-      create: (context) =>
-          EditThumbnailBloc(videoPath: videoPath, videoDuration: videoDuration)
-            ..add(const InitialEvent()),
-      child: BlocPresentationListener<EditThumbnailBloc, EditThumbnailPresentationEvent>(
-        listener: (context, event) {
-          switch (event) {
-            case ThumbnailErrorEvent():
-              showErrorSnackBar(context, message: event.message);
-            case SaveSuccessEvent():
-              showSuccessSnackBar(context, message: event.message);
-              // Pop the screen after showing snack bar
-              Future.delayed(const Duration(seconds: 2), () {
-                if (context.mounted) context.pop();
-              });
-          }
-        },
-        child: BlocListener<EditThumbnailBloc, EditThumbnailState>(
-          listenWhen: (previous, current) => current is VideoUploadProgressState,
-          listener: (context, state) {
-            // Progress state is handled in the UI builder
-          },
-          child: BlocBuilder<EditThumbnailBloc, EditThumbnailState>(
-            builder: (context, state) {
-              final isSaving = state is SavingVideoState;
-              final uploadProgress = state is VideoUploadProgressState ? state : null;
+      create: (context) => EditThumbnailBloc(
+        videoPath: videoPath,
+        videoDuration: videoDuration,
+        sport: sport,
+        selectedSubcategory: selectedSubcategory,
+      )..add(const InitialEvent()),
+      child:
+          BlocPresentationListener<
+            EditThumbnailBloc,
+            EditThumbnailPresentationEvent
+          >(
+            listener: (context, event) {
+              switch (event) {
+                case ThumbnailErrorEvent():
+                  showErrorSnackBar(context, message: event.message);
+                case SaveSuccessEvent():
+                  showSuccessSnackBar(context, message: event.message);
+                  // Trigger ProfileBloc to refresh videos
+                  context.read<ProfileBloc>().add(const RefreshVideosEvent());
+                  // Pop the screen after showing snack bar
+                  if (context.mounted) context.pop();
+                  
+              }
+            },
+            child: BlocListener<EditThumbnailBloc, EditThumbnailState>(
+              listenWhen: (previous, current) =>
+                  current is VideoUploadProgressState,
+              listener: (context, state) {
+                // Progress state is handled in the UI builder
+              },
+              child: BlocBuilder<EditThumbnailBloc, EditThumbnailState>(
+                builder: (context, state) {
+                  final isSaving = state is SavingVideoState;
+                  final uploadProgress = state is VideoUploadProgressState
+                      ? state
+                      : null;
 
-              return Stack(
-                children: [
-                  Scaffold(
-                    appBar: AppBar(title: const Text('Edit Thumbnail')),
-                    body: _buildBody(
-                      state,
-                      onBack: isSaving ? null : () => context.pop(),
-                      onUpload: isSaving ? null : () {
-                        context.read<EditThumbnailBloc>().add(
-                          const CustomThumbnailSelectedEvent(),
-                        );
-                      },
-                    ),
-                    floatingActionButton: (state is ThumbnailsGeneratedState && !isSaving)
-                        ? FloatingActionButton.extended(
-                            onPressed: () {
-                              HapticFeedback.mediumImpact();
-                              _showTitleBottomSheet(
-                                context,
-                                onTitleSubmitted: (title) {
+                  return Stack(
+                    children: [
+                      Scaffold(
+                        appBar: AppBar(title: const Text('Edit Thumbnail')),
+                        body: _buildBody(
+                          state,
+                          onBack: isSaving ? null : () => context.pop(),
+                          onUpload: isSaving
+                              ? null
+                              : () {
                                   context.read<EditThumbnailBloc>().add(
-                                    SaveEvent(title: title),
+                                    const CustomThumbnailSelectedEvent(),
                                   );
                                 },
-                              );
-                            },
-                            backgroundColor: AppColors.cyan,
-                            foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            icon: const Icon(Icons.cloud_upload),
-                            label: const Text('Save'),
-                          )
-                        : null,
-                  ),
-                  // Upload progress overlay - DEV: Always visible for testing
-                  UploadProgressOverlay(
-                    progressPercent: uploadProgress?.progressPercent ?? 0,
-                    sentBytes: uploadProgress?.sentBytes ?? 0,
-                    totalBytes: uploadProgress?.totalBytes ?? 0,
-                    isUploading: isSaving || uploadProgress != null,
-                  ),
-                ],
-              );
-            },
+                        ),
+                        floatingActionButton:
+                            (state is ThumbnailsGeneratedState && !isSaving)
+                            ? FloatingActionButton.extended(
+                                onPressed: () {
+                                  HapticFeedback.mediumImpact();
+                                  print(sport);
+                                  _showTitleBottomSheet(
+                                    context,
+                                    onTitleSubmitted: (title) {
+                                      context.read<EditThumbnailBloc>().add(
+                                        SaveEvent(title: title),
+                                      );
+                                    },
+                                  );
+                                },
+                                backgroundColor: AppColors.cyan,
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                icon: const Icon(Icons.cloud_upload),
+                                label: const Text('Save'),
+                              )
+                            : null,
+                      ),
+                      // Upload progress overlay - DEV: Always visible for testing
+                      UploadProgressOverlay(
+                        progressPercent: uploadProgress?.progressPercent ?? 0,
+                        sentBytes: uploadProgress?.sentBytes ?? 0,
+                        totalBytes: uploadProgress?.totalBytes ?? 0,
+                        isUploading: isSaving || uploadProgress != null,
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ),
           ),
-        ),
-      ),
     );
   }
 
@@ -212,4 +234,3 @@ class EditThumbnailScreen extends StatelessWidget {
     );
   }
 }
-

@@ -1,6 +1,7 @@
 import 'package:beat_that/service_locator.dart';
 import 'package:beat_that/services/supabase_service.dart';
 import 'package:beat_that/services/video_picker_service.dart';
+import 'package:beat_that/models/sport.dart';
 import 'package:bloc_presentation/bloc_presentation.dart';
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -26,10 +27,16 @@ class EditThumbnailBloc extends Bloc<EditThumbnailEvent, EditThumbnailState>
 
   final String videoPath;
   final Duration videoDuration;
+  final Sport sport;
+  final String? selectedSubcategory;
   Uint8List? selectedThumbnail;
 
-  EditThumbnailBloc({required this.videoPath, required this.videoDuration})
-    : super(EditThumbnailInitial()) {
+  EditThumbnailBloc({
+    required this.videoPath,
+    required this.videoDuration,
+    required this.sport,
+    this.selectedSubcategory,
+  }) : super(EditThumbnailInitial()) {
     on<InitialEvent>(_onInitialEvent);
     on<ThumbnailSelectedEvent>(_onThumbnailSelected);
     on<CustomThumbnailSelectedEvent>(_onCustomThumbnailSelected);
@@ -41,6 +48,15 @@ class EditThumbnailBloc extends Bloc<EditThumbnailEvent, EditThumbnailState>
     Emitter<EditThumbnailState> emit,
   ) async {
     try {
+      // Print sport model details
+      print('=== EDIT THUMBNAIL BLOC INITIALIZED ===');
+      print('Sport: $sport');
+      print('Sport ID: ${sport.id}');
+      print('Sport Display Name: ${sport.displayName}');
+      print('Sport Icon: ${sport.icon}');
+      print('Sport Subcategories: ${sport.subcategories}');
+      print('========================================');
+
       // Emit loading state with placeholder thumbnails to show shimmer
       emit(
         ThumbnailsGeneratedState(
@@ -148,6 +164,11 @@ class EditThumbnailBloc extends Bloc<EditThumbnailEvent, EditThumbnailState>
     SaveEvent event,
     Emitter<EditThumbnailState> emit,
   ) async {
+
+    
+    print('SaveEvent triggered with title: ${event.title}');
+    print('Selected subcategory: $selectedSubcategory');
+    print('sport: ${sport.displayName} (ID: ${sport.id})');
     try {
       if (selectedThumbnail == null) {
         emitPresentation(
@@ -197,6 +218,27 @@ class EditThumbnailBloc extends Bloc<EditThumbnailEvent, EditThumbnailState>
       await thumbnailFile.delete();
 
       if (result['success'] as bool) {
+        // Get video ID from upload result
+        final videoId = result['videoId'];
+
+        // If a subcategory was selected, link the video to it
+        if (selectedSubcategory != null && selectedSubcategory!.isNotEmpty) {
+          final linkResult = await supabaseService.linkVideoToSubcategory(
+            videoId: videoId,
+            sportId: sport.id,
+            subcategoryName: selectedSubcategory!,
+          );
+
+          if (!linkResult['success']) {
+            emitPresentation(
+              ThumbnailErrorEvent(
+                message: 'Upload succeeded but linking failed: ${linkResult['error']}',
+              ),
+            );
+            return;
+          }
+        }
+
         // Reset to initial state to hide overlay
         emit(
           ThumbnailsGeneratedState(
@@ -206,10 +248,13 @@ class EditThumbnailBloc extends Bloc<EditThumbnailEvent, EditThumbnailState>
         );
         
         // Emit success presentation event - UI will show snack bar and pop
+        String message = 'Video uploaded successfully!\nTitle: ${event.title}';
+        if (selectedSubcategory != null) {
+          message += '\nLinked to: $selectedSubcategory';
+        }
+        
         emitPresentation(
-          SaveSuccessEvent(
-            message: 'Video uploaded successfully!\nTitle: ${event.title}',
-          ),
+          SaveSuccessEvent(message: message),
         );
       } else {
         emitPresentation(

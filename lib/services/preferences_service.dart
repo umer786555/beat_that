@@ -1,4 +1,6 @@
+import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../models/user_personal_profile.dart';
 
 /// Service to manage application preferences using SharedPreferences
 /// Provides a clean abstraction layer for storing and retrieving app-wide preferences
@@ -21,5 +23,32 @@ class PreferencesService {
   /// Set a string preference
   Future<void> setString(String key, String value) async {
     await _prefs.setString(key, value);
+  }
+
+  /// Save a user's personal profile
+  Future<void> saveUserProfile(UserPersonalProfile profile) async {
+    final profileJson = jsonEncode({
+      'username': profile.username,
+      'profileUrl': profile.profileUrl,
+    });
+    await _prefs.setString('user_personal_profile', profileJson);
+  }
+
+  /// Fetch a user's personal profile
+  Future<UserPersonalProfile?> fetchUserProfile() async {
+    final profileJson = _prefs.getString('user_personal_profile');
+    if (profileJson == null) return null;
+
+    final decodedJson = jsonDecode(profileJson) as Map<String, dynamic>;
+    return UserPersonalProfile(
+      username: decodedJson['username'] as String,
+      profileUrl: decodedJson['profileUrl'] as String?,
+    );
+  }
+
+  /// Clear the user's personal profile from local storage
+  /// Used when user logs out or resets their profile
+  Future<void> clearUserProfile() async {
+    await _prefs.remove('user_personal_profile');
   }
 }
