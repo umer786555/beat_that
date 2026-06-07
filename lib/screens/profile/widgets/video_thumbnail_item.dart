@@ -1,3 +1,4 @@
+import 'package:beat_that/models/video_thumbnail_model.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shimmer/shimmer.dart';
@@ -8,10 +9,10 @@ import 'package:beat_that/widgets/thumbnail_error_widget.dart';
 /// Displays video thumbnail with YouTube-style loading shimmer and theme support
 /// Supports long-press for Instagram-style deletion
 class VideoThumbnailItem extends StatelessWidget {
-  final Map<String, dynamic> thumbnail;
+  final VideoThumbnailModel thumbnail;
   final bool isDark;
   final VoidCallback onTap;
-  final Function(Map<String, dynamic>)? onLongPress;
+  final Function(VideoThumbnailModel)? onLongPress;
 
   const VideoThumbnailItem({
     super.key,
@@ -30,6 +31,27 @@ class VideoThumbnailItem extends StatelessWidget {
     return isDark ? const Color(0xFF424242) : const Color(0xFFE0E0E0);
   }
 
+  /// Format view count in human-readable format (1.2M, 500K, etc.) - YouTube style
+  String _formatViewCount(int count) {
+    if (count >= 1000000) {
+      return '${(count / 1000000).toStringAsFixed(1)}M';
+    } else if (count >= 1000) {
+      return '${(count / 1000).toStringAsFixed(1)}K';
+    } else if (count == 0) {
+      return '0';
+    } else {
+      return '$count';
+    }
+  }
+
+  /// Format rating for display
+  String _formatRating(double rating) {
+    if (rating == 0) {
+      return 'No ratings';
+    }
+    return rating.toStringAsFixed(1);
+  }
+
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
@@ -43,7 +65,7 @@ class VideoThumbnailItem extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Thumbnail with play button - using Material elevation for depth
+          // Thumbnail with play button and info overlay
           Expanded(
             child: Material(
               elevation: 0,
@@ -55,7 +77,7 @@ class VideoThumbnailItem extends StatelessWidget {
                   children: [
                     // Main thumbnail image
                     Image.network(
-                      thumbnail['thumbnail_url'] as String,
+                      thumbnail.thumbnailUrl,
                       fit: BoxFit.cover,
                       loadingBuilder: (context, child, loadingProgress) {
                         if (loadingProgress == null) return child;
@@ -83,53 +105,146 @@ class VideoThumbnailItem extends StatelessWidget {
                         );
                       },
                     ),
-                    // Dark gradient overlay for better play button visibility
-                    Container(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [
-                            Colors.transparent,
-                            Colors.black.withOpacity(0.45),
-                          ],
-                        ),
-                      ),
-                    ),
-                    // Play button with improved styling
+                    // Play button - centered
                     Center(
                       child: Container(
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          color: Colors.white.withOpacity(0.7),
-
+                          color: Colors.white.withOpacity(0.85),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.25),
+                              blurRadius: 12,
+                              offset: const Offset(0, 3),
+                            ),
+                          ],
                         ),
-                        padding: const EdgeInsets.all(11),
+                        padding: const EdgeInsets.all(10),
                         child: Icon(
                           Icons.play_arrow_rounded,
-                          size: 20,
+                          size: 22,
                           color: isDark
                               ? AppColors.electricPurple
                               : AppColors.electricMagenta,
                         ),
                       ),
                     ),
+                    // Bottom info overlay with gradient
+                    Positioned(
+                      bottom: 0,
+                      left: 0,
+                      right: 0,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              Colors.transparent,
+                              Colors.black.withOpacity(0.8),
+                            ],
+                          ),
+                        ),
+                        padding: const EdgeInsets.fromLTRB(10, 24, 10, 10),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            // Title
+                            Text(
+                              thumbnail.title,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                height: 1.2,
+                                letterSpacing: -0.3,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            // Stats row with rating and views
+                            Row(
+                              children: [
+                                // Rating badge
+                                if (thumbnail.averageRating > 0)
+                                  Flexible(
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          Icons.star_rounded,
+                                          size: 13,
+                                          color: Colors.amber[300],
+                                        ),
+                                        const SizedBox(width: 3),
+                                        Text(
+                                          _formatRating(thumbnail.averageRating),
+                                          style: TextStyle(
+                                            color: Colors.amber[100],
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w600,
+                                            letterSpacing: -0.2,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  )
+                                else
+                                  Flexible(
+                                    child: Text(
+                                      'No ratings',
+                                      style: TextStyle(
+                                        color: Colors.white.withOpacity(0.7),
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w500,
+                                        letterSpacing: -0.2,
+                                      ),
+                                    ),
+                                  ),
+                                const SizedBox(width: 12),
+                                // Divider
+                                Container(
+                                  width: 1,
+                                  height: 12,
+                                  color: Colors.white.withOpacity(0.3),
+                                ),
+                                const SizedBox(width: 12),
+                                // View count
+                                Flexible(
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        Icons.visibility_rounded,
+                                        size: 13,
+                                        color: Colors.white.withOpacity(0.9),
+                                      ),
+                                      const SizedBox(width: 3),
+                                      Text(
+                                        thumbnail.viewCount > 0
+                                            ? '${_formatViewCount(thumbnail.viewCount)} views'
+                                            : 'No views',
+                                        style: TextStyle(
+                                          color: Colors.white.withOpacity(0.9),
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w600,
+                                          letterSpacing: -0.2,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               ),
-            ),
-          ),
-          // Title section with improved typography and spacing
-          const SizedBox(height: 10),
-          Text(
-            thumbnail['title'] as String,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              fontWeight: FontWeight.w600,
-              fontSize: 13.5,
-              height: 1.4,
-              color: isDark ? Colors.white : Colors.black,
             ),
           ),
         ],

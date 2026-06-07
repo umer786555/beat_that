@@ -1,4 +1,5 @@
 import 'package:beat_that/models/user_personal_profile.dart';
+import 'package:beat_that/models/video_thumbnail_model.dart';
 import 'package:beat_that/service_locator.dart';
 import 'package:equatable/equatable.dart';
 import 'dart:io';
@@ -12,6 +13,7 @@ import 'package:beat_that/services/supabase_service.dart';
 import 'package:beat_that/services/video_picker_service.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:video_thumbnail/video_thumbnail.dart';
 part 'profile_event.dart';
 part 'profile_state.dart';
 
@@ -35,7 +37,7 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
   /// Load profile data and fetch thumbnail URLs
   ///
   /// This event performs three sequential operations:
-  /// 1. Check camera and gallery permissions
+  /// 1. Check camera and gallery permssions
   /// 2. Fetch all thumbnail URLs for the current user's videos
   /// 3. Fetch the username from preferences
   Future<void> _onLoadProfile(

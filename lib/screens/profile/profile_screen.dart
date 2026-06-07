@@ -251,14 +251,14 @@ class ProfileScreen extends StatelessWidget {
                               ),
                             ),
                           ),
-                          // Videos Grid
+                          // Videos Grid - balanced size with proper aspect ratio
                           SliverGrid(
                             gridDelegate:
                                 const SliverGridDelegateWithFixedCrossAxisCount(
-                                  crossAxisCount: 3,
+                                  crossAxisCount: 2,
                                   mainAxisSpacing: 12,
                                   crossAxisSpacing: 12,
-                                  childAspectRatio: 0.8,
+                                  childAspectRatio: 0.78,
                                 ),
                             delegate: SliverChildBuilderDelegate((
                               context,
@@ -274,8 +274,7 @@ class ProfileScreen extends StatelessWidget {
                                   GoRouter.of(context).pushNamed(
                                     'edit-uploaded-video',
                                     extra: PlayUploadedVideoExtra(
-                                      videoPath:
-                                          thumbnail['video_url'] as String,
+                                      videoPath: thumbnail.videoUrl,
                                       shouldShowEditButtons: false,
                                     ),
                                   );
@@ -284,14 +283,14 @@ class ProfileScreen extends StatelessWidget {
                                   showVideoDeleteMenu(
                                     context,
                                     isDark: isDark,
-                                    videoTitle: videoData['title'] as String,
-                                    thumbnailUrl: videoData['thumbnail_url'] as String,
+                                    videoTitle: videoData.title,
+                                    thumbnailUrl: videoData.thumbnailUrl,
                                     onDelete: () {
                                       context.read<ProfileBloc>().add(
                                         DeleteVideoEvent(
-                                          videoId: videoData['id'] as String,
-                                          videoPath: videoData['video_path'] as String,
-                                          thumbnailPath: videoData['thumbnail_path'] as String,
+                                          videoId: videoData.id,
+                                          videoPath: videoData.videoPath,
+                                          thumbnailPath: videoData.thumbnailPath,
                                         ),
                                       );
                                     },

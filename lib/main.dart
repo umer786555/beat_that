@@ -13,18 +13,18 @@ import 'package:beat_that/constants/app_themes.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // In main.dart
-  if (kDebugMode) {
+  // In main.dartßå
+  // if (kDebugMode) {
     await Supabase.initialize(
       url: 'https://hsyqamsignfrbsifrkmu.supabase.co',
       anonKey: 'sb_publishable_0fYQfoXXyTq7Oexc54H_-A_lPipG7MW',
     );
-  } else {
-    await Supabase.initialize(
-      url: 'https://ahrpqdjrnriugjdxqkfy.supabase.co',
-      anonKey: 'sb_publishable_uSCOer4EsaTo9eDc-TedqQ_bIGWkULu',
-    );
-  }
+  // } else {
+  //   await Supabase.initialize(
+  //     url: 'https://ahrpqdjrnriugjdxqkfy.supabase.co',
+  //     anonKey: 'sb_publishable_uSCOer4EsaTo9eDc-TedqQ_bIGWkULu',
+  //   );
+  // }
 
   // Initialize async services
   final preferencesService = await initializeAsyncServices();

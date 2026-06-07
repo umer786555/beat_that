@@ -1,4 +1,5 @@
 import 'package:beat_that/service_locator.dart';
+import 'package:beat_that/services/preferences_service.dart';
 import 'package:beat_that/services/supabase_service.dart';
 import 'package:beat_that/services/video_picker_service.dart';
 import 'package:beat_that/models/sport.dart';
@@ -18,6 +19,7 @@ class EditThumbnailBloc extends Bloc<EditThumbnailEvent, EditThumbnailState>
     with BlocPresentationMixin<EditThumbnailState, EditThumbnailPresentationEvent> {
   final videoPickerService = locator<VideoPickerService>();
   final supabaseService = locator<SupabaseService>();
+  final PreferencesService preferencesService = locator<PreferencesService>();
 
 
   static const int _numberOfThumbnails = 6;
@@ -48,14 +50,6 @@ class EditThumbnailBloc extends Bloc<EditThumbnailEvent, EditThumbnailState>
     Emitter<EditThumbnailState> emit,
   ) async {
     try {
-      // Print sport model details
-      print('=== EDIT THUMBNAIL BLOC INITIALIZED ===');
-      print('Sport: $sport');
-      print('Sport ID: ${sport.id}');
-      print('Sport Display Name: ${sport.displayName}');
-      print('Sport Icon: ${sport.icon}');
-      print('Sport Subcategories: ${sport.subcategories}');
-      print('========================================');
 
       // Emit loading state with placeholder thumbnails to show shimmer
       emit(
@@ -223,10 +217,16 @@ class EditThumbnailBloc extends Bloc<EditThumbnailEvent, EditThumbnailState>
 
         // If a subcategory was selected, link the video to it
         if (selectedSubcategory != null && selectedSubcategory!.isNotEmpty) {
+          // Find the subcategory ID from the selected subcategory name
+          final subcategory = sport.subcategories.firstWhere(
+            (sub) => sub.name == selectedSubcategory,
+            orElse: () => throw Exception('Subcategory not found: $selectedSubcategory'),
+          );
+
           final linkResult = await supabaseService.linkVideoToSubcategory(
             videoId: videoId,
             sportId: sport.id,
-            subcategoryName: selectedSubcategory!,
+            subcategoryId: subcategory.id.toString(), // Convert subcategory ID to string
           );
 
           if (!linkResult['success']) {

@@ -12,7 +12,7 @@ final class ProfileInitial extends ProfileState {}
 final class ProfileLoaded extends ProfileState {
   final bool cameraPermissionEnabled;
   final bool galleryPermissionEnabled;
-  final List<Map<String, dynamic>> thumbnails;
+  final List<VideoThumbnailModel> thumbnails;
   final String? username;
   final String? profileUrl;
 
@@ -31,7 +31,7 @@ final class ProfileLoaded extends ProfileState {
     AppThemeMode? currentTheme,
     bool? cameraPermissionEnabled,
     bool? galleryPermissionEnabled,
-    List<Map<String, dynamic>>? thumbnails,
+    List<VideoThumbnailModel>? thumbnails,
     String? username,
     String? profileUrl,
   }) {

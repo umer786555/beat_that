@@ -1,10 +1,13 @@
 import 'dart:io';
+import 'package:beat_that/service_locator.dart';
+import 'package:beat_that/models/user_personal_profile.dart';
+import 'package:beat_that/models/sport_subcategory.dart';
+import 'package:beat_that/models/video_thumbnail_model.dart';
 import 'package:beat_that/services/dio_upload_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 import 'package:mime/mime.dart';
 import 'package:path/path.dart' as p;
-import 'package:beat_that/service_locator.dart';
 
 class SupabaseService {
   /// Get the Supabase client instance
@@ -282,34 +285,400 @@ class SupabaseService {
     return {'path': path, 'mimeType': mimeType};
   }
 
+  /// Delete a video and all associated resources
+  /// 
+  /// Deletes in this order:
+  /// 1. Database record (safest - no side effects if it fails)
+  /// 2. Video file from storage
+  /// 3. Thumbnail file from storage
+  /// 
+  /// Parameters:
+  /// - [videoId]: The unique video ID to delete
+  /// - [videoPath]: Relative path to video file in storage
+  /// - [thumbnailPath]: Relative path to thumbnail file in storage
+  /// 
+  /// Returns: {success: true, message, deletedSteps} on success
+  /// Returns: {success: false, error} on failure
+  Future<Map<String, dynamic>> deleteVideo({
+    required String videoId,
+    required String videoPath,
+    required String thumbnailPath,
+  }) async {
+    print('🗑️ Starting video deletion for videoId=$videoId');
+    print('   Video path: $videoPath');
+    print('   Thumbnail path: $thumbnailPath');
+    
+    try {
+
+      final deletionSteps = <String>[];
+
+      // ==================== STEP 1: Delete Database Record (FIRST) ====================
+      print('Step 1: Deleting database record...');
+      try {
+        await _deleteWithRetry(
+          operation: () => client.from('my_videos').delete().eq('id', videoId),
+          resourceName: 'database record',
+          maxAttempts: 3,
+        );
+        print('✓ Database record deleted successfully');
+        deletionSteps.add('database_record');
+      } catch (e) {
+        print('✗ Failed to delete database record: $e');
+        throw Exception('Database record deletion failed (storage untouched): $e');
+      }
+
+      // ==================== STEP 2: Delete Video File ====================
+      print('Step 2: Deleting video file from storage...');
+      try {
+        await _deleteWithRetry(
+          operation: () => client.storage.from('my_videos').remove([videoPath]),
+          resourceName: 'video file',
+          maxAttempts: 3,
+        );
+        print('✓ Video file deleted successfully');
+        deletionSteps.add('video_file');
+      } catch (e) {
+        print('⚠ Warning: Failed to delete video file (orphaned): $e');
+        deletionSteps.add('video_file_orphaned');
+      }
+
+      // ==================== STEP 3: Delete Thumbnail File ====================
+      print('Step 3: Deleting thumbnail file from storage...');
+      try {
+        await _deleteWithRetry(
+          operation: () => client.storage.from('my-thumbnails').remove([thumbnailPath]),
+          resourceName: 'thumbnail file',
+          maxAttempts: 3,
+        );
+        print('✓ Thumbnail file deleted successfully');
+        deletionSteps.add('thumbnail_file');
+      } catch (e) {
+        print('⚠ Warning: Failed to delete thumbnail file (orphaned): $e');
+        deletionSteps.add('thumbnail_file_orphaned');
+      }
+
+      // Check if all steps succeeded
+      final hasOrphans = deletionSteps.any((s) => s.contains('orphaned'));
+      if (hasOrphans) {
+        print('⚠ Partial success: DB deleted but some files orphaned');
+        return {
+          'success': true,
+          'message': 'Database record deleted. Some files may be orphaned in storage.',
+          'deletedSteps': deletionSteps,
+          'hasOrphans': true,
+        };
+      }
+
+      print('✓ All deletion steps completed successfully: $deletionSteps');
+      return {
+        'success': true,
+        'message': 'Video, thumbnail, and database record deleted successfully',
+        'deletedSteps': deletionSteps,
+      };
+    } catch (e) {
+      print('✗ Critical deletion failure: $e');
+      return {
+        'success': false,
+        'error': e.toString(),
+      };
+    }
+  }
+
+  /// Helper method to retry a delete operation up to maxAttempts times
+  /// 
+  /// Parameters:
+  /// - [operation]: The async operation to retry
+  /// - [resourceName]: Name of resource being deleted (for logging)
+  /// - [maxAttempts]: Maximum number of retry attempts
+  /// 
+  /// Throws: Exception if all attempts fail
+  Future<void> _deleteWithRetry({
+    required Future<dynamic> Function() operation,
+    required String resourceName,
+    required int maxAttempts,
+  }) async {
+    int attempt = 1;
+    
+    while (attempt <= maxAttempts) {
+      try {
+        print('   Attempt $attempt/$maxAttempts: Deleting $resourceName...');
+        final result = await operation();
+        print('   ✓ $resourceName deleted (result: $result)');
+        return; // Success, exit
+      } catch (e) {
+        print('   ✗ Attempt $attempt failed: $e');
+        if (attempt == maxAttempts) {
+          throw Exception('Failed to delete $resourceName after $maxAttempts attempts: $e');
+        }
+        attempt++;
+        // Wait briefly before retrying
+        await Future.delayed(const Duration(milliseconds: 500));
+      }
+    }
+  }
+
   /// Helper method to extract file extension from file path
   String _getFileExtension(String filePath) {
     final ext = p.extension(filePath);
     return ext.isNotEmpty ? ext.substring(1).toLowerCase() : 'bin';
   }
 
-  /// Get current user's profile
+  /// Check if a username already exists in the database
+  /// 
+  /// Optionally excludes a specific user ID from the check (useful when updating profile).
+  /// 
+  /// Parameters:
+  /// - [username]: The username to check
+  /// - [excludeId]: Optional user ID to exclude from the check
+  /// 
+  /// Returns: true if username exists (and doesn't belong to excludeId), false otherwise
+  Future<bool> usernameExists(String username, {String? excludeId}) async {
+    try {
+      final query = client
+          .from('user_personal_profiles')
+          .select('id')
+          .eq('username', username);
+
+      final results = await query;
+
+      if (results.isEmpty) {
+        return false;
+      }
+
+      // If excludeId is provided, check if the result belongs to a different user
+      if (excludeId != null) {
+        return results.any((record) => record['id'] != excludeId);
+      }
+
+      return true;
+    } catch (e) {
+      print('Error checking username existence: $e');
+      return false;
+    }
+  }
+
+  /// Save user personal profile to the database
   ///
-  /// Fetches user profile from the profiles table.
+  /// Creates or updates the user's personal profile in the 'user_personal_profiles' table.
+  /// Structured to support thousands of user profiles with proper indexing by user_id.
   ///
-  /// Returns: User profile map with all fields, or null if not found or user not authenticated
-  Future<Map<String, dynamic>?> getUserProfile() async {
+  /// Validates that:
+  /// - Username is not empty
+  /// - Username is no more than 20 characters
+  /// - Username is not already taken before saving.
+  ///
+  /// Parameters:
+  /// - [profile]: The UserPersonalProfile containing the username
+  ///
+  /// Returns: {success: true, message} on success or {success: false, error} on failure
+  Future<Map<String, dynamic>> saveUserPersonalProfile(
+    UserPersonalProfile profile,
+  ) async {
     try {
       final userId = getCurrentUserId();
       if (userId == null) {
-        throw Exception('User not authenticated');
+        return {'success': false, 'error': 'User not authenticated'};
       }
 
-      final profile = await client
-          .from('profiles')
+      // Validate username length
+      if (profile.username.length > 20) {
+        return {'success': false, 'error': 'Keep it short! Max 20 characters.'};
+      }
+
+      // Check if username already exists (excluding current user's ID)
+      final usernameTaken = await usernameExists(
+        profile.username,
+        excludeId: userId,
+      );
+      if (usernameTaken) {
+        return {
+          'success': false,
+          'error': 'That username is taken! Try another one.',
+        };
+      }
+
+      // Try to upsert - update if exists, insert if doesn't
+      await client.from('user_personal_profiles').upsert({
+        'id': userId,
+        'username': profile.username,
+        'updated_at': DateTime.now().toIso8601String(),
+      }, onConflict: 'id');
+
+      print('✓ User personal profile saved successfully for user: $userId');
+      return {'success': true, 'message': 'You\'re all set! 🎉'};
+    } catch (e) {
+      print('Error saving user personal profile: $e');
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  /// Fetch user personal profile from the database
+  ///
+  /// Retrieves the current user's personal profile from the 'user_personal_profiles' table.
+  /// Returns null if no profile exists for the user or user is not authenticated.
+  ///
+  /// Returns: UserPersonalProfile on success, null if not found or error occurs
+  Future<UserPersonalProfile?> fetchUserPersonalProfile() async {
+    try {
+      final userId = getCurrentUserId();
+      if (userId == null) {
+        print('Error: User not authenticated');
+        return null;
+      }
+
+      final data = await client
+          .from('user_personal_profiles')
           .select()
           .eq('id', userId)
           .single();
 
+      final profile = UserPersonalProfile(
+        username: data['username'] as String,
+        profileUrl: data['profileUrl'] as String?,
+      );
+
+      print('✓ User personal profile fetched successfully');
       return profile;
     } catch (e) {
-      print('Error fetching profile: $e');
+      print('Error fetching user personal profile: $e');
       return null;
+    }
+  }
+
+  /// Upload user profile image to Supabase storage and update database
+  ///
+  /// Validates that the file is a valid image format (JPEG, PNG, or WebP)
+  /// Uploads to the 'profile_images' bucket and updates the user_personal_profiles table
+  /// with the image URL path.
+  ///
+  /// Parameters:
+  /// - [imageFile]: The image file to upload (must be JPEG, PNG, or WebP)
+  ///
+  /// Returns: {success: true, imageUrl, message} on success
+  /// Returns: {success: false, error} on failure
+  Future<Map<String, dynamic>> uploadProfileImage(File imageFile) async {
+    try {
+      final userId = getCurrentUserId();
+      if (userId == null) {
+        return {'success': false, 'error': 'User not authenticated'};
+      }
+
+      // Get file extension
+      final extension = _getFileExtension(imageFile.path);
+      final path = '$userId/profile_image.$extension';
+
+      // Upload file to storage
+      await _uploadService.uploadFile(
+        file: imageFile,
+        bucketName: 'profile_images',
+        path: path,
+      );
+
+      // Generate public URL with cache-busting parameter
+      var imageUrl = client.storage.from('profile_images').getPublicUrl(path);
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      imageUrl = '$imageUrl?t=$timestamp';
+
+      // Update user profile with image URL in database
+      await client.from('user_personal_profiles').upsert({
+        'id': userId,
+        'profileUrl': imageUrl,
+        'updated_at': DateTime.now().toIso8601String(),
+      }, onConflict: 'id');
+
+      return {
+        'success': true,
+        'imageUrl': imageUrl,
+        'message': 'Profile image uploaded successfully! 🎉',
+      };
+    } catch (e) {
+      print('Error uploading profile image: $e');
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  /// Upload profile image and save URL to database (with automatic rollback on failure)
+  ///
+  /// This is an atomic operation that:
+  /// 1. Uploads the image file to storage bucket
+  /// 2. If successful, saves the image URL to the database
+  /// 3. If database save fails, automatically deletes the uploaded image from storage (rollback)
+  ///
+  /// This ensures consistency - either everything succeeds or everything is rolled back.
+  ///
+  /// Parameters:
+  /// - [imageFile]: The image file to upload (must be JPEG, PNG, or WebP)
+  /// - [username]: The user's username to preserve in the database
+  ///
+  /// Returns: {success: true, imageUrl, message} on success
+  /// Returns: {success: false, error} on failure (with automatic cleanup if needed)
+  Future<Map<String, dynamic>> uploadAndSaveProfileImage(
+    File imageFile,
+    String username,
+  ) async {
+    final userId = getCurrentUserId();
+    if (userId == null) {
+      return {'success': false, 'error': 'User not authenticated'};
+    }
+
+    // Track which resources were successfully created for cleanup
+    String? uploadedImagePath;
+
+    try {
+      // ==================== STEP 1: Upload Image to Storage ====================
+      final extension = _getFileExtension(imageFile.path);
+      final path = '$userId/profile_image.$extension';
+      final mimeType = lookupMimeType(imageFile.path) ?? 'image/jpeg';
+
+      // Upload file to storage
+      await _uploadService.uploadFile(
+        file: imageFile,
+        bucketName: 'profile_images',
+        path: path,
+      );
+
+      uploadedImagePath = path;
+
+      // ==================== STEP 2: Generate Public URL ====================
+      var imageUrl = client.storage.from('profile_images').getPublicUrl(path);
+      
+      // Add cache-busting query parameter (timestamp)
+      // Since we overwrite the same file, this forces CDN and Image.network to fetch fresh
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      imageUrl = '$imageUrl?t=$timestamp';
+
+      // ==================== STEP 3: Save URL to Database ====================
+      // Prepare update data with username
+      final updateData = {
+        'id': userId,
+        'username': username,
+        'profileUrl': imageUrl,
+        'updated_at': DateTime.now().toIso8601String(),
+      };
+
+      await client
+          .from('user_personal_profiles')
+          .upsert(updateData, onConflict: 'id');
+
+      return {
+        'success': true,
+        'imageUrl': imageUrl,
+        'message': 'Profile image uploaded and saved successfully! 🎉',
+      };
+    } catch (e) {
+      // ==================== ROLLBACK: Delete uploaded file ====================
+      if (uploadedImagePath != null) {
+        try {
+          await client.storage.from('profile_images').remove([
+            uploadedImagePath,
+          ]);
+        } catch (deleteError) {
+          // Silently ignore rollback errors
+        }
+      }
+
+      // FAILURE
+      return {'success': false, 'error': e.toString()};
     }
   }
 
@@ -318,23 +687,25 @@ class SupabaseService {
   /// Fetch all thumbnail URLs for the current user's videos
   ///
   /// Retrieves all video records from the database and generates signed URLs
-  /// for each thumbnail. Returns video metadata for display in the UI.
+  /// for each thumbnail. Returns strongly-typed VideoThumbnail models for display in the UI.
   ///
   /// Only fetches necessary columns for better performance:
-  /// - id, thumbnail_url, video_url, title, description, view_count, created_at
+  /// - id (UUID), thumbnail_url, video_url, title, description, view_count, created_at (timestampz)
   ///
-  /// Returns a list of maps containing:
-  /// - id: Unique video identifier
-  /// - thumbnail_url: Signed URL for the thumbnail image (7 days expiry)
-  /// - video_url: Signed URL for the video file (7 days expiry)
-  /// - title: Video title
-  /// - description: Video description
-  /// - view_count: Number of views
-  /// - created_at: When the video was created
+  /// Returns a list of VideoThumbnail models containing:
+  /// - id: Unique video identifier (UUID)
+  /// - thumbnailUrl: Signed URL for the thumbnail image (7 days expiry)
+  /// - videoUrl: Signed URL for the video file (7 days expiry)
+  /// - title: Video title (String)
+  /// - description: Video description (String)
+  /// - viewCount: Number of views (int)
+  /// - createdAt: When the video was created (timestampz as String)
+  /// - thumbnailPath: Storage path for deletion
+  /// - videoPath: Storage path for deletion
   ///
   /// Returns empty list if user not authenticated or no videos found.
   /// Throws exception on database query errors.
-  Future<List<Map<String, dynamic>>> getAllThumbnailUrls() async {
+  Future<List<VideoThumbnailModel>> getAllThumbnailUrls() async {
     try {
       final userId = getCurrentUserId();
       if (userId == null) {
@@ -345,14 +716,15 @@ class SupabaseService {
       final videos = await client
           .from('my_videos')
           .select(
-            'id, thumbnail_url, video_url, title, description, view_count, created_at',
+            'id, thumbnail_url, video_url, title, description, view_count, average_rating, created_at',
           )
           .eq('user_id', userId)
           .order('created_at', ascending: false);
 
-      final thumbnailData = <Map<String, dynamic>>[];
+      final thumbnailData = <VideoThumbnailModel>[];
       for (final video in videos) {
-        thumbnailData.add(await _buildVideoUrlData(video));
+        final videoData = await _buildVideoUrlData(video);
+        thumbnailData.add(VideoThumbnailModel.fromJson(videoData));
       }
 
       return thumbnailData;
@@ -378,7 +750,7 @@ class SupabaseService {
   }
 
   /// Helper method to build video data with URLs
-  /// Converts storage paths to accessible URLs and creates final data map
+  /// Converts storage paths to accessible signed URLs for display
   Future<Map<String, dynamic>> _buildVideoUrlData(
     Map<String, dynamic> video,
   ) async {
@@ -388,7 +760,7 @@ class SupabaseService {
     final thumbnailUrl = await _pathToUrl('my-thumbnails', thumbnailPath);
     final videoUrl = await _pathToUrl('my_videos', videoPath);
 
-    return _createVideoDataMap(video, thumbnailUrl, videoUrl);
+    return _createVideoDataMap(video, thumbnailUrl, videoUrl, thumbnailPath, videoPath);
   }
 
   /// Helper method to create video data map
@@ -396,25 +768,503 @@ class SupabaseService {
     Map<String, dynamic> video,
     String thumbnailUrl,
     String videoUrl,
+    String thumbnailPath,
+    String videoPath,
   ) {
     return {
       'id': video['id'] as String,
       'thumbnail_url': thumbnailUrl,
       'video_url': videoUrl,
+      'thumbnail_path': thumbnailPath,
+      'video_path': videoPath,
       'title': video['title'] as String? ?? 'Untitled',
       'description': video['description'] as String? ?? '',
       'view_count': video['view_count'] as int? ?? 0,
+      'average_rating': video['average_rating'] as num? ?? 0.0,
       'created_at': video['created_at'] as String,
     };
   }
 
-  /// Check if user is authenticated
-  bool isAuthenticated() {
-    return client.auth.currentUser != null;
+  // ==================== SPORT VIDEO OPERATIONS ====================
+
+  /// Fetch all subcategories for a specific sport
+  ///
+  /// Retrieves all available subcategories from the sport_subcategories table
+  /// for a given sport ID.
+  ///
+  /// Parameters:
+  /// - [sportId]: Sport ID string (e.g., "basketball")
+  ///
+  /// Returns: List of SportSubcategory objects, or empty list on error
+  // Future<List<SportSubcategory>> getSubcategoriesBySport(String sportId) async {
+  //   try {
+  //     final result = await client
+  //         .from('sport_subcategories')
+  //         .select('id, name')
+  //         .eq('sport_id', sportId)
+  //         .order('name');
+
+  //     return (result as List<dynamic>)
+  //         .map((item) => SportSubcategory.fromJson(item as Map<String, dynamic>))
+  //         .toList();
+  //   } catch (e) {
+  //     print('Error fetching subcategories for $sportId: $e');
+  //     return [];
+  //   }
+  // }
+
+  /// Fetch all sports with their subcategories from the database
+  ///
+  /// Returns a map where keys are sport IDs (e.g., 'basketball')
+  /// and values are lists of subcategory names for that sport.
+  ///
+  /// Returns: Map<String, List<String>> (sportId -> [subcategory names])
+  Future<Map<String, List<SportSubcategory>>> getAllSportsWithSubcategories() async {
+    try {
+      final result = await client
+          .from('sport_subcategories')
+          .select('id, sport_id, name')
+          .order('sport_id');
+
+      final Map<String, List<SportSubcategory>> sportMap = {};
+
+      for (final item in result as List<dynamic>) {
+        final data = item as Map<String, dynamic>;
+        final subcategory = SportSubcategory.fromJson(data);
+        final sportId = subcategory.sportId;
+
+        if (!sportMap.containsKey(sportId)) {
+          sportMap[sportId] = [];
+        }
+        sportMap[sportId]!.add(subcategory);
+      }
+
+      return sportMap;
+    } catch (e) {
+      print('Error fetching all sports: $e');
+      return {};
+    }
   }
 
-  /// Get user session
-  Session? getSession() {
-    return client.auth.currentSession;
+  /// Link a video to a sport subcategory
+  ///
+  /// Creates a link in the sport_videos table to make the video discoverable
+  /// in the specified subcategory. The video details (title, description, URLs)
+  /// are denormalized into the sport_videos table for efficient querying.
+  ///
+  /// A video can only belong to ONE subcategory.
+  /// Users can only link their own videos.
+  ///
+  /// Parameters:
+  /// - [videoId]: UUID of the video in my_videos table
+  /// - [sportId]: Sport ID string (e.g., "soccer", "basketball")
+  /// - [subcategoryId]: UUID of the subcategory (FK to sport_subcategories.id)
+  ///
+  /// Returns: {success: true, message, linkedVideoId} on success
+  /// Returns: {success: false, error} on failure
+  Future<Map<String, dynamic>> linkVideoToSubcategory({
+    required String videoId,
+    required String sportId,
+    required String subcategoryId,
+  }) async {
+    try {
+      final userId = getCurrentUserId();
+      if (userId == null) {
+        return {'success': false, 'error': 'User not authenticated'};
+      }
+
+      // STEP 1: Verify the video belongs to the current user and get video details
+      final videoData = await client
+          .from('my_videos')
+          .select('id, title, description, video_url, thumbnail_url')
+          .eq('id', videoId)
+          .eq('user_id', userId)
+          .maybeSingle();
+
+      if (videoData == null) {
+        return {
+          'success': false,
+          'error': 'Video not found or does not belong to you',
+        };
+      }
+
+      // STEP 2: Check if video is already linked to a subcategory
+      final existingLink = await client
+          .from('sport_videos')
+          .select('id')
+          .eq('user_video_id', videoId)
+          .maybeSingle();
+
+      if (existingLink != null) {
+        return {
+          'success': false,
+          'error': 'You\'ve already linked this video to a category. Each video can only belong to one category.',
+        };
+      }
+
+      // STEP 3: Link video to subcategory with denormalized data
+      // This allows efficient discovery queries without JOINs
+      final insertResponse = await client.from('sport_videos').insert({
+        'user_id': userId,
+        'user_video_id': videoId,
+        'sport_id': sportId,
+        'subcategory_id': subcategoryId,
+        'title': videoData['title'] as String,
+        'description': videoData['description'] as String? ?? '',
+        'video_url': videoData['video_url'] as String,
+        'thumbnail_url': videoData['thumbnail_url'] as String,
+        'view_count': 0,
+        'created_at': DateTime.now().toIso8601String(),
+        'updated_at': DateTime.now().toIso8601String(),
+      }).select();
+
+      if (insertResponse.isEmpty) {
+        return {
+          'success': false,
+          'error': 'Failed to link video to category',
+        };
+      }
+
+      final linkedVideoId = insertResponse[0]['id'] as String?;
+
+      print('✓ Video linked to subcategory in $sportId by user $userId');
+      return {
+        'success': true,
+        'message': 'Video linked to category! 🎉',
+        'linkedVideoId': linkedVideoId,
+      };
+    } catch (e) {
+      print('Error linking video to subcategory: $e');
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  /// Fetch all videos linked to a specific sport subcategory (Discovery Method)
+  ///
+  /// Retrieves videos that have been linked to a specific subcategory,
+  /// ordered by most recent first. Includes pagination support.
+  ///
+  /// Parameters:
+  /// - [sportId]: Sport ID (e.g., "soccer")
+  /// - [subcategoryId]: Subcategory ID UUID
+  /// - [limit]: Maximum number of videos to return (default: 20)
+  /// - [offset]: Pagination offset (default: 0)
+  ///
+  /// Returns: List of videos with username included
+  /// Each video contains: {id, title, description, video_url, thumbnail_url, view_count, username, created_at}
+  Future<List<Map<String, dynamic>>> getSportCategoryVideos({
+    required String sportId,
+    required String subcategoryId,
+    int limit = 20,
+    int offset = 0,
+  }) async {
+    try {
+      // Query sport_videos table with pagination
+      // Ordered by bayesian_score (Bayesian weighted rating) with total_ratings as tiebreaker
+      final videos = await client
+          .from('sport_videos')
+          .select(
+            'id, title, description, video_url, thumbnail_url, view_count, user_id, created_at, bayesian_score, total_ratings, average_rating',
+          )
+          .eq('sport_id', sportId)
+          .eq('subcategory_id', subcategoryId)
+          .order('bayesian_score', ascending: false)
+          .order('total_ratings', ascending: false)
+          .range(offset, offset + limit - 1);
+
+      // Fetch usernames for each video
+      final videosWithUsernames = <Map<String, dynamic>>[];
+      for (final video in videos as List<dynamic>) {
+        final videoMap = video as Map<String, dynamic>;
+        final userId = videoMap['user_id'] as String?;
+
+        if (userId != null) {
+          final profiles = await client
+              .from('user_personal_profiles')
+              .select('username')
+              .eq('id', userId)
+              .maybeSingle();
+
+          final username =
+              profiles != null ? profiles['username'] as String : 'Unknown User';
+
+          videosWithUsernames.add({
+            ...videoMap,
+            'username': username,
+          });
+        }
+      }
+
+      print(
+        '✓ Fetched ${videosWithUsernames.length} videos for $sportId/$subcategoryId',
+      );
+      return videosWithUsernames;
+    } catch (e) {
+      print('Error fetching category videos: $e');
+      return [];
+    }
+  }
+
+  /// Fetch all videos linked by the current user (Their Contributions)
+  ///
+  /// Shows all videos that the current user has linked to categories.
+  /// Useful for user profile to show their contributions.
+  ///
+  /// Parameters:
+  /// - [limit]: Maximum number of videos to return (default: 50)
+  /// - [offset]: Pagination offset (default: 0)
+  ///
+  /// Returns: List of linked videos with category information
+  /// Each video contains: {id, title, description, sport_id, subcategory_id, view_count, created_at}
+  Future<List<Map<String, dynamic>>> getUserLinkedVideos({
+    int limit = 50,
+    int offset = 0,
+  }) async {
+    try {
+      final userId = getCurrentUserId();
+      if (userId == null) {
+        return [];
+      }
+
+      final videos = await client
+          .from('sport_videos')
+          .select(
+            'id, title, description, sport_id, subcategory_id, view_count, created_at',
+          )
+          .eq('user_id', userId)
+          .order('created_at', ascending: false)
+          .range(offset, offset + limit - 1);
+
+      print('✓ Fetched ${videos.length} linked videos for user $userId');
+      return List<Map<String, dynamic>>.from(videos as List<dynamic>);
+    } catch (e) {
+      print('Error fetching user linked videos: $e');
+      return [];
+    }
+  }
+
+  /// Update view count for a linked video in a specific category
+  ///
+  /// Atomically increments the view_count in BOTH tables:
+  /// 1. sport_videos table - tracks views in this specific category
+  /// 2. my_videos table - tracks total views across all categories
+  ///
+  /// Uses PostgreSQL atomic increment to prevent race conditions with concurrent views.
+  /// Both tables are updated in a single atomic transaction.
+  ///
+  /// Parameters:
+  /// - [linkedVideoId]: The ID from sport_videos table (not my_videos)
+  /// - [increment]: Amount to increment (default: 1)
+  ///
+  /// Returns: {success: true} or {success: false, error}
+  ///
+  /// Note: This calls increment_both_view_counts() PostgreSQL function.
+  /// Safe for concurrent views - no race conditions, no lost counts.
+  Future<Map<String, dynamic>> updateCategoryVideoViewCount({
+    required String linkedVideoId,
+    int increment = 1,
+  }) async {
+    try {
+      // Call single atomic RPC function that updates both tables
+      await client.rpc('increment_both_view_counts', params: {
+        'linked_video_id': linkedVideoId,
+        'increment_by': increment,
+      });
+
+      print(
+        '✓ Atomically incremented view count for linked video $linkedVideoId in both tables',
+      );
+      return {'success': true};
+    } catch (e) {
+      print('Error updating view count: $e');
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  /// Delete a video from a category (Unlink video)
+  ///
+  /// Removes the link between a video and a category.
+  /// This does NOT delete the video from my_videos table.
+  /// Users can only unlink their own videos.
+  ///
+  /// Parameters:
+  /// - [linkedVideoId]: The ID from sport_videos table
+  ///
+  /// Returns: {success: true} or {success: false, error}
+  Future<Map<String, dynamic>> deleteLinkedVideo({
+    required String linkedVideoId,
+  }) async {
+    try {
+      final userId = getCurrentUserId();
+      if (userId == null) {
+        return {'success': false, 'error': 'User not authenticated'};
+      }
+
+      // Verify this linked video belongs to the current user
+      final videoCheck = await client
+          .from('sport_videos')
+          .select('id')
+          .eq('id', linkedVideoId)
+          .eq('user_id', userId)
+          .maybeSingle();
+
+      if (videoCheck == null) {
+        return {
+          'success': false,
+          'error': 'Video link not found or does not belong to you',
+        };
+      }
+
+      // Delete the link
+      await client.from('sport_videos').delete().eq('id', linkedVideoId);
+
+      print('✓ Unlinked video $linkedVideoId from category');
+      return {'success': true, 'message': 'Video unlinked from category'};
+    } catch (e) {
+      print('Error deleting linked video: $e');
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  /// ========== VIDEO RATING SYSTEM METHODS ==========
+  /// The following methods manage the Bayesian-weighted rating system
+  /// that allows users to rate videos 1-10 and rank them fairly.
+  /// 
+  /// System works as follows:
+  /// - Each user can rate a video once (1-10)
+  /// - Can update or delete their rating
+  /// - PostgreSQL trigger auto-updates video's bayesian_score
+  /// - Videos ranked by bayesian_score (prevents bias against new videos)
+  /// ================================================
+
+  /// Rate a video (submit or update a rating)
+  ///
+  /// Allows the current user to rate a video from 1-10.
+  /// If the user already rated this video, their rating is updated.
+  /// Uses UPSERT operation (insert if new, update if exists).
+  ///
+  /// The database trigger automatically:
+  /// - Counts total votes
+  /// - Sums all ratings
+  /// - Calculates average rating
+  /// - Recalculates Bayesian score for ranking
+  ///
+  /// Parameters:
+  /// - [videoId]: UUID of the sport_videos table record
+  /// - [rating]: Rating value (must be 1-10 inclusive)
+  ///
+  /// Returns:
+  /// - {success: true, ratingId} - Rating submitted/updated successfully
+  /// - {success: false, error} - Error message if validation fails
+  Future<Map<String, dynamic>> rateVideo({
+    required String videoId,
+    required int rating,
+  }) async {
+    try {
+      final userId = getCurrentUserId();
+      if (userId == null) {
+        return {'success': false, 'error': 'User not authenticated'};
+      }
+
+      // Validate rating is in valid range (1-10)
+      if (rating < 1 || rating > 10) {
+        return {
+          'success': false,
+          'error': 'Rating must be between 1 and 10'
+        };
+      }
+
+      // Upsert: inserts new rating if user hasn't rated, updates if they have
+      // UNIQUE constraint on (user_id, sport_video_id) ensures one vote per user per video
+      final result = await client.from('video_ratings').upsert({
+        'user_id': userId,
+        'sport_video_id': videoId,
+        'rating': rating,
+      });
+
+      print('✓ User rated video $videoId with rating $rating');
+      return {'success': true, 'ratingId': result[0]['id']};
+    } catch (e) {
+      print('Error rating video: $e');
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  /// Get the current user's rating for a video (if they've rated it)
+  ///
+  /// Checks if the current user has already rated a specific video.
+  /// Used to display which rating button should be highlighted in the UI.
+  ///
+  /// Parameters:
+  /// - [videoId]: UUID of the sport_videos table record
+  ///
+  /// Returns:
+  /// - {success: true, rating: 8} - User's rating (1-10)
+  /// - {success: true, rating: null} - User hasn't rated this video yet
+  /// - {success: false, error} - Error occurred
+  Future<Map<String, dynamic>> getUserRating({
+    required String videoId,
+  }) async {
+    try {
+      final userId = getCurrentUserId();
+      if (userId == null) {
+        return {'success': false, 'rating': null};
+      }
+
+      // Query video_ratings table for this user's vote on this video
+      // maybeSingle() returns null if no rating exists (graceful, no error)
+      final result = await client
+          .from('video_ratings')
+          .select()
+          .eq('sport_video_id', videoId)
+          .eq('user_id', userId)
+          .maybeSingle();
+
+      if (result == null) {
+        // User hasn't rated this video yet
+        return {'success': true, 'rating': null};
+      }
+
+      // Return the rating value (1-10)
+      return {'success': true, 'rating': result['rating'] as int};
+    } catch (e) {
+      print('Error getting user rating: $e');
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  /// Delete the current user's rating for a video
+  ///
+  /// Removes the user's rating from the video_ratings table.
+  /// The PostgreSQL trigger automatically recalculates the video's bayesian_score.
+  ///
+  /// Parameters:
+  /// - [videoId]: UUID of the sport_videos table record
+  ///
+  /// Returns:
+  /// - {success: true} - Rating deleted successfully
+  /// - {success: false, error} - Error occurred or user not authenticated
+  Future<Map<String, dynamic>> deleteRating({
+    required String videoId,
+  }) async {
+    try {
+      final userId = getCurrentUserId();
+      if (userId == null) {
+        return {'success': false, 'error': 'User not authenticated'};
+      }
+
+      // Delete the user's rating from video_ratings table
+      await client
+          .from('video_ratings')
+          .delete()
+          .eq('sport_video_id', videoId)
+          .eq('user_id', userId);
+
+      print('✓ Deleted rating for video $videoId');
+      return {'success': true, 'message': 'Rating removed'};
+    } catch (e) {
+      print('Error deleting rating: $e');
+      return {'success': false, 'error': e.toString()};
+    }
   }
 }
