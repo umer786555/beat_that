@@ -15,6 +15,8 @@ final class ProfileLoaded extends ProfileState {
   final List<VideoThumbnailModel> thumbnails;
   final String? username;
   final String? profileUrl;
+  final int followers;
+  final int following;
 
   const ProfileLoaded({
     required this.cameraPermissionEnabled,
@@ -22,10 +24,12 @@ final class ProfileLoaded extends ProfileState {
     this.thumbnails = const [],
     this.username,
     this.profileUrl,
+    this.followers = 0,
+    this.following = 0,
   });
 
   @override
-  List<Object> get props => [cameraPermissionEnabled, galleryPermissionEnabled, thumbnails, username ?? '', profileUrl ?? ''];
+  List<Object> get props => [cameraPermissionEnabled, galleryPermissionEnabled, thumbnails, username ?? '', profileUrl ?? '', followers, following];
 
   ProfileLoaded copyWith({
     AppThemeMode? currentTheme,
@@ -34,6 +38,8 @@ final class ProfileLoaded extends ProfileState {
     List<VideoThumbnailModel>? thumbnails,
     String? username,
     String? profileUrl,
+    int? followers,
+    int? following,
   }) {
     return ProfileLoaded(
       cameraPermissionEnabled: cameraPermissionEnabled ?? this.cameraPermissionEnabled,
@@ -41,6 +47,8 @@ final class ProfileLoaded extends ProfileState {
       thumbnails: thumbnails ?? this.thumbnails,
       username: username ?? this.username,
       profileUrl: profileUrl ?? this.profileUrl,
+      followers: followers ?? this.followers,
+      following: following ?? this.following,
     );
   }
 }

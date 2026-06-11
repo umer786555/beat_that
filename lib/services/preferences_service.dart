@@ -51,4 +51,111 @@ class PreferencesService {
   Future<void> clearUserProfile() async {
     await _prefs.remove('user_personal_profile');
   }
+
+  /// Track a video view for a subcategory
+  /// Increments view count and updates last_viewed timestamp
+  /// Automatically enforces max 20 categories by removing oldest viewed
+  Future<void> trackVideoView(String subcategoryId) async {
+    try {
+      final engagementJson = _prefs.getString('engagement_data');
+      Map<String, dynamic> engagement = {};
+
+      if (engagementJson != null) {
+        engagement = jsonDecode(engagementJson) as Map<String, dynamic>;
+      }
+
+      final now = DateTime.now().toIso8601String();
+
+      // Create new entry or update existing one
+      if (engagement.containsKey(subcategoryId)) {
+        final entry = engagement[subcategoryId] as Map<String, dynamic>;
+        entry['views'] = (entry['views'] as int) + 1;
+        entry['last_viewed'] = now;
+      } else {
+        engagement[subcategoryId] = {'views': 1, 'last_viewed': now};
+      }
+
+      // Enforce max 20 categories - remove oldest if we exceed limit
+      if (engagement.length > 20) {
+        final sortedByTime = engagement.entries.toList()
+          ..sort((a, b) => DateTime.parse(a.value['last_viewed'] as String)
+              .compareTo(DateTime.parse(b.value['last_viewed'] as String)));
+        
+        engagement.remove(sortedByTime.first.key);
+      }
+
+      await _prefs.setString('engagement_data', jsonEncode(engagement));
+    } catch (e) {
+      print('Error tracking video view: $e');
+    }
+  }
+
+  /// Get top engaged subcategories sorted by view count (highest first)
+  /// Returns list of MapEntry with subcategory ID and engagement data
+  /// Limit defaults to 5, can be customized
+  Future<List<MapEntry<String, dynamic>>> getTopSubcategories(
+      {int limit = 5}) async {
+    try {
+      final engagementJson = _prefs.getString('engagement_data');
+      if (engagementJson == null) return [];
+
+      final engagement = jsonDecode(engagementJson) as Map<String, dynamic>;
+
+      // Convert to list and sort by view count (descending)
+      final sortedList = engagement.entries.toList()
+        ..sort((a, b) =>
+            (b.value['views'] as int).compareTo(a.value['views'] as int));
+
+      return sortedList.take(limit).toList();
+    } catch (e) {
+      print('Error getting top subcategories: $e');
+      return [];
+    }
+  }
+
+  /// Clean up engagement data older than 30 days
+  /// Removes any subcategory not viewed in the last 30 days
+  /// Call this on app launch or periodically to maintain fresh data
+  Future<void> cleanupOldEngagement() async {
+    try {
+      final engagementJson = _prefs.getString('engagement_data');
+      if (engagementJson == null) return;
+
+      final engagement = jsonDecode(engagementJson) as Map<String, dynamic>;
+      final thirtyDaysAgo = DateTime.now().subtract(Duration(days: 30));
+
+      // Remove entries older than 30 days
+      engagement.removeWhere((key, value) {
+        final lastViewed = DateTime.parse(value['last_viewed'] as String);
+        return lastViewed.isBefore(thirtyDaysAgo);
+      });
+
+      await _prefs.setString('engagement_data', jsonEncode(engagement));
+    } catch (e) {
+      print('Error cleaning up old engagement data: $e');
+    }
+  }
+
+  /// Get all engagement data for debugging or analysis
+  /// Returns map of subcategoryId -> {views, last_viewed}
+  Future<Map<String, dynamic>> getEngagementData() async {
+    try {
+      final engagementJson = _prefs.getString('engagement_data');
+      if (engagementJson == null) return {};
+
+      return jsonDecode(engagementJson) as Map<String, dynamic>;
+    } catch (e) {
+      print('Error getting engagement data: $e');
+      return {};
+    }
+  }
+
+  /// Clear all engagement data (used for logout or reset)
+  Future<void> clearEngagement() async {
+    try {
+      await _prefs.remove('engagement_data');
+    } catch (e) {
+      print('Error clearing engagement data: $e');
+    }
+  }
 }

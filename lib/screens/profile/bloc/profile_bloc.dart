@@ -13,7 +13,6 @@ import 'package:beat_that/services/supabase_service.dart';
 import 'package:beat_that/services/video_picker_service.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:video_thumbnail/video_thumbnail.dart';
 part 'profile_event.dart';
 part 'profile_state.dart';
 
@@ -36,10 +35,11 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
 
   /// Load profile data and fetch thumbnail URLs
   ///
-  /// This event performs three sequential operations:
+  /// This event performs four sequential operations:
   /// 1. Check camera and gallery permssions
   /// 2. Fetch all thumbnail URLs for the current user's videos
   /// 3. Fetch the username from preferences
+  /// 4. Fetch the follower and following counts
   Future<void> _onLoadProfile(
     LoadProfileEvent event,
     Emitter<ProfileState> emit,
@@ -59,7 +59,14 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
       // Step 3: Fetch the username from preferences and cache at block level
       userProfile = await preferencesService.fetchUserProfile();
 
-      // Initialize with permissions, thumbnails, and username
+      // Step 4: Fetch the follower and following counts
+      final followerCountResult = await supabaseService.getFollowerCount();
+      final followingCountResult = await supabaseService.getFollowingCount();
+
+      final followers = followerCountResult['success'] ? followerCountResult['count'] : 3;
+      final following = followingCountResult['success'] ? followingCountResult['count'] : 0;
+
+      // Initialize with permissions, thumbnails, username, and follower/following counts
       emit(
         ProfileLoaded(
           cameraPermissionEnabled: cameraPermissionEnabled,
@@ -67,6 +74,8 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
           thumbnails: thumbnails,
           username: userProfile?.username,
           profileUrl: userProfile?.profileUrl,
+          followers: followers,
+          following: following,
         ),
       );
     } catch (e) {

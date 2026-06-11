@@ -22,6 +22,9 @@ Future<PreferencesService> initializeAsyncServices() async {
     // Initialize PreferencesService with SharedPreferences
     final preferencesService = PreferencesService();
     await preferencesService.init();
+    
+    // Clean up old engagement data (30+ days old) on app startup
+    await preferencesService.cleanupOldEngagement(); 
 
     return preferencesService;
   } catch (e, stackTrace) {

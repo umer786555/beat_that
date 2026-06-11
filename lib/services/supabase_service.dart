@@ -1267,4 +1267,296 @@ class SupabaseService {
       return {'success': false, 'error': e.toString()};
     }
   }
+
+  // ==================== USER FOLLOW SYSTEM METHODS ====================
+  /// The following methods manage the social following system
+  /// that allows users to follow each other and build networks.
+  /// ================================================
+
+  /// Follow a user
+  ///
+  /// Creates a follow relationship where the current user follows another user.
+  /// Uses UNIQUE constraint to prevent duplicate follows.
+  ///
+  /// Parameters:
+  /// - [userIdToFollow]: UUID of the user to follow
+  ///
+  /// Returns:
+  /// - {success: true} - Successfully started following
+  /// - {success: false, error} - Error message if validation fails or already following
+  Future<Map<String, dynamic>> followUser({
+    required String userIdToFollow,
+  }) async {
+    try {
+      final userId = getCurrentUserId();
+      if (userId == null) {
+        return {'success': false, 'error': 'User not authenticated'};
+      }
+
+      // Prevent self-following
+      if (userId == userIdToFollow) {
+        return {'success': false, 'error': 'You cannot follow yourself'};
+      }
+
+      // Insert follow relationship
+      // If duplicate, will fail due to UNIQUE constraint (which is good)
+      await client.from('user_follows').insert({
+        'follower_id': userId,
+        'followed_user_id': userIdToFollow,
+        'created_at': DateTime.now().toIso8601String(),
+      });
+
+      print('✓ Successfully followed user $userIdToFollow');
+      return {'success': true, 'message': 'Now following user! 🎉'};
+    } catch (e) {
+      print('Error following user: $e');
+      // Check if error is due to duplicate (already following)
+      if (e.toString().contains('duplicate') ||
+          e.toString().contains('UNIQUE')) {
+        return {'success': false, 'error': 'You\'re already following this user'};
+      }
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  /// Unfollow a user
+  ///
+  /// Removes the follow relationship where the current user follows another user.
+  ///
+  /// Parameters:
+  /// - [userIdToUnfollow]: UUID of the user to unfollow
+  ///
+  /// Returns:
+  /// - {success: true} - Successfully unfollowed user
+  /// - {success: false, error} - Error if follow relationship doesn't exist
+  Future<Map<String, dynamic>> unfollowUser({
+    required String userIdToUnfollow,
+  }) async {
+    try {
+      final userId = getCurrentUserId();
+      if (userId == null) {
+        return {'success': false, 'error': 'User not authenticated'};
+      }
+
+      // Delete follow relationship
+      await client
+          .from('user_follows')
+          .delete()
+          .eq('follower_id', userId)
+          .eq('followed_user_id', userIdToUnfollow);
+
+      print('✓ Successfully unfollowed user $userIdToUnfollow');
+      return {'success': true, 'message': 'Unfollowed user'};
+    } catch (e) {
+      print('Error unfollowing user: $e');
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  /// Get all users that the current user is following
+  ///
+  /// Retrieves a paginated list of users that the current user follows.
+  /// Includes user profile information (username, profile image).
+  ///
+  /// Parameters:
+  /// - [limit]: Maximum number of users to return (default: 20)
+  /// - [offset]: Pagination offset (default: 0)
+  ///
+  /// Returns: List of users with profile data
+  /// Each user contains: {id, username, profileUrl, created_at}
+  Future<List<Map<String, dynamic>>> getFollowing({
+    int limit = 20,
+    int offset = 0,
+  }) async {
+    try {
+      final userId = getCurrentUserId();
+      if (userId == null) {
+        return [];
+      }
+
+      // Get list of user IDs that current user follows
+      final follows = await client
+          .from('user_follows')
+          .select('followed_user_id')
+          .eq('follower_id', userId)
+          .order('created_at', ascending: false)
+          .range(offset, offset + limit - 1);
+
+      if (follows.isEmpty) {
+        return [];
+      }
+
+      // Extract followed user IDs
+      final followedUserIds = (follows as List<dynamic>)
+          .map((f) => (f as Map<String, dynamic>)['followed_user_id'] as String)
+          .toList();
+
+      // Fetch profile data for all followed users
+      final profiles = await client
+          .from('user_personal_profiles')
+          .select('id, username, profileUrl')
+          .inFilter('id', followedUserIds);
+
+      print(
+          '✓ Fetched ${profiles.length} users that current user is following');
+      return List<Map<String, dynamic>>.from(profiles as List<dynamic>);
+    } catch (e) {
+      print('Error fetching following list: $e');
+      return [];
+    }
+  }
+
+  /// Get all followers of the current user
+  ///
+  /// Retrieves a paginated list of users that follow the current user.
+  /// Includes user profile information (username, profile image).
+  ///
+  /// Parameters:
+  /// - [limit]: Maximum number of users to return (default: 20)
+  /// - [offset]: Pagination offset (default: 0)
+  ///
+  /// Returns: List of users with profile data
+  /// Each user contains: {id, username, profileUrl, created_at}
+  Future<List<Map<String, dynamic>>> getFollowers({
+    int limit = 20,
+    int offset = 0,
+  }) async {
+    try {
+      final userId = getCurrentUserId();
+      if (userId == null) {
+        return [];
+      }
+
+      // Get list of user IDs that follow current user
+      final follows = await client
+          .from('user_follows')
+          .select('follower_id')
+          .eq('followed_user_id', userId)
+          .order('created_at', ascending: false)
+          .range(offset, offset + limit - 1);
+
+      if (follows.isEmpty) {
+        return [];
+      }
+
+      // Extract follower user IDs
+      final followerUserIds = (follows as List<dynamic>)
+          .map((f) => (f as Map<String, dynamic>)['follower_id'] as String)
+          .toList();
+
+      // Fetch profile data for all followers
+      final profiles = await client
+          .from('user_personal_profiles')
+          .select('id, username, profileUrl')
+          .inFilter('id', followerUserIds);
+
+      print('✓ Fetched ${profiles.length} followers for current user');
+      return List<Map<String, dynamic>>.from(profiles as List<dynamic>);
+    } catch (e) {
+      print('Error fetching followers list: $e');
+      return [];
+    }
+  }
+
+  /// Get the count of users following the current user
+  ///
+  /// Lightweight query that returns only the count (no user data).
+  /// Useful for displaying "42 followers" on profile screen.
+  ///
+  /// Returns:
+  /// - {success: true, count: 42} - Follower count
+  /// - {success: false, count: 0, error} - Error occurred
+  Future<Map<String, dynamic>> getFollowerCount() async {
+    try {
+      final userId = getCurrentUserId();
+      if (userId == null) {
+        return {'success': false, 'count': 0, 'error': 'User not authenticated'};
+      }
+
+      // Count all follows where current user is being followed
+      final result = await client
+          .from('user_follows')
+          .select('id')
+          .eq('followed_user_id', userId);
+
+      final count = result.length;
+
+      print('✓ Fetched follower count: $count');
+      return {'success': true, 'count': count};
+    } catch (e) {
+      print('Error fetching follower count: $e');
+      return {'success': false, 'count': 0, 'error': e.toString()};
+    }
+  }
+
+  /// Get the count of users the current user is following
+  ///
+  /// Lightweight query that returns only the count (no user data).
+  /// Useful for displaying "18 following" on profile screen.
+  ///
+  /// Returns:
+  /// - {success: true, count: 18} - Following count
+  /// - {success: false, count: 0, error} - Error occurred
+  Future<Map<String, dynamic>> getFollowingCount() async {
+    try {
+      final userId = getCurrentUserId();
+      if (userId == null) {
+        return {'success': false, 'count': 0, 'error': 'User not authenticated'};
+      }
+
+      // Count all follows where current user is the follower
+      final result = await client
+          .from('user_follows')
+          .select('id')
+          .eq('follower_id', userId);
+
+      final count = result.length;
+
+      print('✓ Fetched following count: $count');
+      return {'success': true, 'count': count};
+    } catch (e) {
+      print('Error fetching following count: $e');
+      return {'success': false, 'count': 0, 'error': e.toString()};
+    }
+  }
+
+  /// Check if current user is following a specific user
+  ///
+  /// Lightweight boolean check useful for toggling follow/unfollow button state.
+  ///
+  /// Parameters:
+  /// - [userId]: UUID of the user to check
+  ///
+  /// Returns:
+  /// - {success: true, isFollowing: true} - User is being followed
+  /// - {success: true, isFollowing: false} - User is not being followed
+  /// - {success: false, error} - Error occurred
+  Future<Map<String, dynamic>> checkIsFollowing({
+    required String userId,
+  }) async {
+    try {
+      final currentUserId = getCurrentUserId();
+      if (currentUserId == null) {
+        return {'success': false, 'isFollowing': false};
+      }
+
+      final result = await client
+          .from('user_follows')
+          .select('id')
+          .eq('follower_id', currentUserId)
+          .eq('followed_user_id', userId)
+          .maybeSingle();
+
+      final isFollowing = result != null;
+
+      return {'success': true, 'isFollowing': isFollowing};
+    } catch (e) {
+      print('Error checking follow status: $e');
+      return {
+        'success': false,
+        'isFollowing': false,
+        'error': e.toString()
+      };
+    }
+  }
 }
