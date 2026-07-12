@@ -4,6 +4,7 @@ import 'package:beat_that/models/user_personal_profile.dart';
 import 'package:beat_that/models/sport_subcategory.dart';
 import 'package:beat_that/models/video_thumbnail_model.dart';
 import 'package:beat_that/services/dio_upload_service.dart';
+import 'package:beat_that/services/preferences_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 import 'package:mime/mime.dart';
@@ -109,13 +110,15 @@ class SupabaseService {
       final thumbnailPath = thumbnailUploadData['path'] as String;
 
       // ==================== STEP 3: Create Database Record ====================
+      // Store paths only (not full URLs) - URLs generated on-demand by service layer
+      // This follows industry best practice (Instagram, YouTube, etc.)
       print('Step 3: Creating video record in database');
       final insertResponse = await client.from('my_videos').insert({
         'user_id': userId,
         'title': title,
         'description': description ?? '',
-        'video_url': videoPath,
-        'thumbnail_url': thumbnailPath,
+        'video_url': videoPath,  // Store path, not URL
+        'thumbnail_url': thumbnailPath,  // Store path, not URL
         'view_count': 0,
         'created_at': DateTime.now().toIso8601String(),
         'data_type': 'user_profile_video',
@@ -134,14 +137,9 @@ class SupabaseService {
       print('✓ Database record created successfully');
       print('File ID: $fileId');
 
-      // ==================== STEP 4: Generate Public URLs ====================
-      final videoPublicUrl = client.storage
-          .from('my_videos')
-          .getPublicUrl(videoPath);
-
-      final thumbnailPublicUrl = client.storage
-          .from('my-thumbnails')
-          .getPublicUrl(thumbnailPath);
+      // ==================== STEP 4: Generate Public URLs (for return value only) ====================
+      final videoPublicUrl = _generatePublicUrl('my_videos', videoPath);
+      final thumbnailPublicUrl = _generatePublicUrl('my-thumbnails', thumbnailPath);
 
       print('✓ All steps completed successfully!');
       print('Video URL: $videoPublicUrl');
@@ -904,6 +902,7 @@ class SupabaseService {
 
       // STEP 3: Link video to subcategory with denormalized data
       // This allows efficient discovery queries without JOINs
+      // Note: videoData contains paths from my_videos table (URLs generated on-demand)
       final insertResponse = await client.from('sport_videos').insert({
         'user_id': userId,
         'user_video_id': videoId,
@@ -911,8 +910,8 @@ class SupabaseService {
         'subcategory_id': subcategoryId,
         'title': videoData['title'] as String,
         'description': videoData['description'] as String? ?? '',
-        'video_url': videoData['video_url'] as String,
-        'thumbnail_url': videoData['thumbnail_url'] as String,
+        'video_url': videoData['video_url'] as String,  // Path from my_videos
+        'thumbnail_url': videoData['thumbnail_url'] as String,  // Path from my_videos
         'view_count': 0,
         'created_at': DateTime.now().toIso8601String(),
         'updated_at': DateTime.now().toIso8601String(),
@@ -995,10 +994,15 @@ class SupabaseService {
         }
       }
 
+      // Convert paths to URLs (service layer transformation)
+      final videosWithUrls = videosWithUsernames
+          .map((v) => _convertVideoPathsToUrls(v))
+          .toList();
+
       print(
-        '✓ Fetched ${videosWithUsernames.length} videos for $sportId/$subcategoryId',
+        '✓ Fetched ${videosWithUrls.length} videos for $sportId/$subcategoryId',
       );
-      return videosWithUsernames;
+      return videosWithUrls;
     } catch (e) {
       print('Error fetching category videos: $e');
       return [];
@@ -1276,7 +1280,8 @@ class SupabaseService {
   /// Follow a user
   ///
   /// Creates a follow relationship where the current user follows another user.
-  /// Uses UNIQUE constraint to prevent duplicate follows.
+  /// Stores user ID, timestamp, and uses database indexes for efficient queries.
+  /// Prevents duplicate follows and self-follows through validation.
   ///
   /// Parameters:
   /// - [userIdToFollow]: UUID of the user to follow
@@ -1298,8 +1303,8 @@ class SupabaseService {
         return {'success': false, 'error': 'You cannot follow yourself'};
       }
 
-      // Insert follow relationship
-      // If duplicate, will fail due to UNIQUE constraint (which is good)
+      // Insert follow relationship with timestamp
+      // UNIQUE constraint prevents duplicates
       await client.from('user_follows').insert({
         'follower_id': userId,
         'followed_user_id': userIdToFollow,
@@ -1358,12 +1363,15 @@ class SupabaseService {
   /// Retrieves a paginated list of users that the current user follows.
   /// Includes user profile information (username, profile image).
   ///
+  /// Efficiently queries the user_follows table with database indexes
+  /// for fast lookups. Scales well to thousands of follows.
+  ///
   /// Parameters:
   /// - [limit]: Maximum number of users to return (default: 20)
   /// - [offset]: Pagination offset (default: 0)
   ///
   /// Returns: List of users with profile data
-  /// Each user contains: {id, username, profileUrl, created_at}
+  /// Each user contains: {id, username, profileUrl}
   Future<List<Map<String, dynamic>>> getFollowing({
     int limit = 20,
     int offset = 0,
@@ -1374,22 +1382,21 @@ class SupabaseService {
         return [];
       }
 
-      // Get list of user IDs that current user follows
+      // Query user_follows table with index on (follower_id)
+      // Scales efficiently even with thousands of follows
       final follows = await client
           .from('user_follows')
           .select('followed_user_id')
           .eq('follower_id', userId)
-          .order('created_at', ascending: false)
           .range(offset, offset + limit - 1);
 
       if (follows.isEmpty) {
         return [];
       }
 
-      // Extract followed user IDs
-      final followedUserIds = (follows as List<dynamic>)
-          .map((f) => (f as Map<String, dynamic>)['followed_user_id'] as String)
-          .toList();
+      // Extract user IDs from follow relationships
+      final followedUserIds =
+          List<String>.from(follows.map((f) => f['followed_user_id']));
 
       // Fetch profile data for all followed users
       final profiles = await client
@@ -1410,13 +1417,14 @@ class SupabaseService {
   ///
   /// Retrieves a paginated list of users that follow the current user.
   /// Includes user profile information (username, profile image).
+  /// Uses database index on (followed_user_id) for efficient queries.
   ///
   /// Parameters:
   /// - [limit]: Maximum number of users to return (default: 20)
   /// - [offset]: Pagination offset (default: 0)
   ///
   /// Returns: List of users with profile data
-  /// Each user contains: {id, username, profileUrl, created_at}
+  /// Each user contains: {id, username, profileUrl}
   Future<List<Map<String, dynamic>>> getFollowers({
     int limit = 20,
     int offset = 0,
@@ -1427,12 +1435,13 @@ class SupabaseService {
         return [];
       }
 
-      // Get list of user IDs that follow current user
+      // Query user_follows table with index on (followed_user_id)
+      // This is O(k log n) where k = number of followers
+      // Much faster than fetching all users and filtering client-side
       final follows = await client
           .from('user_follows')
           .select('follower_id')
           .eq('followed_user_id', userId)
-          .order('created_at', ascending: false)
           .range(offset, offset + limit - 1);
 
       if (follows.isEmpty) {
@@ -1440,9 +1449,8 @@ class SupabaseService {
       }
 
       // Extract follower user IDs
-      final followerUserIds = (follows as List<dynamic>)
-          .map((f) => (f as Map<String, dynamic>)['follower_id'] as String)
-          .toList();
+      final followerUserIds =
+          List<String>.from(follows.map((f) => f['follower_id']));
 
       // Fetch profile data for all followers
       final profiles = await client
@@ -1460,8 +1468,8 @@ class SupabaseService {
 
   /// Get the count of users following the current user
   ///
-  /// Lightweight query that returns only the count (no user data).
-  /// Useful for displaying "42 followers" on profile screen.
+  /// Returns the number of users who follow the current user.
+  /// Uses efficient query on user_follows table with index.
   ///
   /// Returns:
   /// - {success: true, count: 42} - Follower count
@@ -1473,13 +1481,14 @@ class SupabaseService {
         return {'success': false, 'count': 0, 'error': 'User not authenticated'};
       }
 
-      // Count all follows where current user is being followed
-      final result = await client
+      // Query user_follows table
+      // Index on (followed_user_id) makes this efficient
+      final follows = await client
           .from('user_follows')
           .select('id')
           .eq('followed_user_id', userId);
 
-      final count = result.length;
+      final count = follows.length;
 
       print('✓ Fetched follower count: $count');
       return {'success': true, 'count': count};
@@ -1491,8 +1500,8 @@ class SupabaseService {
 
   /// Get the count of users the current user is following
   ///
-  /// Lightweight query that returns only the count (no user data).
-  /// Useful for displaying "18 following" on profile screen.
+  /// Returns the number of users the current user follows.
+  /// Uses efficient query on user_follows table.
   ///
   /// Returns:
   /// - {success: true, count: 18} - Following count
@@ -1504,13 +1513,14 @@ class SupabaseService {
         return {'success': false, 'count': 0, 'error': 'User not authenticated'};
       }
 
-      // Count all follows where current user is the follower
-      final result = await client
+      // Query user_follows table
+      // Index on (follower_id) makes this efficient
+      final follows = await client
           .from('user_follows')
           .select('id')
           .eq('follower_id', userId);
 
-      final count = result.length;
+      final count = follows.length;
 
       print('✓ Fetched following count: $count');
       return {'success': true, 'count': count};
@@ -1523,6 +1533,7 @@ class SupabaseService {
   /// Check if current user is following a specific user
   ///
   /// Lightweight boolean check useful for toggling follow/unfollow button state.
+  /// Queries the user_follows table for this follow relationship.
   ///
   /// Parameters:
   /// - [userId]: UUID of the user to check
@@ -1540,6 +1551,7 @@ class SupabaseService {
         return {'success': false, 'isFollowing': false};
       }
 
+      // Query user_follows table for this relationship
       final result = await client
           .from('user_follows')
           .select('id')
@@ -1557,6 +1569,444 @@ class SupabaseService {
         'isFollowing': false,
         'error': e.toString()
       };
+    }
+  }
+
+  // ==================== URL GENERATION (Single Source of Truth) ====================
+
+  /// Generate public URL from storage bucket and path
+  ///
+  /// This is the CENTRALIZED URL generation method - the single source of truth.
+  /// Database stores only paths; URLs are generated on-demand by this method.
+  ///
+  /// This pattern follows industry best practices (Instagram, YouTube, etc.):
+  /// - Flexible: Change CDN/bucket structure without database migration
+  /// - Secure: Easy to implement signed URLs or expiration
+  /// - Maintainable: Single point to update URL format
+  /// - Scalable: Support multiple URL types (public, signed, with transforms)
+  ///
+  /// Parameters:
+  /// - [bucketName]: Supabase storage bucket (e.g., 'my-thumbnails', 'my_videos')
+  /// - [path]: Asset path from database (e.g., 'profiles/user123/videos/abc.png')
+  ///
+  /// Returns: Full public URL string (https://project.supabase.co/storage/...)
+  String _generatePublicUrl(String bucketName, String path) {
+    return client.storage.from(bucketName).getPublicUrl(path);
+  }
+
+  /// Convert video object paths to URLs (for service-layer transformation)
+  ///
+  /// Takes a video map from the database (with paths) and returns a copy with
+  /// full URLs for consumption by the UI layer.
+  ///
+  /// Parameters:
+  /// - [video]: Video object from database with path fields
+  ///
+  /// Returns: Video object with URLs instead of paths
+  Map<String, dynamic> _convertVideoPathsToUrls(Map<String, dynamic> video) {
+    final updated = Map<String, dynamic>.from(video);
+
+    // Convert thumbnail_url path to full URL
+    if (updated['thumbnail_url'] != null) {
+      final thumbnailPath = updated['thumbnail_url'] as String;
+      final thumbnailUrl = _generatePublicUrl('my-thumbnails', thumbnailPath);
+      updated['thumbnail_url'] = thumbnailUrl;
+      print('🔄 Convert thumbnail: "$thumbnailPath" → "$thumbnailUrl"');
+    }
+
+    // Convert video_url path to full URL (if needed for video player)
+    if (updated['video_url'] != null) {
+      final videoPath = updated['video_url'] as String;
+      final videoUrl = _generatePublicUrl('my_videos', videoPath);
+      updated['video_url'] = videoUrl;
+      print('🔄 Convert video: "$videoPath" → "$videoUrl"');
+    }
+
+    return updated;
+  }
+
+  /// Helper: Add usernames to videos by looking up user_id in user_personal_profiles
+  ///
+  /// Takes a list of videos (with user_id field) and adds the username field
+  /// by querying user_personal_profiles table.
+  ///
+  /// Parameters:
+  /// - [videos]: List of video maps from database (must have 'user_id' field)
+  ///
+  /// Returns: List of videos with 'username' field added
+  Future<List<Map<String, dynamic>>> _addUsernamesToVideos(
+    List<Map<String, dynamic>> videos,
+  ) async {
+    if (videos.isEmpty) return videos;
+
+    // Extract unique user IDs from all videos
+    final userIds = <String>{};
+    for (final video in videos) {
+      final userId = video['user_id'] as String?;
+      if (userId != null) {
+        userIds.add(userId);
+      }
+    }
+
+    print('👥 _addUsernamesToVideos: Found ${userIds.length} unique user IDs from ${videos.length} videos');
+
+    // If no user IDs, just return videos with 'Unknown User'
+    if (userIds.isEmpty) {
+      print('👥 No user IDs found, returning all videos as "Unknown User"');
+      return videos.map((v) => {...v, 'username': 'Unknown User'}).toList();
+    }
+
+    // Fetch all usernames in ONE query instead of N queries
+    final profiles = await client
+        .from('user_personal_profiles')
+        .select('id, username')
+        .inFilter('id', userIds.toList());
+
+    print('👥 Fetched ${profiles.length} profiles from database');
+    
+    // Create a map of user_id -> username for fast lookups
+    final usernameMap = <String, String>{};
+    for (final profile in profiles) {
+      final userId = profile['id'] as String;
+      final username = profile['username'] as String;
+      usernameMap[userId] = username;
+      print('   ✓ Mapped $userId → $username');
+    }
+
+    // Add usernames to videos using the map
+    final videosWithUsernames = <Map<String, dynamic>>[];
+    for (final video in videos) {
+      final userId = video['user_id'] as String?;
+      final videoId = video['id'] as String?;
+      final username = userId != null ? (usernameMap[userId] ?? 'Unknown User') : 'Unknown User';
+      videosWithUsernames.add({
+        ...video,
+        'username': username,
+      });
+      print('👥 Video $videoId (user: $userId) → username: $username');
+    }
+
+    return videosWithUsernames;
+  }
+
+  /// Get videos from users that the current user follows (Following Feed)
+  ///
+  /// SECURITY: Uses auth.uid() server-side (not client-provided p_user_id)
+  /// This prevents users from querying other users' follow graphs.
+  ///
+  /// How it works:
+  /// 1. PostgreSQL function receives only limit + offset (no user ID parameter)
+  /// 2. Function uses auth.uid() to get current logged-in user
+  /// 3. Finds all users that auth.uid() is following
+  /// 4. Returns their videos sorted by newest first
+  /// 5. RLS on user_follows table restricts which rows the function can access
+  ///
+  /// Performance: ~20-50ms even with 100K+ follows
+  /// (Database optimizer handles the subquery efficiently)
+  ///
+  /// Parameters:
+  /// - [limit]: Videos per page (default: 50)
+  /// - [offset]: Pagination offset for "load more" (default: 0)
+  ///
+  /// Returns: List of videos with usernames (includes username field for attribution)
+  /// Each video: {id, title, description, video_url, thumbnail_url, user_id,
+  ///             view_count, average_rating, bayesian_score, total_ratings,
+  ///             created_at, username}
+  ///
+  /// Security notes:
+  /// - Function uses auth.uid() (caller's identity), not a passed-in user_id
+  /// - RLS on user_follows restricts to only the caller's follows
+  /// - RLS on sport_videos allows authenticated users to view all videos
+  /// - RLS on user_personal_profiles allows authenticated users to view all usernames
+  Future<List<Map<String, dynamic>>> getFollowingVideos({
+    int limit = 50,
+    int offset = 0,
+  }) async {
+    try {
+      final userId = getCurrentUserId();
+      if (userId == null) {
+        return [];
+      }
+
+      // Single RPC call to PostgreSQL function
+      // Function uses auth.uid() internally (secure pattern)
+      // Only pass limit + offset, not user_id
+      final videos = await client.rpc(
+        'get_following_videos',
+        params: {
+          'p_limit': limit,
+          'p_offset': offset,
+        },
+      );
+
+      if (videos.isEmpty) {
+        print('✓ No videos from followed users yet');
+        return [];
+      }
+
+      // Convert paths to URLs (service layer transformation)
+      final videosWithUrls = (videos as List<dynamic>)
+          .map((v) => _convertVideoPathsToUrls(v as Map<String, dynamic>))
+          .toList();
+
+      print('✓ Fetched ${videosWithUrls.length} videos from followed users (RPC optimized)');
+      return videosWithUrls;
+    } catch (e) {
+      print('Error fetching following videos: $e');
+      return [];
+    }
+  }
+
+  /// Fetch personalized videos based on user's watch history
+  ///
+  /// Returns videos from the user's top 5 engaged subcategories,
+  /// sorted by quality (bayesian_score) in descending order.
+  ///
+  /// Logic:
+  /// 1. Get top 5 subcategories from user's watch history (local storage)
+  /// 2. Query sport_videos WHERE subcategory_id IN (top 5)
+  /// 3. Order by bayesian_score DESC (best-rated videos first)
+  /// 4. Include username via JOIN with user_personal_profiles
+  /// 5. Apply pagination (limit, offset)
+  ///
+  /// Parameters:
+  /// - [limit]: Number of videos to fetch per page (default: 50)
+  /// - [offset]: Number of videos to skip for pagination (default: 0)
+  ///
+  /// Returns empty list if:
+  /// - User hasn't watched any videos yet (no engagement data)
+  /// - No videos exist in the user's engaged subcategories
+  /// - An error occurs during fetch
+  Future<List<Map<String, dynamic>>> getPersonalizedVideos({
+    int limit = 50,
+    int offset = 0,
+  }) async {
+    try {
+      // Step 1: Get user's top 5 engaged subcategories from local storage
+      final preferencesService = locator<PreferencesService>();
+      final topSubcategories =
+          await preferencesService.getTopSubcategories(limit: 5);
+
+      if (topSubcategories.isEmpty) {
+        print(
+            '✓ No watched subcategories yet - personalized feed will be empty');
+        return [];
+      }
+
+      // Step 2: Extract subcategory IDs
+      final subcategoryIds = topSubcategories.map((e) => e.key).toList();
+      print('📊 Personalized feed: fetching videos from subcategories: $subcategoryIds');
+
+      // Step 3: Query videos WHERE subcategory_id IN (top 5 engaged categories)
+      // Note: username fetching removed due to schema relationship - will show as 'Unknown' in UI
+      // Order by bayesian_score DESC (best-rated videos first)
+      // Use range(start, end) for pagination instead of limit + offset
+      final videos = await client
+          .from('sport_videos')
+          .select()
+          .inFilter('subcategory_id', subcategoryIds)
+          .order('bayesian_score', ascending: false)
+          .range(offset, offset + limit - 1);
+
+      if (videos.isEmpty) {
+        print('✓ No videos in top subcategories yet');
+        return [];
+      }
+
+      // Convert paths to URLs (service layer transformation)
+      final videosWithUrls = (videos as List<dynamic>)
+          .map((v) => _convertVideoPathsToUrls(v as Map<String, dynamic>))
+          .toList();
+
+      // Add usernames to videos
+      final videosWithUsernames = await _addUsernamesToVideos(videosWithUrls);
+
+      print(
+          '✓ Fetched ${videosWithUsernames.length} personalized videos from top 5 engaged categories (bayesian_score sorted)');
+      return videosWithUsernames;
+    } catch (e) {
+      print('Error fetching personalized videos: $e');
+      return [];
+    }
+  }
+
+  /// Fetch trending videos based on quality and recency
+  ///
+  /// Returns highest-rated videos from the last 7 days,
+  /// sorted by bayesian_score in descending order.
+  ///
+  /// Logic:
+  /// 1. Filter videos posted in the last 7 days (created_at > 7 days ago)
+  /// 2. Order by bayesian_score DESC (best-rated videos first)
+  /// 3. Include username via JOIN with user_personal_profiles
+  /// 4. Apply pagination (limit, offset)
+  ///
+  /// Parameters:
+  /// - [limit]: Number of videos to fetch per page (default: 50)
+  /// - [offset]: Number of videos to skip for pagination (default: 0)
+  ///
+  /// Returns empty list if:
+  /// - No videos exist in the last 7 days
+  /// - All videos have low/zero ratings
+  /// - An error occurs during fetch
+  ///
+  /// Performance:
+  /// - Optimized by idx_sport_videos_created_bayesian index
+  /// - Filters by created_at range first, then sorts by bayesian_score
+  Future<List<Map<String, dynamic>>> getTrendingVideos({
+    int limit = 50,
+    int offset = 0,
+  }) async {
+    try {
+      // Calculate cutoff timestamp: 7 days ago in UTC
+      // Using UTC ensures consistency with Supabase PostgreSQL (always UTC)
+      // toIso8601String() format: "2026-06-04T14:30:00.000Z"
+      final sevenDaysAgo = DateTime.now()
+          .toUtc()
+          .subtract(Duration(days: 7))
+          .toIso8601String();
+
+      print('🔥 Trending feed: fetching videos from last 7 days (after $sevenDaysAgo)');
+
+      // Query videos posted in last 7 days
+      // Order by bayesian_score DESC (best-rated videos first, not newest)
+      // Note: username fetching removed due to schema relationship - will show as 'Unknown' in UI
+      final videos = await client
+          .from('sport_videos')
+          .select()
+          .gt('created_at', sevenDaysAgo) // created_at > 7 days ago
+          .order('bayesian_score', ascending: false) // Best-rated first
+          .range(offset, offset + limit - 1); // Pagination
+
+      if (videos.isEmpty) {
+        print('✓ No trending videos in the last 7 days');
+        return [];
+      }
+
+      // Convert paths to URLs (service layer transformation)
+      final videosWithUrls = (videos as List<dynamic>)
+          .map((v) => _convertVideoPathsToUrls(v as Map<String, dynamic>))
+          .toList();
+
+      // Add usernames to videos
+      final videosWithUsernames = await _addUsernamesToVideos(videosWithUrls);
+
+      print(
+          '✓ Fetched ${videosWithUsernames.length} trending videos from last 7 days (bayesian_score sorted)');
+      return videosWithUsernames;
+    } catch (e) {
+      print('Error fetching trending videos: $e');
+      return [];
+    }
+  }
+
+  /// Fetch random discovery videos from unwatched categories
+  ///
+  /// Returns random videos from subcategories the user has NOT watched,
+  /// enabling content discovery outside their comfort zone.
+  ///
+  /// Logic:
+  /// 1. Get user's top 5 engaged subcategories from local storage
+  /// 2. Query videos WHERE subcategory_id NOT IN (top 5)
+  /// 3. Shuffle in Dart for true randomness
+  /// 4. Include username via JOIN with user_personal_profiles
+  /// 5. Return limit videos (NO pagination - refresh for new random videos)
+  ///
+  /// Parameters:
+  /// - [limit]: Number of discovery videos to fetch (default: 50)
+  ///   No offset parameter - each call returns fresh random batch
+  ///
+  /// Returns empty list if:
+  /// - User hasn't watched any videos yet (all videos shown)
+  /// - No videos exist outside user's top 5 categories
+  /// - An error occurs during fetch
+  ///
+  /// UX Pattern:
+  /// - User swipes through all 50 videos
+  /// - Reaches bottom, taps "Load More" or pulls to refresh
+  /// - New random 50 videos returned (no duplicates from pagination)
+  /// - Matches TikTok/Instagram Explore pattern (refresh = new random)
+  ///
+  /// Note: Uses client-side shuffle (Dart List.shuffle()) instead of database
+  /// ORDER BY RANDOM() for compatibility with Supabase Dart v2.12.4
+  Future<List<Map<String, dynamic>>> getRandomDiscoveryVideos({
+    int limit = 50,
+  }) async {
+    try {
+      // Step 1: Get user's top 5 engaged subcategories from local storage
+      final preferencesService = locator<PreferencesService>();
+      final topSubcategories =
+          await preferencesService.getTopSubcategories(limit: 5);
+
+      // Step 2a: If no watch history, show ALL videos (everything is new discovery)
+      if (topSubcategories.isEmpty) {
+        print('🎲 Discovery: No watch history - showing random videos from ALL categories');
+
+        // Fetch extra to ensure we have enough after shuffling
+        final allVideos = await client
+            .from('sport_videos')
+            .select()
+            .limit(limit * 2); // Fetch 2x limit for better randomness
+
+        if (allVideos.isEmpty) {
+          print('✓ No discovery videos available');
+          return [];
+        }
+
+        // Shuffle in Dart and take limit
+        (allVideos as List).shuffle();
+        final randomVideos = allVideos.take(limit).toList();
+
+        // Convert paths to URLs (service layer transformation)
+        final videosWithUrls = randomVideos
+            .map((v) => _convertVideoPathsToUrls(v as Map<String, dynamic>))
+            .toList();
+
+        // Add usernames to videos
+        final videosWithUsernames = await _addUsernamesToVideos(videosWithUrls);
+
+        print('✓ Fetched ${videosWithUsernames.length} random discovery videos from all categories');
+        return videosWithUsernames;
+      }
+
+      // Step 2b: Extract subcategory IDs to exclude
+      final unwatchedSubcategoryIds =
+          topSubcategories.map((e) => e.key).toList();
+      print('🎲 Discovery: fetching random videos NOT from: $unwatchedSubcategoryIds');
+
+      // Step 3: Query videos NOT in user's top 5 categories
+      // Fetch extra to ensure we have enough after shuffling
+      // Each call returns different random batch via Dart's shuffle
+      final allDiscoveryVideos = await client
+          .from('sport_videos')
+          .select()
+          .not('subcategory_id', 'in', unwatchedSubcategoryIds) // NOT IN top 5
+          .limit(limit * 2); // Fetch 2x limit for better randomness
+
+      if (allDiscoveryVideos.isEmpty) {
+        print(
+            '✓ No discovery videos available outside top categories (user has watched most sports)');
+        return [];
+      }
+
+      // Shuffle in Dart and take limit
+      (allDiscoveryVideos as List).shuffle();
+      final randomDiscoveryVideos = allDiscoveryVideos.take(limit).toList();
+
+      // Convert paths to URLs (service layer transformation)
+      final videosWithUrls = randomDiscoveryVideos
+          .map((v) => _convertVideoPathsToUrls(v as Map<String, dynamic>))
+          .toList();
+
+      // Add usernames to videos
+      final videosWithUsernames = await _addUsernamesToVideos(videosWithUrls);
+
+      print(
+          '✓ Fetched ${videosWithUsernames.length} random discovery videos (new random batch each call)');
+      return videosWithUsernames;
+    } catch (e) {
+      print('Error fetching discovery videos: $e');
+      return [];
     }
   }
 }

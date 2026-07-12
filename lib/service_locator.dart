@@ -7,6 +7,7 @@ import 'package:beat_that/services/permission_service.dart';
 import 'package:beat_that/services/video_picker_service.dart';
 import 'package:beat_that/services/supabase_service.dart';
 import 'package:beat_that/services/dio_upload_service.dart';
+import 'package:beat_that/services/home_feed_service.dart';
 import 'package:beat_that/routes/app_router.dart';
 
 /// Service Locator instance for dependency injection
@@ -74,6 +75,9 @@ void setupServiceLocator(PreferencesService preferencesService) {
 
     // Register VideoPickerService
     locator.registerSingleton<VideoPickerService>(VideoPickerService());
+
+    // Register HomeFeedService (depends on SupabaseService)
+    locator.registerSingleton<HomeFeedService>(HomeFeedService());
 
   } catch (e, stackTrace) {
     debugPrintStack(
