@@ -2,7 +2,7 @@ import 'package:beat_that/service_locator.dart';
 import 'package:beat_that/services/supabase_service.dart';
 
 /// Service to orchestrate the home feed by blending multiple video sources
-/// 
+///
 /// Implements a 40/30/20/10 blending algorithm:
 /// - 40% Personalized (user's engaged categories)
 /// - 30% Following (videos from followed users)
@@ -17,6 +17,8 @@ import 'package:beat_that/services/supabase_service.dart';
 /// - Caching to reduce redundant API calls
 class HomeFeedService {
   final supabaseService = locator<SupabaseService>();
+
+  static const int _maxContinuationAttempts = 4;
 
   /// Weights for feed blending (must sum to 1.0)
   static const double PERSONALIZED_WEIGHT = 0.40;
@@ -64,14 +66,15 @@ class HomeFeedService {
       }
 
       // Step 1: Calculate exact fetch amounts with dedup buffer
-      final personalizedCount =
-          (limit * PERSONALIZED_WEIGHT * DEDUP_BUFFER).ceil();
+      final personalizedCount = (limit * PERSONALIZED_WEIGHT * DEDUP_BUFFER)
+          .ceil();
       final followingCount = (limit * FOLLOWING_WEIGHT * DEDUP_BUFFER).ceil();
       final trendingCount = (limit * TRENDING_WEIGHT * DEDUP_BUFFER).ceil();
       final discoveryCount = (limit * DISCOVERY_WEIGHT * DEDUP_BUFFER).ceil();
 
       print(
-          '📊 HomeFeed: Fetching personalized=$personalizedCount, following=$followingCount, trending=$trendingCount, discovery=$discoveryCount');
+        '📊 HomeFeed: Fetching personalized=$personalizedCount, following=$followingCount, trending=$trendingCount, discovery=$discoveryCount',
+      );
 
       // Step 2: Fetch all 4 sources in PARALLEL
       final results = await Future.wait([
@@ -83,13 +86,8 @@ class HomeFeedService {
           limit: followingCount,
           offset: offset,
         ),
-        supabaseService.getTrendingVideos(
-          limit: trendingCount,
-          offset: offset,
-        ),
-        supabaseService.getRandomDiscoveryVideos(
-          limit: discoveryCount,
-        ),
+        supabaseService.getTrendingVideos(limit: trendingCount, offset: offset),
+        supabaseService.getRandomDiscoveryVideos(limit: discoveryCount),
       ]);
 
       final personalizedVideos = results[0];
@@ -98,7 +96,8 @@ class HomeFeedService {
       final discoveryVideos = results[3];
 
       print(
-          '✓ Fetched: personalized=${personalizedVideos.length}, following=${followingVideos.length}, trending=${trendingVideos.length}, discovery=${discoveryVideos.length}');
+        '✓ Fetched: personalized=${personalizedVideos.length}, following=${followingVideos.length}, trending=${trendingVideos.length}, discovery=${discoveryVideos.length}',
+      );
 
       // Step 3: Blend videos with deduplication and scoring
       final blendedFeed = _blendFeeds(
@@ -120,6 +119,60 @@ class HomeFeedService {
     }
   }
 
+  /// Fetch the next unseen batch for an existing home-feed session.
+  ///
+  /// Starts from [offset], filters out any videos already present in
+  /// [seenVideoIds], and keeps advancing until it collects up to [limit]
+  /// unique videos or the feed appears exhausted.
+  Future<Map<String, dynamic>> getHomeFeedContinuation({
+    required Set<String> seenVideoIds,
+    required int offset,
+    int limit = 20,
+  }) async {
+    final collectedVideos = <Map<String, dynamic>>[];
+    final mutableSeenIds = <String>{...seenVideoIds};
+    var nextOffset = offset;
+    var hasMoreContent = true;
+
+    for (var attempt = 0; attempt < _maxContinuationAttempts; attempt++) {
+      if (collectedVideos.length >= limit || !hasMoreContent) {
+        break;
+      }
+
+      final batch = await getHomeFeed(limit: limit, offset: nextOffset);
+      if (batch.isEmpty) {
+        hasMoreContent = false;
+        break;
+      }
+
+      nextOffset += batch.length;
+
+      for (final video in batch) {
+        final videoId = video['id'] as String?;
+        if (videoId == null || mutableSeenIds.contains(videoId)) {
+          continue;
+        }
+
+        mutableSeenIds.add(videoId);
+        collectedVideos.add(video);
+
+        if (collectedVideos.length >= limit) {
+          break;
+        }
+      }
+
+      if (batch.length < limit) {
+        hasMoreContent = false;
+      }
+    }
+
+    return {
+      'videos': collectedVideos,
+      'nextOffset': nextOffset,
+      'hasMoreContent': hasMoreContent,
+    };
+  }
+
   /// Blend videos from 4 sources with deduplication and composite scoring
   ///
   /// Algorithm:
@@ -137,14 +190,30 @@ class HomeFeedService {
     int limit,
   ) {
     // Tag each video with source and weight
-    final taggedPersonalized = _tagVideos(personalizedVideos, 'personalized',
-        PERSONALIZED_WEIGHT, 0);
-    final taggedFollowing =
-        _tagVideos(followingVideos, 'following', FOLLOWING_WEIGHT, 1);
-    final taggedTrending =
-        _tagVideos(trendingVideos, 'trending', TRENDING_WEIGHT, 2);
-    final taggedDiscovery =
-        _tagVideos(discoveryVideos, 'discovery', DISCOVERY_WEIGHT, 3);
+    final taggedPersonalized = _tagVideos(
+      personalizedVideos,
+      'personalized',
+      PERSONALIZED_WEIGHT,
+      0,
+    );
+    final taggedFollowing = _tagVideos(
+      followingVideos,
+      'following',
+      FOLLOWING_WEIGHT,
+      1,
+    );
+    final taggedTrending = _tagVideos(
+      trendingVideos,
+      'trending',
+      TRENDING_WEIGHT,
+      2,
+    );
+    final taggedDiscovery = _tagVideos(
+      discoveryVideos,
+      'discovery',
+      DISCOVERY_WEIGHT,
+      3,
+    );
 
     // Merge all videos (preserves order from tagging)
     final allVideos = [
@@ -166,7 +235,9 @@ class HomeFeedService {
       }
     }
 
-    print('📊 Deduplication: ${allVideos.length} → ${deduplicatedVideos.length}');
+    print(
+      '📊 Deduplication: ${allVideos.length} → ${deduplicatedVideos.length}',
+    );
 
     // Sort by composite score (descending)
     deduplicatedVideos.sort((a, b) {
@@ -177,19 +248,19 @@ class HomeFeedService {
 
     // Return top 'limit' videos
     final finalFeed = deduplicatedVideos.take(limit).toList();
-    
+
     // Debug: print URLs in final feed
     for (final video in finalFeed) {
       final videoId = video['id'] as String;
       final thumbnailUrl = video['thumbnail_url'] as String?;
       print('📸 Final feed video $videoId: thumbnail_url=$thumbnailUrl');
     }
-    
+
     return finalFeed;
   }
 
   /// Tag videos with source, weight, and composite score
-  /// 
+  ///
   /// Composite Score = source_weight + popularity_factor
   /// Where popularity_factor is normalized bayesian_score (0.0-1.0)
   List<Map<String, dynamic>> _tagVideos(
@@ -200,7 +271,8 @@ class HomeFeedService {
   ) {
     return videos.map((video) {
       // Normalize bayesian_score to 0.0-1.0 (assuming max score around 100)
-      final bayesianScore = (video['bayesian_score'] as num?)?.toDouble() ?? 0.0;
+      final bayesianScore =
+          (video['bayesian_score'] as num?)?.toDouble() ?? 0.0;
       final popularityFactor = (bayesianScore / 100).clamp(0.0, 1.0);
 
       // Composite score = source weight + scaled popularity
@@ -228,7 +300,10 @@ class HomeFeedService {
   Map<String, dynamic> getCacheStats() {
     return {
       'cached_offsets': _feedCache.keys.toList(),
-      'total_cached_videos': _feedCache.values.fold(0, (sum, list) => sum + list.length),
+      'total_cached_videos': _feedCache.values.fold(
+        0,
+        (sum, list) => sum + list.length,
+      ),
       'cache_size': _feedCache.length,
     };
   }

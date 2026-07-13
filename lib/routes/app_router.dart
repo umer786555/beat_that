@@ -5,6 +5,8 @@ import 'package:beat_that/models/sport_subcategory.dart';
 import 'package:beat_that/constants/sports_data.dart';
 import 'package:beat_that/screens/play_uploaded_video.dart/play_uploaded_video_screen.dart';
 import 'package:beat_that/screens/edit_thumbnail/edit_thumbnail_screen.dart';
+import 'package:beat_that/screens/home/video_feed/home_video_feed_route_extra.dart';
+import 'package:beat_that/screens/home/video_feed/home_video_feed_screen.dart';
 import 'package:beat_that/screens/sports_hub/sport_details_screen.dart';
 import 'package:beat_that/screens/username_setup/username_setup_screen.dart';
 import 'package:flutter/material.dart';
@@ -19,6 +21,8 @@ import 'package:beat_that/screens/explore/explore_screen.dart';
 import 'package:beat_that/screens/sports_hub/sports_hub_screen.dart';
 import 'package:beat_that/screens/profile/profile_screen.dart';
 import 'package:beat_that/screens/profile/bloc/profile_bloc.dart';
+import 'package:beat_that/screens/profile/connections/profile_connections_screen.dart';
+import 'package:beat_that/screens/creator_profile/creator_profile_screen.dart';
 import 'package:beat_that/screens/auth/login_screen.dart';
 import 'package:beat_that/screens/auth/signup_screen.dart';
 
@@ -57,6 +61,18 @@ class SportDetailsExtra {
   final Sport sport;
 
   SportDetailsExtra({required this.sport});
+}
+
+class ProfileConnectionsExtra {
+  final String connectionType;
+
+  ProfileConnectionsExtra({required this.connectionType});
+}
+
+class CreatorProfileExtra {
+  final String userId;
+
+  CreatorProfileExtra({required this.userId});
 }
 
 /// Custom codec for serializing/deserializing route extras
@@ -99,10 +115,18 @@ class _RouteExtraEncoder extends Converter<Object?, Object?> {
         return <Object?>[
           'SportDetailsExtra',
           input.sport.id,
-          jsonEncode(
-            input.sport.subcategories.map((s) => s.toJson()).toList(),
-          ),
+          jsonEncode(input.sport.subcategories.map((s) => s.toJson()).toList()),
         ];
+      case HomeVideoFeedExtra _:
+        return <Object?>[
+          'HomeVideoFeedExtra',
+          input.sessionId,
+          input.initialIndex,
+        ];
+      case ProfileConnectionsExtra _:
+        return <Object?>['ProfileConnectionsExtra', input.connectionType];
+      case CreatorProfileExtra _:
+        return <Object?>['CreatorProfileExtra', input.userId];
       default:
         throw FormatException('Cannot encode type ${input.runtimeType}');
     }
@@ -156,7 +180,9 @@ class _RouteExtraDecoder extends Converter<Object?, Object?> {
       final sportId = inputAsList[1] as String;
       final subcategoriesJson = inputAsList[2] as String;
       final subcategories = (jsonDecode(subcategoriesJson) as List<dynamic>)
-          .map((item) => SportSubcategory.fromJson(item as Map<String, dynamic>))
+          .map(
+            (item) => SportSubcategory.fromJson(item as Map<String, dynamic>),
+          )
           .toList();
       final sport = Sport(
         id: sportId,
@@ -166,6 +192,22 @@ class _RouteExtraDecoder extends Converter<Object?, Object?> {
         subcategories: subcategories,
       );
       return SportDetailsExtra(sport: sport);
+    }
+    if (inputAsList[0] == 'HomeVideoFeedExtra') {
+      final sessionId = inputAsList[1] as String;
+      final initialIndex = inputAsList[2] as int;
+      return HomeVideoFeedExtra(
+        sessionId: sessionId,
+        initialIndex: initialIndex,
+      );
+    }
+    if (inputAsList[0] == 'ProfileConnectionsExtra') {
+      final connectionType = inputAsList[1] as String;
+      return ProfileConnectionsExtra(connectionType: connectionType);
+    }
+    if (inputAsList[0] == 'CreatorProfileExtra') {
+      final userId = inputAsList[1] as String;
+      return CreatorProfileExtra(userId: userId);
     }
     throw FormatException('Unable to parse input: $input');
   }
@@ -179,6 +221,10 @@ class AppRoutes {
 
   // App routes
   static const String home = '/home';
+  static const String homeVideoFeed = '/home/video-feed';
+  static const String profileConnections = '/profile/connections';
+  static const String creatorProfile = '/creator-profile';
+  static const String playVideo = '/play-video';
 
   // Profile routes
   static const String editUploadedVideo = '/profile/edit-uploaded-video';
@@ -316,6 +362,79 @@ class AppRouter {
             return NoTransitionPage(
               key: state.pageKey,
               child: const UsernameSetupScreen(),
+            );
+          },
+        ),
+        GoRoute(
+          path: AppRoutes.homeVideoFeed,
+          name: 'home-video-feed',
+          pageBuilder: (context, state) {
+            final extra = state.extra as HomeVideoFeedExtra;
+            return CustomTransitionPage(
+              key: state.pageKey,
+              child: HomeVideoFeedScreen(
+                sessionId: extra.sessionId,
+                initialIndex: extra.initialIndex,
+              ),
+              transitionsBuilder:
+                  (context, animation, secondaryAnimation, child) {
+                    return FadeTransition(opacity: animation, child: child);
+                  },
+            );
+          },
+        ),
+        GoRoute(
+          path: AppRoutes.creatorProfile,
+          name: 'creator-profile',
+          pageBuilder: (context, state) {
+            final extra = state.extra as CreatorProfileExtra;
+            return CustomTransitionPage(
+              key: state.pageKey,
+              child: CreatorProfileScreen(userId: extra.userId),
+              transitionsBuilder:
+                  (context, animation, secondaryAnimation, child) {
+                    const begin = Offset(1.0, 0.0);
+                    const end = Offset.zero;
+                    final tween = Tween(begin: begin, end: end);
+                    final curvedAnimation = CurvedAnimation(
+                      parent: animation,
+                      curve: Curves.easeInOut,
+                    );
+                    return SlideTransition(
+                      position: tween.animate(curvedAnimation),
+                      child: child,
+                    );
+                  },
+            );
+          },
+        ),
+        GoRoute(
+          path: AppRoutes.playVideo,
+          name: 'play-video',
+          pageBuilder: (context, state) {
+            final extra = state.extra as PlayUploadedVideoExtra;
+            return CustomTransitionPage(
+              key: state.pageKey,
+              child: PlayUploadedVideoScreen(
+                videoPath: extra.videoPath,
+                shouldShowEditButtons: extra.shouldShowEditButtons,
+                sport: extra.sport,
+                selectedSubcategory: extra.selectedSubcategory,
+              ),
+              transitionsBuilder:
+                  (context, animation, secondaryAnimation, child) {
+                    const begin = Offset(0.0, 1.0);
+                    const end = Offset.zero;
+                    final tween = Tween(begin: begin, end: end);
+                    final curvedAnimation = CurvedAnimation(
+                      parent: animation,
+                      curve: Curves.easeInOut,
+                    );
+                    return SlideTransition(
+                      position: tween.animate(curvedAnimation),
+                      child: child,
+                    );
+                  },
             );
           },
         ),
@@ -492,6 +611,39 @@ class AppRouter {
                                     child,
                                   ) {
                                     const begin = Offset(0.0, 1.0);
+                                    const end = Offset.zero;
+                                    final tween = Tween(begin: begin, end: end);
+                                    final curvedAnimation = CurvedAnimation(
+                                      parent: animation,
+                                      curve: Curves.easeInOut,
+                                    );
+                                    return SlideTransition(
+                                      position: tween.animate(curvedAnimation),
+                                      child: child,
+                                    );
+                                  },
+                            );
+                          },
+                        ),
+                        GoRoute(
+                          path: 'connections',
+                          name: 'profile-connections',
+                          pageBuilder: (context, state) {
+                            final extra =
+                                state.extra as ProfileConnectionsExtra;
+                            return CustomTransitionPage(
+                              key: state.pageKey,
+                              child: ProfileConnectionsScreen(
+                                connectionType: extra.connectionType,
+                              ),
+                              transitionsBuilder:
+                                  (
+                                    context,
+                                    animation,
+                                    secondaryAnimation,
+                                    child,
+                                  ) {
+                                    const begin = Offset(1.0, 0.0);
                                     const end = Offset.zero;
                                     final tween = Tween(begin: begin, end: end);
                                     final curvedAnimation = CurvedAnimation(

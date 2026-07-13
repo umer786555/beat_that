@@ -19,6 +19,7 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
   // Track pagination state
   int _currentOffset = 0;
   List<Map<String, dynamic>> _allFeedVideos = [];
+  bool _isPaginationRequestInFlight = false;
 
   HomeBloc() : super(HomeInitial()) {
     on<InitialEvent>(_onInitial);
@@ -36,10 +37,9 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
       await preferencesService.clearUserProfile();
 
       // Fetch user profile from Supabase
-      final userProfile =
-          await supabaseService.fetchUserPersonalProfile();
+      final userProfile = await supabaseService.fetchUserPersonalProfile();
 
-       if (userProfile != null) {
+      if (userProfile != null) {
         // Save to preferences for offline access
         await preferencesService.saveUserProfile(userProfile);
         print('✓ User profile found and saved: ${userProfile.username}');
@@ -58,15 +58,19 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
   }
 
   /// Handle FetchFeedEvent - fetch blended home feed
-  /// 
+  ///
   /// Fetches videos from 4 sources in parallel and blends them:
   /// - 40% Personalized (user's engaged categories)
   /// - 30% Following (videos from followed users)
   /// - 20% Trending (best-rated videos from last 7 days)
   /// - 10% Discovery (random from unwatched categories)
-  Future<void> _onFetchFeed(FetchFeedEvent event, Emitter<HomeState> emit) async {
+  Future<void> _onFetchFeed(
+    FetchFeedEvent event,
+    Emitter<HomeState> emit,
+  ) async {
     print(
-        '📺 HomeBloc FetchFeedEvent: limit=${event.limit}, offset=${event.offset}, forceRefresh=${event.forceRefresh}');
+      '📺 HomeBloc FetchFeedEvent: limit=${event.limit}, offset=${event.offset}, forceRefresh=${event.forceRefresh}',
+    );
 
     try {
       // Emit loading state
@@ -82,11 +86,13 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
 
       if (videos.isEmpty) {
         print('⚠️ No videos available');
-        emit(FeedLoaded(
-          videos: List<Map<String, dynamic>>.from(_allFeedVideos),
-          offset: event.offset,
-          hasMoreContent: false,
-        ));
+        emit(
+          FeedLoaded(
+            videos: List<Map<String, dynamic>>.from(_allFeedVideos),
+            offset: event.offset,
+            hasMoreContent: false,
+          ),
+        );
         return;
       }
 
@@ -100,32 +106,38 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
       }
 
       print(
-          '✓ Fetched ${videos.length} videos, total feed size: ${_allFeedVideos.length}');
+        '✓ Fetched ${videos.length} videos, total feed size: ${_allFeedVideos.length}',
+      );
 
       // Determine if more content available (if we got fewer videos than requested, we're at the end)
       final hasMoreContent = videos.length >= event.limit;
 
-      emit(FeedLoaded(
-        videos: List<Map<String, dynamic>>.from(_allFeedVideos),
-        offset: event.offset,
-        hasMoreContent: hasMoreContent,
-      ));
+      emit(
+        FeedLoaded(
+          videos: List<Map<String, dynamic>>.from(_allFeedVideos),
+          offset: event.offset,
+          hasMoreContent: hasMoreContent,
+        ),
+      );
 
       _currentOffset = event.offset + videos.length;
     } catch (e) {
       print('✗ FetchFeedEvent Error: $e');
-      emit(FeedError(
-        message: 'Failed to load feed: $e',
-        offset: event.offset,
-      ));
+      emit(FeedError(message: 'Failed to load feed: $e', offset: event.offset));
+    } finally {
+      if (event.offset > 0) {
+        _isPaginationRequestInFlight = false;
+      }
     }
   }
 
   /// Handle RefreshFeedEvent - refresh feed from the top
-  /// 
+  ///
   /// Clears cache and fetches fresh feed starting from offset=0
   Future<void> _onRefreshFeed(
-      RefreshFeedEvent event, Emitter<HomeState> emit) async {
+    RefreshFeedEvent event,
+    Emitter<HomeState> emit,
+  ) async {
     print('🔄 HomeBloc RefreshFeedEvent triggered');
 
     try {
@@ -135,11 +147,7 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
       _allFeedVideos = [];
 
       // Fetch fresh feed from top
-      add(const FetchFeedEvent(
-        limit: 50,
-        offset: 0,
-        forceRefresh: true,
-      ));
+      add(const FetchFeedEvent(limit: 50, offset: 0, forceRefresh: true));
     } catch (e) {
       print('✗ RefreshFeedEvent Error: $e');
       emit(FeedError(message: 'Failed to refresh feed: $e'));
@@ -147,25 +155,39 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
   }
 
   /// Handle LoadMoreFeedEvent - load next page of feed
-  /// 
+  ///
   /// Fetches next batch using current offset
   Future<void> _onLoadMoreFeed(
-      LoadMoreFeedEvent event, Emitter<HomeState> emit) async {
-    print('⬇️ HomeBloc LoadMoreFeedEvent triggered, currentOffset=$_currentOffset');
+    LoadMoreFeedEvent event,
+    Emitter<HomeState> emit,
+  ) async {
+    print(
+      '⬇️ HomeBloc LoadMoreFeedEvent triggered, currentOffset=$_currentOffset',
+    );
 
     try {
+      if (_isPaginationRequestInFlight) {
+        print(
+          '⚠️ Pagination request already in flight, ignoring duplicate load more',
+        );
+        return;
+      }
+
+      _isPaginationRequestInFlight = true;
+
       // Fetch next batch at current offset
-      add(FetchFeedEvent(
-        limit: 50,
-        offset: _currentOffset,
-        forceRefresh: false,
-      ));
+      add(
+        FetchFeedEvent(limit: 50, offset: _currentOffset, forceRefresh: false),
+      );
     } catch (e) {
+      _isPaginationRequestInFlight = false;
       print('✗ LoadMoreFeedEvent Error: $e');
-      emit(FeedError(
-        message: 'Failed to load more videos: $e',
-        offset: _currentOffset,
-      ));
+      emit(
+        FeedError(
+          message: 'Failed to load more videos: $e',
+          offset: _currentOffset,
+        ),
+      );
     }
   }
 

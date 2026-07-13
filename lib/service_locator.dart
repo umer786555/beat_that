@@ -8,6 +8,7 @@ import 'package:beat_that/services/video_picker_service.dart';
 import 'package:beat_that/services/supabase_service.dart';
 import 'package:beat_that/services/dio_upload_service.dart';
 import 'package:beat_that/services/home_feed_service.dart';
+import 'package:beat_that/services/home_video_feed_session_store.dart';
 import 'package:beat_that/routes/app_router.dart';
 
 /// Service Locator instance for dependency injection
@@ -23,9 +24,9 @@ Future<PreferencesService> initializeAsyncServices() async {
     // Initialize PreferencesService with SharedPreferences
     final preferencesService = PreferencesService();
     await preferencesService.init();
-    
+
     // Clean up old engagement data (30+ days old) on app startup
-    await preferencesService.cleanupOldEngagement(); 
+    await preferencesService.cleanupOldEngagement();
 
     return preferencesService;
   } catch (e, stackTrace) {
@@ -79,6 +80,10 @@ void setupServiceLocator(PreferencesService preferencesService) {
     // Register HomeFeedService (depends on SupabaseService)
     locator.registerSingleton<HomeFeedService>(HomeFeedService());
 
+    // Register HomeVideoFeedSessionStore for lightweight route handoff
+    locator.registerSingleton<HomeVideoFeedSessionStore>(
+      HomeVideoFeedSessionStore(),
+    );
   } catch (e, stackTrace) {
     debugPrintStack(
       label: 'ERROR: Failed to register services in service locator',

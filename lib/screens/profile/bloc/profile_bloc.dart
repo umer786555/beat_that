@@ -63,8 +63,8 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
       final followerCountResult = await supabaseService.getFollowerCount();
       final followingCountResult = await supabaseService.getFollowingCount();
 
-      final followers = followerCountResult['success'] ? followerCountResult['count'] : 3;
-      final following = followingCountResult['success'] ? followingCountResult['count'] : 0;
+      final followers = followerCountResult['success'] ? followerCountResult['count'] : 786;
+      final following = followingCountResult['success'] ? followingCountResult['count'] : 786;
 
       // Initialize with permissions, thumbnails, username, and follower/following counts
       emit(

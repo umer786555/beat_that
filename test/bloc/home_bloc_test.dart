@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:bloc_test/bloc_test.dart';
 import 'package:mocktail/mocktail.dart';
@@ -10,8 +12,11 @@ import 'package:beat_that/services/auth_service.dart';
 
 // Mock services
 class MockHomeFeedService extends Mock implements HomeFeedService {}
+
 class MockPreferencesService extends Mock implements PreferencesService {}
+
 class MockSupabaseService extends Mock implements SupabaseService {}
+
 class MockAuthService extends Mock implements AuthService {}
 
 void main() {
@@ -75,18 +80,23 @@ void main() {
     blocTest<HomeBloc, HomeState>(
       'emits [FeedLoading, FeedLoaded] when FetchFeedEvent succeeds',
       setUp: () {
-        when(() => mockHomeFeedService.getHomeFeed(
-          limit: any(named: 'limit'),
-          offset: any(named: 'offset'),
-          forceRefresh: any(named: 'forceRefresh'),
-        )).thenAnswer((_) async => sampleVideos);
+        when(
+          () => mockHomeFeedService.getHomeFeed(
+            limit: any(named: 'limit'),
+            offset: any(named: 'offset'),
+            forceRefresh: any(named: 'forceRefresh'),
+          ),
+        ).thenAnswer((_) async => sampleVideos);
       },
       build: () => homeBloc,
       act: (bloc) => bloc.add(const FetchFeedEvent(limit: 50, offset: 0)),
       expect: () => [
         isA<FeedLoading>(),
-        isA<FeedLoaded>()
-            .having((state) => state.videos, 'videos', equals(sampleVideos)),
+        isA<FeedLoaded>().having(
+          (state) => state.videos,
+          'videos',
+          equals(sampleVideos),
+        ),
       ],
     );
 
@@ -94,18 +104,19 @@ void main() {
     blocTest<HomeBloc, HomeState>(
       'emits [FeedLoading, FeedLoaded] with empty videos',
       setUp: () {
-        when(() => mockHomeFeedService.getHomeFeed(
-          limit: any(named: 'limit'),
-          offset: any(named: 'offset'),
-          forceRefresh: any(named: 'forceRefresh'),
-        )).thenAnswer((_) async => []);
+        when(
+          () => mockHomeFeedService.getHomeFeed(
+            limit: any(named: 'limit'),
+            offset: any(named: 'offset'),
+            forceRefresh: any(named: 'forceRefresh'),
+          ),
+        ).thenAnswer((_) async => []);
       },
       build: () => homeBloc,
       act: (bloc) => bloc.add(const FetchFeedEvent(limit: 50, offset: 0)),
       expect: () => [
         isA<FeedLoading>(),
-        isA<FeedLoaded>()
-            .having((state) => state.videos, 'videos', isEmpty),
+        isA<FeedLoaded>().having((state) => state.videos, 'videos', isEmpty),
       ],
     );
 
@@ -113,47 +124,47 @@ void main() {
     blocTest<HomeBloc, HomeState>(
       'emits [FeedLoading, FeedError] when getHomeFeed throws',
       setUp: () {
-        when(() => mockHomeFeedService.getHomeFeed(
-          limit: any(named: 'limit'),
-          offset: any(named: 'offset'),
-          forceRefresh: any(named: 'forceRefresh'),
-        )).thenThrow(Exception('Network error'));
+        when(
+          () => mockHomeFeedService.getHomeFeed(
+            limit: any(named: 'limit'),
+            offset: any(named: 'offset'),
+            forceRefresh: any(named: 'forceRefresh'),
+          ),
+        ).thenThrow(Exception('Network error'));
       },
       build: () => homeBloc,
       act: (bloc) => bloc.add(const FetchFeedEvent(limit: 50, offset: 0)),
-      expect: () => [
-        isA<FeedLoading>(),
-        isA<FeedError>(),
-      ],
+      expect: () => [isA<FeedLoading>(), isA<FeedError>()],
     );
 
     /// Test 5: RefreshFeedEvent uses forceRefresh
     blocTest<HomeBloc, HomeState>(
       'uses forceRefresh when RefreshFeedEvent is triggered',
       setUp: () {
-        when(() => mockHomeFeedService.getHomeFeed(
-          limit: any(named: 'limit'),
-          offset: any(named: 'offset'),
-          forceRefresh: any(named: 'forceRefresh'),
-        )).thenAnswer((_) async => sampleVideos);
+        when(
+          () => mockHomeFeedService.getHomeFeed(
+            limit: any(named: 'limit'),
+            offset: any(named: 'offset'),
+            forceRefresh: any(named: 'forceRefresh'),
+          ),
+        ).thenAnswer((_) async => sampleVideos);
       },
       build: () => homeBloc,
       act: (bloc) => bloc.add(const RefreshFeedEvent()),
-      expect: () => [
-        isA<FeedLoading>(),
-        isA<FeedLoaded>(),
-      ],
+      expect: () => [isA<FeedLoading>(), isA<FeedLoaded>()],
     );
 
     /// Test 6: Video data integrity - source field preserved
     blocTest<HomeBloc, HomeState>(
       'preserves source field in video data',
       setUp: () {
-        when(() => mockHomeFeedService.getHomeFeed(
-          limit: any(named: 'limit'),
-          offset: any(named: 'offset'),
-          forceRefresh: any(named: 'forceRefresh'),
-        )).thenAnswer((_) async => sampleVideos);
+        when(
+          () => mockHomeFeedService.getHomeFeed(
+            limit: any(named: 'limit'),
+            offset: any(named: 'offset'),
+            forceRefresh: any(named: 'forceRefresh'),
+          ),
+        ).thenAnswer((_) async => sampleVideos);
       },
       build: () => homeBloc,
       act: (bloc) => bloc.add(const FetchFeedEvent(limit: 50, offset: 0)),
@@ -168,11 +179,13 @@ void main() {
     blocTest<HomeBloc, HomeState>(
       'preserves username field in video data',
       setUp: () {
-        when(() => mockHomeFeedService.getHomeFeed(
-          limit: any(named: 'limit'),
-          offset: any(named: 'offset'),
-          forceRefresh: any(named: 'forceRefresh'),
-        )).thenAnswer((_) async => sampleVideos);
+        when(
+          () => mockHomeFeedService.getHomeFeed(
+            limit: any(named: 'limit'),
+            offset: any(named: 'offset'),
+            forceRefresh: any(named: 'forceRefresh'),
+          ),
+        ).thenAnswer((_) async => sampleVideos);
       },
       build: () => homeBloc,
       act: (bloc) => bloc.add(const FetchFeedEvent(limit: 50, offset: 0)),
@@ -187,11 +200,13 @@ void main() {
     blocTest<HomeBloc, HomeState>(
       'handles multiple FetchFeedEvents sequentially',
       setUp: () {
-        when(() => mockHomeFeedService.getHomeFeed(
-          limit: any(named: 'limit'),
-          offset: any(named: 'offset'),
-          forceRefresh: any(named: 'forceRefresh'),
-        )).thenAnswer((_) async => sampleVideos);
+        when(
+          () => mockHomeFeedService.getHomeFeed(
+            limit: any(named: 'limit'),
+            offset: any(named: 'offset'),
+            forceRefresh: any(named: 'forceRefresh'),
+          ),
+        ).thenAnswer((_) async => sampleVideos);
       },
       build: () => homeBloc,
       act: (bloc) {
@@ -206,24 +221,79 @@ void main() {
       ],
     );
 
+    test(
+      'ignores duplicate LoadMoreFeedEvent while pagination is in flight',
+      () async {
+        final paginationCompleter = Completer<List<Map<String, dynamic>>>();
+
+        when(
+          () => mockHomeFeedService.getHomeFeed(
+            limit: 2,
+            offset: 0,
+            forceRefresh: false,
+          ),
+        ).thenAnswer((_) async => sampleVideos);
+
+        when(
+          () => mockHomeFeedService.getHomeFeed(
+            limit: 50,
+            offset: 2,
+            forceRefresh: false,
+          ),
+        ).thenAnswer((_) => paginationCompleter.future);
+
+        homeBloc.add(const FetchFeedEvent(limit: 2, offset: 0));
+        await homeBloc.stream.firstWhere((state) => state is FeedLoaded);
+
+        homeBloc.add(const LoadMoreFeedEvent());
+        homeBloc.add(const LoadMoreFeedEvent());
+
+        await untilCalled(
+          () => mockHomeFeedService.getHomeFeed(
+            limit: 50,
+            offset: 2,
+            forceRefresh: false,
+          ),
+        );
+        await Future<void>.delayed(Duration.zero);
+
+        verify(
+          () => mockHomeFeedService.getHomeFeed(
+            limit: 50,
+            offset: 2,
+            forceRefresh: false,
+          ),
+        ).called(1);
+
+        paginationCompleter.complete(sampleVideos);
+        await homeBloc.stream.firstWhere(
+          (state) => state is FeedLoaded && state.offset == 2,
+        );
+      },
+    );
+
     /// Test 9: Service layer is called with correct parameters
     blocTest<HomeBloc, HomeState>(
       'calls getHomeFeed with correct parameters',
       setUp: () {
-        when(() => mockHomeFeedService.getHomeFeed(
-          limit: 50,
-          offset: 25,
-          forceRefresh: false,
-        )).thenAnswer((_) async => sampleVideos);
+        when(
+          () => mockHomeFeedService.getHomeFeed(
+            limit: 50,
+            offset: 25,
+            forceRefresh: false,
+          ),
+        ).thenAnswer((_) async => sampleVideos);
       },
       build: () => homeBloc,
       act: (bloc) => bloc.add(const FetchFeedEvent(limit: 50, offset: 25)),
       verify: (bloc) {
-        verify(() => mockHomeFeedService.getHomeFeed(
-          limit: 50,
-          offset: 25,
-          forceRefresh: false,
-        )).called(greaterThan(0));
+        verify(
+          () => mockHomeFeedService.getHomeFeed(
+            limit: 50,
+            offset: 25,
+            forceRefresh: false,
+          ),
+        ).called(greaterThan(0));
       },
     );
 
@@ -243,11 +313,13 @@ void main() {
             'source': 'discovery',
           },
         );
-        when(() => mockHomeFeedService.getHomeFeed(
-          limit: any(named: 'limit'),
-          offset: any(named: 'offset'),
-          forceRefresh: any(named: 'forceRefresh'),
-        )).thenAnswer((_) async => largeBatch);
+        when(
+          () => mockHomeFeedService.getHomeFeed(
+            limit: any(named: 'limit'),
+            offset: any(named: 'offset'),
+            forceRefresh: any(named: 'forceRefresh'),
+          ),
+        ).thenAnswer((_) async => largeBatch);
       },
       build: () => homeBloc,
       act: (bloc) => bloc.add(const FetchFeedEvent(limit: 100, offset: 0)),

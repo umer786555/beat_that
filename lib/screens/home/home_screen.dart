@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shimmer/shimmer.dart';
+import 'package:beat_that/service_locator.dart';
 import 'package:beat_that/screens/home/bloc/home_bloc.dart';
+import 'package:beat_that/screens/home/video_feed/home_video_feed_route_extra.dart';
+import 'package:beat_that/services/home_video_feed_session_store.dart';
 import 'package:beat_that/widgets/video_feed_card.dart';
 import 'package:beat_that/widgets/shimmer_loading.dart';
 
@@ -18,6 +21,8 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   late ScrollController _scrollController;
   static const double _scrollTriggerDistance = 500;
+  List<dynamic> _lastLoadedVideos = const [];
+  bool _lastHasMoreContent = true;
 
   @override
   void initState() {
@@ -49,9 +54,14 @@ class _HomeScreenState extends State<HomeScreen> {
 
   /// Handle pull-to-refresh
   Future<void> _onRefresh() async {
-    context.read<HomeBloc>().add(const RefreshFeedEvent());
-    // Wait for the refresh to complete
-    await Future.delayed(const Duration(milliseconds: 500));
+    final homeBloc = context.read<HomeBloc>();
+    final refreshCompletion = homeBloc.stream.firstWhere(
+      (state) =>
+          state is FeedLoaded || state is FeedError || state is NoUserProfile,
+    );
+
+    homeBloc.add(const RefreshFeedEvent());
+    await refreshCompletion;
   }
 
   @override
@@ -69,15 +79,22 @@ class _HomeScreenState extends State<HomeScreen> {
             // Navigate to username setup screen
             context.go('/username-setup');
           }
+
+          if (state is FeedLoaded) {
+            _lastLoadedVideos = List<dynamic>.from(state.videos);
+            _lastHasMoreContent = state.hasMoreContent;
+          }
         },
 
         /// Builder: Render UI based on state
         builder: (context, state) {
           // Initial state - not ready yet
           if (state is HomeInitial) {
-            return const Center(
-              child: CircularProgressIndicator(),
-            );
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          if (state is UserProfileLoaded) {
+            return ShimmerLoading(cardCount: 8);
           }
 
           // No user profile state
@@ -86,11 +103,7 @@ class _HomeScreenState extends State<HomeScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(
-                    Icons.person_outline,
-                    size: 80,
-                    color: Colors.grey[400],
-                  ),
+                  Icon(Icons.person_outline, size: 80, color: Colors.grey[400]),
                   const SizedBox(height: 16),
                   Text(
                     'Profile not found',
@@ -112,8 +125,11 @@ class _HomeScreenState extends State<HomeScreen> {
               // First load - show full shimmer
               return ShimmerLoading(cardCount: 8);
             } else {
-              // Pagination - this state shouldn't show, but handle gracefully
-              return _buildFeedGrid([], isLoading: true);
+              return _buildFeedGrid(
+                _lastLoadedVideos,
+                hasMoreContent: _lastHasMoreContent,
+                isLoading: true,
+              );
             }
           }
 
@@ -184,12 +200,31 @@ class _HomeScreenState extends State<HomeScreen> {
                 videoId: video['id'] ?? '',
                 thumbnailUrl: video['thumbnail_url'] ?? '',
                 username: video['username'] ?? 'Unknown',
+                sportId: video['sport_id'] as String?,
                 viewCount: (video['view_count'] as num?)?.toInt() ?? 0,
                 rating: (video['average_rating'] as num?)?.toDouble() ?? 0.0,
-                sourceType: video['source'] ?? 'discovery',
                 onTap: () {
-                  // TODO: Navigate to video player screen
-                  print('Tapped video: ${video['id']}');
+                  final initialVideos = videos
+                      .map(
+                        (item) => Map<String, dynamic>.from(
+                          item as Map<String, dynamic>,
+                        ),
+                      )
+                      .toList();
+                  final sessionStore = locator<HomeVideoFeedSessionStore>();
+                  final sessionId = sessionStore.createSession(
+                    videos: initialVideos,
+                    nextOffset: initialVideos.length,
+                    hasMoreContent: hasMoreContent,
+                  );
+
+                  context.pushNamed(
+                    'home-video-feed',
+                    extra: HomeVideoFeedExtra(
+                      sessionId: sessionId,
+                      initialIndex: index,
+                    ),
+                  );
                 },
                 onLongPress: () {
                   // TODO: Show context menu (share, report, etc.)
@@ -218,11 +253,7 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
-            Icons.error_outline,
-            size: 80,
-            color: Colors.red[300],
-          ),
+          Icon(Icons.error_outline, size: 80, color: Colors.red[300]),
           const SizedBox(height: 24),
           Text(
             'Failed to load videos',
@@ -234,10 +265,7 @@ class _HomeScreenState extends State<HomeScreen> {
             child: Text(
               message,
               textAlign: TextAlign.center,
-              style: TextStyle(
-                color: Colors.grey[600],
-                fontSize: 14,
-              ),
+              style: TextStyle(color: Colors.grey[600], fontSize: 14),
             ),
           ),
           const SizedBox(height: 32),
@@ -259,24 +287,14 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
-            Icons.video_library_outlined,
-            size: 80,
-            color: Colors.grey[400],
-          ),
+          Icon(Icons.video_library_outlined, size: 80, color: Colors.grey[400]),
           const SizedBox(height: 24),
-          Text(
-            'No videos yet',
-            style: Theme.of(context).textTheme.titleLarge,
-          ),
+          Text('No videos yet', style: Theme.of(context).textTheme.titleLarge),
           const SizedBox(height: 8),
           Text(
             'Follow users or explore categories\nto see videos here',
             textAlign: TextAlign.center,
-            style: TextStyle(
-              color: Colors.grey[600],
-              fontSize: 14,
-            ),
+            style: TextStyle(color: Colors.grey[600], fontSize: 14),
           ),
           const SizedBox(height: 32),
           ElevatedButton.icon(
