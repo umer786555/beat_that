@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:beat_that/constants/app_colors.dart';
+import 'package:beat_that/constants/sports_data.dart';
 import 'package:beat_that/widgets/thumbnail_error_widget.dart';
 
 /// Reusable widget for displaying a video thumbnail item in grid view
@@ -52,8 +53,29 @@ class VideoThumbnailItem extends StatelessWidget {
     return rating.toStringAsFixed(1);
   }
 
+  String? _buildSportLabel() {
+    final sportId = thumbnail.sportId;
+    if (sportId == null || sportId.isEmpty) {
+      return null;
+    }
+
+    return getDisplayNameForSport(sportId);
+  }
+
+  String? _buildSubcategoryLabel() {
+    final subcategoryName = thumbnail.subcategoryName;
+    if (subcategoryName == null || subcategoryName.isEmpty) {
+      return null;
+    }
+
+    return subcategoryName;
+  }
+
   @override
   Widget build(BuildContext context) {
+    final sportLabel = _buildSportLabel();
+    final subcategoryLabel = _buildSubcategoryLabel();
+
     return GestureDetector(
       onTap: onTap,
       onLongPress: () {
@@ -163,6 +185,34 @@ class VideoThumbnailItem extends StatelessWidget {
                                 letterSpacing: -0.3,
                               ),
                             ),
+                            if (sportLabel != null) ...[
+                              const SizedBox(height: 4),
+                              Text(
+                                sportLabel,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: Colors.white.withOpacity(0.82),
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: -0.1,
+                                ),
+                              ),
+                            ],
+                            if (subcategoryLabel != null) ...[
+                              const SizedBox(height: 2),
+                              Text(
+                                subcategoryLabel,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: Colors.white.withOpacity(0.74),
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w500,
+                                  letterSpacing: -0.1,
+                                ),
+                              ),
+                            ],
                             const SizedBox(height: 6),
                             // Stats row with rating and views
                             Row(

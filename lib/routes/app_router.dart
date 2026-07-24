@@ -3,6 +3,9 @@ import 'dart:convert';
 import 'package:beat_that/models/sport.dart';
 import 'package:beat_that/models/sport_subcategory.dart';
 import 'package:beat_that/constants/sports_data.dart';
+import 'package:beat_that/screens/explore/video_feed/explore_video_feed_route_extra.dart';
+import 'package:beat_that/screens/explore/video_feed/explore_video_feed_screen.dart';
+import 'package:beat_that/screens/explore/bloc/explore_bloc.dart';
 import 'package:beat_that/screens/play_uploaded_video.dart/play_uploaded_video_screen.dart';
 import 'package:beat_that/screens/edit_thumbnail/edit_thumbnail_screen.dart';
 import 'package:beat_that/screens/home/video_feed/home_video_feed_route_extra.dart';
@@ -22,6 +25,8 @@ import 'package:beat_that/screens/sports_hub/sports_hub_screen.dart';
 import 'package:beat_that/screens/profile/profile_screen.dart';
 import 'package:beat_that/screens/profile/bloc/profile_bloc.dart';
 import 'package:beat_that/screens/profile/connections/profile_connections_screen.dart';
+import 'package:beat_that/screens/settings/bloc/settings_bloc.dart';
+import 'package:beat_that/screens/settings/settings_screen.dart';
 import 'package:beat_that/screens/creator_profile/creator_profile_screen.dart';
 import 'package:beat_that/screens/auth/login_screen.dart';
 import 'package:beat_that/screens/auth/signup_screen.dart';
@@ -123,6 +128,17 @@ class _RouteExtraEncoder extends Converter<Object?, Object?> {
           input.sessionId,
           input.initialIndex,
         ];
+      case ExploreVideoFeedExtra _:
+        return <Object?>[
+          'ExploreVideoFeedExtra',
+          input.videos,
+          input.initialIndex,
+          input.query,
+          input.searchMode.name,
+          input.selectedSportId,
+          input.nextOffset,
+          input.hasMoreContent,
+        ];
       case ProfileConnectionsExtra _:
         return <Object?>['ProfileConnectionsExtra', input.connectionType];
       case CreatorProfileExtra _:
@@ -201,6 +217,21 @@ class _RouteExtraDecoder extends Converter<Object?, Object?> {
         initialIndex: initialIndex,
       );
     }
+    if (inputAsList[0] == 'ExploreVideoFeedExtra') {
+      return ExploreVideoFeedExtra(
+        videos: List<Map<String, dynamic>>.from(
+          (inputAsList[1] as List<dynamic>).map(
+            (item) => Map<String, dynamic>.from(item as Map),
+          ),
+        ),
+        initialIndex: inputAsList[2] as int,
+        query: inputAsList[3] as String,
+        searchMode: ExploreSearchMode.values.byName(inputAsList[4] as String),
+        selectedSportId: inputAsList[5] as String?,
+        nextOffset: inputAsList[6] as int,
+        hasMoreContent: inputAsList[7] as bool,
+      );
+    }
     if (inputAsList[0] == 'ProfileConnectionsExtra') {
       final connectionType = inputAsList[1] as String;
       return ProfileConnectionsExtra(connectionType: connectionType);
@@ -222,6 +253,7 @@ class AppRoutes {
   // App routes
   static const String home = '/home';
   static const String homeVideoFeed = '/home/video-feed';
+  static const String exploreVideoFeed = '/explore/video-feed';
   static const String profileConnections = '/profile/connections';
   static const String creatorProfile = '/creator-profile';
   static const String playVideo = '/play-video';
@@ -229,6 +261,7 @@ class AppRoutes {
   // Profile routes
   static const String editUploadedVideo = '/profile/edit-uploaded-video';
   static const String editThumbnail = '/profile/edit-thumbnail';
+  static const String settings = '/profile/settings';
 }
 
 /// GoRouter configuration for the application
@@ -384,6 +417,21 @@ class AppRouter {
           },
         ),
         GoRoute(
+          path: AppRoutes.exploreVideoFeed,
+          name: 'explore-video-feed',
+          pageBuilder: (context, state) {
+            final extra = state.extra as ExploreVideoFeedExtra;
+            return CustomTransitionPage(
+              key: state.pageKey,
+              child: ExploreVideoFeedScreen(extra: extra),
+              transitionsBuilder:
+                  (context, animation, secondaryAnimation, child) {
+                    return FadeTransition(opacity: animation, child: child);
+                  },
+            );
+          },
+        ),
+        GoRoute(
           path: AppRoutes.creatorProfile,
           name: 'creator-profile',
           pageBuilder: (context, state) {
@@ -503,6 +551,34 @@ class AppRouter {
                     );
                   },
                   routes: [
+                    GoRoute(
+                      path: 'settings',
+                      name: 'settings',
+                      pageBuilder: (context, state) {
+                        return CustomTransitionPage(
+                          key: state.pageKey,
+                          child: BlocProvider(
+                            create: (context) => SettingsBloc(),
+                            child: const SettingsScreen(),
+                          ),
+                          transitionsBuilder:
+                              (context, animation, secondaryAnimation, child) {
+                                const begin = Offset(1.0, 0.0);
+                                const end = Offset.zero;
+                                final tween = Tween(begin: begin, end: end);
+                                final curvedAnimation = CurvedAnimation(
+                                  parent: animation,
+                                  curve: Curves.easeInOut,
+                                );
+                                return SlideTransition(
+                                  position: tween.animate(curvedAnimation),
+                                  child: child,
+                                );
+                              },
+                        );
+                      },
+                    ),
+
                     /// Edit Uploaded Video Child Route
                     GoRoute(
                       path: 'edit-uploaded-video',

@@ -41,8 +41,3 @@ final class RefreshFeedEvent extends HomeEvent {
 final class LoadMoreFeedEvent extends HomeEvent {
   const LoadMoreFeedEvent();
 }
-
-/// Logout and clear user session
-final class LogoutEvent extends HomeEvent {
-  const LogoutEvent();
-}

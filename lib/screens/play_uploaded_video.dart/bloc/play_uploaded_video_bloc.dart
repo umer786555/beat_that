@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:beat_that/service_locator.dart';
+import 'package:beat_that/services/supabase_service.dart';
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:video_player/video_player.dart';
@@ -11,6 +13,7 @@ class PlayUploadedVideoBloc
     extends Bloc<PlayUploadedVideoEvent, PlayUploadedVideoState> {
   VideoPlayerController? _videoController;
   final String videoPath;
+  final SupabaseService _supabaseService = locator<SupabaseService>();
 
   PlayUploadedVideoBloc({required this.videoPath})
     : super(PlayUploadedVideoInitial()) {
@@ -33,17 +36,25 @@ class PlayUploadedVideoBloc
       // Dispose old controller if exists
       await _videoController?.dispose();
 
-      // Determine if the path is a URL or a local file
-      final isUrl = event.videoPath.startsWith('http://') ||
+      final isUrl =
+          event.videoPath.startsWith('http://') ||
           event.videoPath.startsWith('https://');
+      final localFile = File(event.videoPath);
+      final isLocalFile = !isUrl && await localFile.exists();
 
-      // Create new controller - use networkUrl for URLs, file for local paths
       if (isUrl) {
         _videoController = VideoPlayerController.networkUrl(
           Uri.parse(event.videoPath),
         );
+      } else if (isLocalFile) {
+        _videoController = VideoPlayerController.file(localFile);
       } else {
-        _videoController = VideoPlayerController.file(File(event.videoPath));
+        final resolvedVideoUrl = await _supabaseService.resolveVideoPlaybackUrl(
+          event.videoPath,
+        );
+        _videoController = VideoPlayerController.networkUrl(
+          Uri.parse(resolvedVideoUrl),
+        );
       }
 
       // Initialize the controller

@@ -11,6 +11,8 @@ part 'home_event.dart';
 part 'home_state.dart';
 
 class HomeBloc extends Bloc<HomeEvent, HomeState> {
+  static const int _homeFeedPageSize = 24;
+
   final preferencesService = locator<PreferencesService>();
   final supabaseService = locator<SupabaseService>();
   final homeFeedService = locator<HomeFeedService>();
@@ -19,6 +21,8 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
   // Track pagination state
   int _currentOffset = 0;
   List<Map<String, dynamic>> _allFeedVideos = [];
+  final Set<String> _seenFeedVideoIds = <String>{};
+  bool _hasMoreFeedContent = true;
   bool _isPaginationRequestInFlight = false;
 
   HomeBloc() : super(HomeInitial()) {
@@ -26,7 +30,6 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
     on<FetchFeedEvent>(_onFetchFeed);
     on<RefreshFeedEvent>(_onRefreshFeed);
     on<LoadMoreFeedEvent>(_onLoadMoreFeed);
-    on<LogoutEvent>(_onLogout);
   }
 
   /// Handle InitialEvent - save user profile and fetch initial feed
@@ -46,7 +49,13 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
         emit(UserProfileLoaded(userProfile));
 
         // Automatically fetch initial feed after saving profile
-        add(const FetchFeedEvent(limit: 50, offset: 0, forceRefresh: false));
+        add(
+          const FetchFeedEvent(
+            limit: _homeFeedPageSize,
+            offset: 0,
+            forceRefresh: false,
+          ),
+        );
       } else {
         print('✗ No user profile found');
         emit(const NoUserProfile());
@@ -80,12 +89,14 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
       // Fetch blended feed from HomeFeedService
       final videos = await homeFeedService.getHomeFeed(
         limit: event.limit,
+
         offset: event.offset,
         forceRefresh: event.forceRefresh,
       );
 
       if (videos.isEmpty) {
         print('⚠️ No videos available');
+        _hasMoreFeedContent = false;
         emit(
           FeedLoaded(
             videos: List<Map<String, dynamic>>.from(_allFeedVideos),
@@ -96,21 +107,43 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
         return;
       }
 
+      final uniqueVideos = videos.where((video) {
+        final videoId = video['id'] as String?;
+        if (videoId == null) {
+          return true;
+        }
+
+        return !_seenFeedVideoIds.contains(videoId);
+      }).toList();
+
       // For pagination: append new videos to existing list if offset > 0
       if (event.offset == 0) {
-        _allFeedVideos = videos;
+        _allFeedVideos = uniqueVideos;
+        _seenFeedVideoIds
+          ..clear()
+          ..addAll(
+            uniqueVideos
+                .map((video) => video['id'] as String?)
+                .whereType<String>(),
+          );
         _currentOffset = 0;
       } else {
-        // Create a new list to avoid concurrent modification issues
-        _allFeedVideos = [..._allFeedVideos, ...videos];
+        _allFeedVideos = [..._allFeedVideos, ...uniqueVideos];
+        _seenFeedVideoIds.addAll(
+          uniqueVideos
+              .map((video) => video['id'] as String?)
+              .whereType<String>(),
+        );
       }
 
       print(
-        '✓ Fetched ${videos.length} videos, total feed size: ${_allFeedVideos.length}',
+        '✓ Fetched ${videos.length} videos, ${uniqueVideos.length} unique, total feed size: ${_allFeedVideos.length}',
       );
 
-      // Determine if more content available (if we got fewer videos than requested, we're at the end)
-      final hasMoreContent = videos.length >= event.limit;
+      // Stop pagination once the backend returns a short page or no unseen videos.
+      final hasMoreContent =
+          videos.length >= event.limit && uniqueVideos.isNotEmpty;
+      _hasMoreFeedContent = hasMoreContent;
 
       emit(
         FeedLoaded(
@@ -145,9 +178,18 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
       homeFeedService.clearCache();
       _currentOffset = 0;
       _allFeedVideos = [];
+      _seenFeedVideoIds.clear();
+      _hasMoreFeedContent = true;
+      _isPaginationRequestInFlight = false;
 
       // Fetch fresh feed from top
-      add(const FetchFeedEvent(limit: 50, offset: 0, forceRefresh: true));
+      add(
+        const FetchFeedEvent(
+          limit: _homeFeedPageSize,
+          offset: 0,
+          forceRefresh: true,
+        ),
+      );
     } catch (e) {
       print('✗ RefreshFeedEvent Error: $e');
       emit(FeedError(message: 'Failed to refresh feed: $e'));
@@ -166,6 +208,11 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
     );
 
     try {
+      if (!_hasMoreFeedContent) {
+        print('⚠️ No more feed content available, ignoring load more');
+        return;
+      }
+
       if (_isPaginationRequestInFlight) {
         print(
           '⚠️ Pagination request already in flight, ignoring duplicate load more',
@@ -177,7 +224,11 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
 
       // Fetch next batch at current offset
       add(
-        FetchFeedEvent(limit: 50, offset: _currentOffset, forceRefresh: false),
+        FetchFeedEvent(
+          limit: _homeFeedPageSize,
+          offset: _currentOffset,
+          forceRefresh: false,
+        ),
       );
     } catch (e) {
       _isPaginationRequestInFlight = false;
@@ -188,28 +239,6 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
           offset: _currentOffset,
         ),
       );
-    }
-  }
-
-  /// Handle LogoutEvent - clear session and cache
-  Future<void> _onLogout(LogoutEvent event, Emitter<HomeState> emit) async {
-    print('🚪 HomeBloc LogoutEvent triggered');
-
-    try {
-      // Clear local data
-      await preferencesService.clearUserProfile();
-      await preferencesService.clearEngagement();
-      homeFeedService.clearCache();
-
-      // Reset pagination state
-      _currentOffset = 0;
-      _allFeedVideos = [];
-
-      print('✓ Logout complete - caches cleared');
-      emit(HomeInitial());
-    } catch (e) {
-      print('✗ LogoutEvent Error: $e');
-      emit(FeedError(message: 'Failed to logout: $e'));
     }
   }
 }

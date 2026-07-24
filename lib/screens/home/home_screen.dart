@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shimmer/shimmer.dart';
@@ -41,9 +42,12 @@ class _HomeScreenState extends State<HomeScreen> {
   /// Handle scroll events for infinite scroll pagination
   void _onScroll() {
     if (!_scrollController.hasClients) return;
+    if (!_lastHasMoreContent) return;
 
     final maxScroll = _scrollController.position.maxScrollExtent;
     final currentScroll = _scrollController.position.pixels;
+    if (maxScroll <= 0) return;
+
     final triggerDistance = maxScroll - _scrollTriggerDistance;
 
     // Trigger load more when user is 500px from bottom
@@ -60,6 +64,7 @@ class _HomeScreenState extends State<HomeScreen> {
           state is FeedLoaded || state is FeedError || state is NoUserProfile,
     );
 
+    HapticFeedback.mediumImpact();
     homeBloc.add(const RefreshFeedEvent());
     await refreshCompletion;
   }
@@ -135,13 +140,15 @@ class _HomeScreenState extends State<HomeScreen> {
 
           // Error state
           if (state is FeedError) {
-            return _buildErrorState(state.message);
+            return _buildRefreshableBody(
+              child: _buildErrorState(state.message),
+            );
           }
 
           // Loaded state - show feed
           if (state is FeedLoaded) {
             if (state.videos.isEmpty && state.offset == 0) {
-              return _buildEmptyState();
+              return _buildRefreshableBody(child: _buildEmptyState());
             }
 
             return _buildFeedGrid(
@@ -172,6 +179,7 @@ class _HomeScreenState extends State<HomeScreen> {
           GridView.builder(
             controller: _scrollController,
             padding: const EdgeInsets.all(8),
+            physics: const AlwaysScrollableScrollPhysics(),
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: 2,
               crossAxisSpacing: 8,
@@ -199,7 +207,8 @@ class _HomeScreenState extends State<HomeScreen> {
               return VideoFeedCard(
                 videoId: video['id'] ?? '',
                 thumbnailUrl: video['thumbnail_url'] ?? '',
-                username: video['username'] ?? 'Unknown',
+                title: video['title'] as String?,
+                username: video['username'] ?? '',
                 sportId: video['sport_id'] as String?,
                 viewCount: (video['view_count'] as num?)?.toInt() ?? 0,
                 rating: (video['average_rating'] as num?)?.toDouble() ?? 0.0,
@@ -247,6 +256,23 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Widget _buildRefreshableBody({required Widget child}) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return RefreshIndicator(
+          onRefresh: _onRefresh,
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: constraints.maxHeight),
+              child: child,
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   /// Build error state UI
   Widget _buildErrorState(String message) {
     return Center(
@@ -273,6 +299,7 @@ class _HomeScreenState extends State<HomeScreen> {
             icon: const Icon(Icons.refresh),
             label: const Text('Retry'),
             onPressed: () {
+              HapticFeedback.mediumImpact();
               context.read<HomeBloc>().add(const RefreshFeedEvent());
             },
           ),
@@ -301,6 +328,7 @@ class _HomeScreenState extends State<HomeScreen> {
             icon: const Icon(Icons.explore),
             label: const Text('Explore'),
             onPressed: () {
+              HapticFeedback.mediumImpact();
               // TODO: Navigate to explore/discovery screen
               context.go('/explore');
             },

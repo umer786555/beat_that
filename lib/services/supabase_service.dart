@@ -1,16 +1,28 @@
 import 'dart:io';
 import 'package:beat_that/service_locator.dart';
 import 'package:beat_that/models/user_personal_profile.dart';
+import 'package:beat_that/models/user_profile_summary.dart';
 import 'package:beat_that/models/sport_subcategory.dart';
 import 'package:beat_that/models/video_thumbnail_model.dart';
 import 'package:beat_that/services/dio_upload_service.dart';
 import 'package:beat_that/services/preferences_service.dart';
+import 'package:flutter_image_compress/flutter_image_compress.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 import 'package:mime/mime.dart';
 import 'package:path/path.dart' as p;
+import 'package:video_compress/video_compress.dart';
 
 class SupabaseService {
+  static const String _debugMediaPrefix = '[DEBUG_MEDIA]';
+  static const int _profileImageMaxDimension = 1080;
+  static const int _profileImageQuality = 78;
+  static const int _thumbnailMaxDimension = 720;
+  static const int _thumbnailQuality = 68;
+  static const VideoQuality _videoCompressionQuality =
+      VideoQuality.MediumQuality;
+
   /// Get the Supabase client instance
   /// This accesses the globally initialized Supabase instance
   /// Supabase.initialize() must be called in main.dart before using
@@ -65,6 +77,9 @@ class SupabaseService {
     required File thumbnailFile,
     required String title,
     String? description,
+    String? sportId,
+    int? subcategoryId,
+    String? subcategoryName,
     Function(int, int)? onVideoProgress,
   }) async {
     final userId = getCurrentUserId();
@@ -84,12 +99,18 @@ class SupabaseService {
     String? uploadedVideoPath;
     String? uploadedThumbnailPath;
     String? createdVideoId;
+    File? compressedVideoFile;
+    File? compressedThumbnailFile;
 
     try {
       // ==================== STEP 1: Upload Video ====================
       print('Step 1: Uploading video file...');
+      compressedVideoFile = await _compressVideoForUpload(
+        videoFile,
+        quality: _videoCompressionQuality,
+      );
       final videoUploadData = await _uploadVideoFile(
-        file: videoFile,
+        file: compressedVideoFile,
         userId: userId,
         fileId: fileId,
         stepNumber: 1,
@@ -100,8 +121,17 @@ class SupabaseService {
 
       // ==================== STEP 2: Upload Thumbnail ====================
       print('Step 2: Uploading thumbnail file...');
+      compressedThumbnailFile = await _compressImageForUpload(
+        thumbnailFile,
+        fileNamePrefix: 'upload_thumbnail',
+        maxDimension: _thumbnailMaxDimension,
+        quality: _thumbnailQuality,
+      );
+      print(
+        '$_debugMediaPrefix Uploading thumbnail file to Supabase: ${compressedThumbnailFile.path} (${_formatBytes(await compressedThumbnailFile.length())})',
+      );
       final thumbnailUploadData = await _uploadThumbnailFile(
-        file: thumbnailFile,
+        file: compressedThumbnailFile,
         userId: userId,
         fileId: fileId,
         stepNumber: 2,
@@ -119,6 +149,9 @@ class SupabaseService {
         'description': description ?? '',
         'video_url': videoPath, // Store path, not URL
         'thumbnail_url': thumbnailPath, // Store path, not URL
+        'sport_id': sportId,
+        'subcategory_id': subcategoryId,
+        'subcategory_name': subcategoryName,
         'view_count': 0,
         'created_at': DateTime.now().toIso8601String(),
         'data_type': 'user_profile_video',
@@ -204,6 +237,12 @@ class SupabaseService {
         'message': 'Upload failed and rolled back',
         'error': e.toString(),
       };
+    } finally {
+      await _deleteTemporaryCompressedFile(compressedVideoFile, videoFile);
+      await _deleteTemporaryCompressedFile(
+        compressedThumbnailFile,
+        thumbnailFile,
+      );
     }
   }
 
@@ -385,6 +424,142 @@ class SupabaseService {
     }
   }
 
+  /// Delete the current user's video via the `delete-my-video` Edge Function.
+  ///
+  /// This is the client-side caller only. The actual deletion logic lives in
+  /// the Supabase Edge Function and should validate ownership, remove storage
+  /// assets, and delete related database rows server-side.
+  ///
+  /// Parameters:
+  /// - [videoId]: The UUID of the `my_videos` record to delete
+  ///
+  /// Returns:
+  /// - {success: true, status, data} on success
+  /// - {success: false, error, status?} on failure
+  Future<Map<String, dynamic>> deleteMyVideoViaEdgeFunction({
+    required String videoId,
+  }) async {
+    try {
+      print('delete-video request videoId=$videoId');
+
+      final response = await _invokeAuthenticatedEdgeFunction(
+        'delete-video',
+        body: {'id': videoId},
+      );
+
+      print(
+        'delete-video success response (status ${response.status}): ${response.data}',
+      );
+
+      final data = response.data;
+      if (data is Map<String, dynamic> && data['success'] == false) {
+        print(
+          'delete-video returned success=false (status ${response.status}): $data',
+        );
+        return {
+          'success': false,
+          'status': response.status,
+          'data': data,
+          'error':
+              data['error']?.toString() ??
+              data['message']?.toString() ??
+              'Function returned success=false',
+        };
+      }
+
+      return {'success': true, 'status': response.status, 'data': data};
+    } on FunctionException catch (e) {
+      print(
+        'delete-video error response (status ${e.status}, reason: ${e.reasonPhrase}): ${e.details}',
+      );
+      return {
+        'success': false,
+        'status': e.status,
+        'data': e.details,
+        'error': e.details?.toString() ?? e.reasonPhrase ?? 'Function failed',
+      };
+    } catch (e) {
+      print('delete-video unexpected error: $e');
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  /// Delete the current user's account via a Supabase Edge Function.
+  ///
+  /// This is the client-side caller only. The actual deletion logic lives in
+  /// the Supabase Edge Function and should remove user-owned database rows,
+  /// storage assets, and the auth user server-side.
+  ///
+  /// Parameters:
+  /// - [functionName]: Deployed edge function name. Defaults to 'delet-all-data'.
+  ///
+  /// Returns:
+  /// - {success: true, status, data} on success
+  /// - {success: false, error, status?} on failure
+  Future<Map<String, dynamic>> deleteCurrentUserViaEdgeFunction({
+    String functionName = 'delet-all-data',
+  }) async {
+    try {
+      final response = await _invokeAuthenticatedEdgeFunction(
+        functionName,
+        body: <String, dynamic>{},
+      );
+
+      print(
+        '$functionName success response (status ${response.status}): ${response.data}',
+      );
+
+      final data = response.data;
+      if (data is Map<String, dynamic> && data['success'] == false) {
+        print(
+          '$functionName returned success=false (status ${response.status}): $data',
+        );
+        return {
+          'success': false,
+          'status': response.status,
+          'data': data,
+          'error':
+              data['error']?.toString() ??
+              data['message']?.toString() ??
+              'Function returned success=false',
+        };
+      }
+
+      return {'success': true, 'status': response.status, 'data': data};
+    } on FunctionException catch (e) {
+      print(
+        '$functionName error response (status ${e.status}, reason: ${e.reasonPhrase}): ${e.details}',
+      );
+      return {
+        'success': false,
+        'status': e.status,
+        'data': e.details,
+        'error': e.details?.toString() ?? e.reasonPhrase ?? 'Function failed',
+      };
+    } catch (e) {
+      print('$functionName unexpected error: $e');
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  Future<FunctionResponse> _invokeAuthenticatedEdgeFunction(
+    String functionName, {
+    Object? body,
+  }) async {
+    final session = client.auth.currentSession;
+    final user = client.auth.currentUser;
+    if (session == null || user == null) {
+      print('$functionName aborted: user not authenticated');
+      throw Exception('User not authenticated');
+    }
+
+    print(
+      '$functionName auth context: userId=${user.id}, hasAccessToken=${session.accessToken.isNotEmpty}',
+    );
+
+    return client.functions.invoke(functionName, body: body);
+  }
+
   /// Helper method to retry a delete operation up to maxAttempts times
   ///
   /// Parameters:
@@ -535,10 +710,7 @@ class SupabaseService {
           .eq('id', userId)
           .single();
 
-      final profile = UserPersonalProfile(
-        username: data['username'] as String,
-        profileUrl: data['profileUrl'] as String?,
-      );
+      final profile = await _buildUserPersonalProfile(data);
 
       print('✓ User personal profile fetched successfully');
       return profile;
@@ -551,7 +723,9 @@ class SupabaseService {
   /// Fetch a particular user's public profile information.
   ///
   /// Returns null if the profile does not exist or an error occurs.
-  Future<UserPersonalProfile?> fetchUserPersonalProfileById(String userId) async {
+  Future<UserPersonalProfile?> fetchUserPersonalProfileById(
+    String userId,
+  ) async {
     try {
       return await _fetchUserPersonalProfileById(userId);
     } catch (e) {
@@ -560,57 +734,552 @@ class SupabaseService {
     }
   }
 
-  /// Upload user profile image to Supabase storage and update database
+  /// Search public user profiles by username.
   ///
-  /// Validates that the file is a valid image format (JPEG, PNG, or WebP)
-  /// Uploads to the 'profile_images' bucket and updates the user_personal_profiles table
-  /// with the image URL path.
+  /// Performs a case-insensitive search against the username field and returns
+  /// lightweight profile summaries for UI search results.
   ///
-  /// Parameters:
-  /// - [imageFile]: The image file to upload (must be JPEG, PNG, or WebP)
+  /// When [startsWithOnly] is true, only usernames beginning with [query]
+  /// are returned. Otherwise, usernames containing [query] anywhere are
+  /// returned, with prefix matches paginated ahead of looser contains matches.
   ///
-  /// Returns: {success: true, imageUrl, message} on success
-  /// Returns: {success: false, error} on failure
-  Future<Map<String, dynamic>> uploadProfileImage(File imageFile) async {
+  /// Returns:
+  /// - `users`: current page of results
+  /// - `totalCount`: total matches across all pages
+  /// - `hasMore`: whether another page exists
+  /// - `nextOffset`: offset to use for the next page
+  Future<Map<String, dynamic>> searchUsersByUsername(
+    String query, {
+    int limit = 20,
+    int offset = 0,
+    bool startsWithOnly = false,
+    bool excludeCurrentUser = true,
+  }) async {
+    final normalizedQuery = query.trim();
+    final normalizedLimit = limit <= 0 ? 20 : limit;
+    final normalizedOffset = offset < 0 ? 0 : offset;
+
+    if (normalizedQuery.isEmpty) {
+      return {
+        'users': <UserProfileSummary>[],
+        'totalCount': 0,
+        'hasMore': false,
+        'nextOffset': normalizedOffset,
+      };
+    }
+
     try {
-      final userId = getCurrentUserId();
-      if (userId == null) {
-        return {'success': false, 'error': 'User not authenticated'};
+      final currentUserId = excludeCurrentUser ? getCurrentUserId() : null;
+      final prefixPattern = '$normalizedQuery%';
+
+      if (startsWithOnly) {
+        final totalCount = await _countUserSearchMatches(
+          pattern: prefixPattern,
+          currentUserId: currentUserId,
+        );
+
+        if (normalizedOffset >= totalCount) {
+          return {
+            'users': <UserProfileSummary>[],
+            'totalCount': totalCount,
+            'hasMore': false,
+            'nextOffset': normalizedOffset,
+          };
+        }
+
+        final users = await _fetchUserSearchMatches(
+          pattern: prefixPattern,
+          currentUserId: currentUserId,
+          limit: normalizedLimit,
+          offset: normalizedOffset,
+        );
+
+        return {
+          'users': users,
+          'totalCount': totalCount,
+          'hasMore': normalizedOffset + users.length < totalCount,
+          'nextOffset': normalizedOffset + users.length,
+        };
       }
 
-      // Get file extension
-      final extension = _getFileExtension(imageFile.path);
-      final path = '$userId/profile_image.$extension';
-
-      // Upload file to storage
-      await _uploadService.uploadFile(
-        file: imageFile,
-        bucketName: 'profile_images',
-        path: path,
+      final containsPattern = '%$normalizedQuery%';
+      final prefixCount = await _countUserSearchMatches(
+        pattern: prefixPattern,
+        currentUserId: currentUserId,
       );
+      final containsNonPrefixCount = await _countUserSearchMatches(
+        pattern: containsPattern,
+        currentUserId: currentUserId,
+        excludedPattern: prefixPattern,
+      );
+      final totalCount = prefixCount + containsNonPrefixCount;
 
-      // Generate public URL with cache-busting parameter
-      var imageUrl = client.storage.from('profile_images').getPublicUrl(path);
-      final timestamp = DateTime.now().millisecondsSinceEpoch;
-      imageUrl = '$imageUrl?t=$timestamp';
+      if (normalizedOffset >= totalCount) {
+        return {
+          'users': <UserProfileSummary>[],
+          'totalCount': totalCount,
+          'hasMore': false,
+          'nextOffset': normalizedOffset,
+        };
+      }
 
-      // Update user profile with image URL in database
-      await client.from('user_personal_profiles').upsert({
-        'id': userId,
-        'profileUrl': imageUrl,
-        'updated_at': DateTime.now().toIso8601String(),
-      }, onConflict: 'id');
+      final users = <UserProfileSummary>[];
+
+      if (normalizedOffset < prefixCount) {
+        final prefixUsers = await _fetchUserSearchMatches(
+          pattern: prefixPattern,
+          currentUserId: currentUserId,
+          limit: normalizedLimit,
+          offset: normalizedOffset,
+        );
+        users.addAll(prefixUsers);
+
+        final remainingSlots = normalizedLimit - users.length;
+        if (remainingSlots > 0) {
+          final containsUsers = await _fetchUserSearchMatches(
+            pattern: containsPattern,
+            currentUserId: currentUserId,
+            limit: remainingSlots,
+            offset: 0,
+            excludedPattern: prefixPattern,
+          );
+          users.addAll(containsUsers);
+        }
+      } else {
+        final containsOffset = normalizedOffset - prefixCount;
+        final containsUsers = await _fetchUserSearchMatches(
+          pattern: containsPattern,
+          currentUserId: currentUserId,
+          limit: normalizedLimit,
+          offset: containsOffset,
+          excludedPattern: prefixPattern,
+        );
+        users.addAll(containsUsers);
+      }
 
       return {
-        'success': true,
-        'imageUrl': imageUrl,
-        'message': 'Profile image uploaded successfully! 🎉',
+        'users': users,
+        'totalCount': totalCount,
+        'hasMore': normalizedOffset + users.length < totalCount,
+        'nextOffset': normalizedOffset + users.length,
       };
     } catch (e) {
-      print('Error uploading profile image: $e');
-      return {'success': false, 'error': e.toString()};
+      print('Error searching users by username: $e');
+      return {
+        'users': <UserProfileSummary>[],
+        'totalCount': 0,
+        'hasMore': false,
+        'nextOffset': normalizedOffset,
+      };
     }
   }
+
+  Future<int> _countUserSearchMatches({
+    required String pattern,
+    String? currentUserId,
+    String? excludedPattern,
+  }) async {
+    dynamic query = client
+        .from('user_personal_profiles')
+        .count(CountOption.exact)
+        .ilike('username', pattern);
+
+    if (currentUserId != null) {
+      query = query.neq('id', currentUserId);
+    }
+
+    if (excludedPattern != null) {
+      query = query.not('username', 'ilike', excludedPattern);
+    }
+
+    return await query as int;
+  }
+
+  Future<List<UserProfileSummary>> _fetchUserSearchMatches({
+    required String pattern,
+    required int limit,
+    required int offset,
+    String? currentUserId,
+    String? excludedPattern,
+  }) async {
+    dynamic query = client
+        .from('user_personal_profiles')
+        .select('id, username, profileUrl, updated_at')
+        .ilike('username', pattern);
+
+    if (currentUserId != null) {
+      query = query.neq('id', currentUserId);
+    }
+
+    if (excludedPattern != null) {
+      query = query.not('username', 'ilike', excludedPattern);
+    }
+
+    query = query.order('username').range(offset, offset + limit - 1);
+
+    final response = await query;
+
+    return Future.wait(
+      (response as List<dynamic>).whereType<Map<String, dynamic>>().map(
+        _buildUserProfileSummary,
+      ),
+    );
+  }
+
+  /// Search public videos by title.
+  ///
+  /// Titles are stored initially in `my_videos` during upload, then copied into
+  /// `sport_videos` when a user links a video into a public category. Search is
+  /// performed against `sport_videos` so results match the public discovery/feed
+  /// surfaces users can actually browse.
+  ///
+  /// Matching modes:
+  /// - `exactMatch=true`: case-insensitive exact title match only
+  /// - `startsWithOnly=true`: case-insensitive prefix match only
+  /// - default: exact matches first, then prefix matches, then contains matches
+  ///
+  /// Returns:
+  /// - `videos`: current page of results
+  /// - `totalCount`: total matches across all pages
+  /// - `hasMore`: whether another page exists
+  /// - `nextOffset`: offset to use for the next page
+  Future<Map<String, dynamic>> searchVideosByTitle(
+    String query, {
+    int limit = 20,
+    int offset = 0,
+    bool exactMatch = false,
+    bool startsWithOnly = false,
+    String? sportId,
+  }) async {
+    final normalizedQuery = query.trim();
+    final normalizedLimit = limit <= 0 ? 20 : limit;
+    final normalizedOffset = offset < 0 ? 0 : offset;
+    final normalizedSportId = sportId?.trim();
+    final hasSportFilter =
+        normalizedSportId != null && normalizedSportId.isNotEmpty;
+
+    if (normalizedQuery.isEmpty && !hasSportFilter) {
+      return {
+        'videos': <Map<String, dynamic>>[],
+        'totalCount': 0,
+        'hasMore': false,
+        'nextOffset': normalizedOffset,
+      };
+    }
+
+    try {
+      if (normalizedQuery.isEmpty) {
+        final totalCount = await _countVideoTitleSearchMatches(
+          sportId: normalizedSportId,
+        );
+
+        if (normalizedOffset >= totalCount) {
+          return {
+            'videos': <Map<String, dynamic>>[],
+            'totalCount': totalCount,
+            'hasMore': false,
+            'nextOffset': normalizedOffset,
+          };
+        }
+
+        final videos = await _fetchVideoTitleSearchMatches(
+          limit: normalizedLimit,
+          offset: normalizedOffset,
+          sportId: normalizedSportId,
+          sortByTitle: false,
+        );
+
+        return {
+          'videos': videos,
+          'totalCount': totalCount,
+          'hasMore': normalizedOffset + videos.length < totalCount,
+          'nextOffset': normalizedOffset + videos.length,
+        };
+      }
+
+      if (exactMatch) {
+        final totalCount = await _countVideoTitleSearchMatches(
+          ilikePattern: normalizedQuery,
+          sportId: normalizedSportId,
+        );
+
+        if (normalizedOffset >= totalCount) {
+          return {
+            'videos': <Map<String, dynamic>>[],
+            'totalCount': totalCount,
+            'hasMore': false,
+            'nextOffset': normalizedOffset,
+          };
+        }
+
+        final videos = await _fetchVideoTitleSearchMatches(
+          ilikePattern: normalizedQuery,
+          limit: normalizedLimit,
+          offset: normalizedOffset,
+          sportId: normalizedSportId,
+        );
+
+        return {
+          'videos': videos,
+          'totalCount': totalCount,
+          'hasMore': normalizedOffset + videos.length < totalCount,
+          'nextOffset': normalizedOffset + videos.length,
+        };
+      }
+
+      final prefixPattern = '$normalizedQuery%';
+
+      if (startsWithOnly) {
+        final totalCount = await _countVideoTitleSearchMatches(
+          ilikePattern: prefixPattern,
+          sportId: normalizedSportId,
+        );
+
+        if (normalizedOffset >= totalCount) {
+          return {
+            'videos': <Map<String, dynamic>>[],
+            'totalCount': totalCount,
+            'hasMore': false,
+            'nextOffset': normalizedOffset,
+          };
+        }
+
+        final videos = await _fetchVideoTitleSearchMatches(
+          ilikePattern: prefixPattern,
+          limit: normalizedLimit,
+          offset: normalizedOffset,
+          sportId: normalizedSportId,
+        );
+
+        return {
+          'videos': videos,
+          'totalCount': totalCount,
+          'hasMore': normalizedOffset + videos.length < totalCount,
+          'nextOffset': normalizedOffset + videos.length,
+        };
+      }
+
+      final containsPattern = '%$normalizedQuery%';
+      final exactCount = await _countVideoTitleSearchMatches(
+        ilikePattern: normalizedQuery,
+        sportId: normalizedSportId,
+      );
+      final prefixCount = await _countVideoTitleSearchMatches(
+        ilikePattern: prefixPattern,
+        excludedPattern: normalizedQuery,
+        sportId: normalizedSportId,
+      );
+      final containsCount = await _countVideoTitleSearchMatches(
+        ilikePattern: containsPattern,
+        excludedPattern: prefixPattern,
+        sportId: normalizedSportId,
+      );
+      final totalCount = exactCount + prefixCount + containsCount;
+
+      if (normalizedOffset >= totalCount) {
+        return {
+          'videos': <Map<String, dynamic>>[],
+          'totalCount': totalCount,
+          'hasMore': false,
+          'nextOffset': normalizedOffset,
+        };
+      }
+
+      final videos = <Map<String, dynamic>>[];
+      var remainingSlots = normalizedLimit;
+      var remainingOffset = normalizedOffset;
+
+      if (remainingSlots > 0 && remainingOffset < exactCount) {
+        final exactVideos = await _fetchVideoTitleSearchMatches(
+          ilikePattern: normalizedQuery,
+          limit: remainingSlots,
+          offset: remainingOffset,
+          sportId: normalizedSportId,
+        );
+        videos.addAll(exactVideos);
+        remainingSlots -= exactVideos.length;
+        remainingOffset = 0;
+      } else {
+        remainingOffset = remainingOffset > exactCount
+            ? remainingOffset - exactCount
+            : 0;
+      }
+
+      if (remainingSlots > 0 && remainingOffset < prefixCount) {
+        final prefixVideos = await _fetchVideoTitleSearchMatches(
+          ilikePattern: prefixPattern,
+          limit: remainingSlots,
+          offset: remainingOffset,
+          excludedPattern: normalizedQuery,
+          sportId: normalizedSportId,
+        );
+        videos.addAll(prefixVideos);
+        remainingSlots -= prefixVideos.length;
+        remainingOffset = 0;
+      } else if (remainingSlots > 0) {
+        remainingOffset = remainingOffset > prefixCount
+            ? remainingOffset - prefixCount
+            : 0;
+      }
+
+      if (remainingSlots > 0) {
+        final containsVideos = await _fetchVideoTitleSearchMatches(
+          ilikePattern: containsPattern,
+          limit: remainingSlots,
+          offset: remainingOffset,
+          excludedPattern: prefixPattern,
+          sportId: normalizedSportId,
+        );
+        videos.addAll(containsVideos);
+      }
+
+      return {
+        'videos': videos,
+        'totalCount': totalCount,
+        'hasMore': normalizedOffset + videos.length < totalCount,
+        'nextOffset': normalizedOffset + videos.length,
+      };
+    } catch (e) {
+      print('Error searching videos by title: $e');
+      return {
+        'videos': <Map<String, dynamic>>[],
+        'totalCount': 0,
+        'hasMore': false,
+        'nextOffset': normalizedOffset,
+      };
+    }
+  }
+
+  Future<int> _countVideoTitleSearchMatches({
+    String? ilikePattern,
+    String? excludedPattern,
+    String? sportId,
+  }) async {
+    dynamic query = client.from('sport_videos').count(CountOption.exact);
+
+    if (ilikePattern != null && ilikePattern.isNotEmpty) {
+      query = query.ilike('title', ilikePattern);
+    }
+
+    if (sportId != null && sportId.isNotEmpty) {
+      query = query.eq('sport_id', sportId);
+    }
+
+    if (excludedPattern != null) {
+      query = query.not('title', 'ilike', excludedPattern);
+    }
+
+    return await query as int;
+  }
+
+  Future<List<Map<String, dynamic>>> _fetchVideoTitleSearchMatches({
+    required int limit,
+    required int offset,
+    String? ilikePattern,
+    String? excludedPattern,
+    String? sportId,
+    bool sortByTitle = true,
+  }) async {
+    dynamic query = client
+        .from('sport_videos')
+        .select(
+          'id, user_video_id, title, description, video_url, thumbnail_url, view_count, user_id, created_at, bayesian_score, total_ratings, average_rating',
+        );
+
+    if (ilikePattern != null && ilikePattern.isNotEmpty) {
+      query = query.ilike('title', ilikePattern);
+    }
+
+    if (sportId != null && sportId.isNotEmpty) {
+      query = query.eq('sport_id', sportId);
+    }
+
+    if (excludedPattern != null) {
+      query = query.not('title', 'ilike', excludedPattern);
+    }
+
+    query = sortByTitle
+        ? query.order('title').order('created_at', ascending: false)
+        : query
+              .order('bayesian_score', ascending: false)
+              .order('total_ratings', ascending: false)
+              .order('created_at', ascending: false);
+
+    query = query.range(offset, offset + limit - 1);
+
+    final response = await query;
+    final videos = List<Map<String, dynamic>>.from(response as List<dynamic>);
+    final videosWithUrls = await Future.wait(
+      videos.map(_convertVideoPathsToUrls),
+    );
+    return _addUsernamesToVideos(videosWithUrls);
+  }
+
+  // /// Upload user profile image to Supabase storage and update database
+  // ///
+  // /// Validates that the file is a valid image format (JPEG, PNG, or WebP)
+  // /// Uploads to the 'profile_images' bucket and updates the user_personal_profiles table
+  // /// with the image URL path.
+  // ///
+  // /// Parameters:
+  // /// - [imageFile]: The image file to upload (must be JPEG, PNG, or WebP)
+  // ///
+  // /// Returns: {success: true, imageUrl, message} on success
+  // /// Returns: {success: false, error} on failure
+  // Future<Map<String, dynamic>> uploadProfileImage(File imageFile) async {
+  //   File? compressedImageFile;
+
+  //   try {
+  //     final userId = getCurrentUserId();
+  //     if (userId == null) {
+  //       return {'success': false, 'error': 'User not authenticated'};
+  //     }
+
+  //     compressedImageFile = await _compressImageForUpload(
+  //       imageFile,
+  //       fileNamePrefix: 'profile_image',
+  //       maxDimension: _profileImageMaxDimension,
+  //       quality: _profileImageQuality,
+  //     );
+  //     print(
+  //       '$_debugMediaPrefix Uploading profile image to Supabase: ${compressedImageFile.path} (${_formatBytes(await compressedImageFile.length())})',
+  //     );
+
+  //     // Get file extension
+  //     final extension = _getFileExtension(compressedImageFile.path);
+  //     final path = '$userId/profile_image.$extension';
+
+  //     // Upload file to storage
+  //     await _uploadService.uploadFile(
+  //       file: compressedImageFile,
+  //       bucketName: 'profile_images',
+  //       path: path,
+  //     );
+
+  //     // Generate public URL with cache-busting parameter
+  //     var imageUrl = client.storage.from('profile_images').getPublicUrl(path);
+  //     final timestamp = DateTime.now().millisecondsSinceEpoch;
+  //     imageUrl = '$imageUrl?t=$timestamp';
+
+  //     // Update user profile with image URL in database
+  //     await client.from('user_personal_profiles').upsert({
+  //       'id': userId,
+  //       'profileUrl': imageUrl,
+  //       'updated_at': DateTime.now().toIso8601String(),
+  //     }, onConflict: 'id');
+
+  //     return {
+  //       'success': true,
+  //       'imageUrl': imageUrl,
+  //       'message': 'Profile image uploaded successfully! 🎉',
+  //     };
+  //   } catch (e) {
+  //     print('Error uploading profile image: $e');
+  //     return {'success': false, 'error': e.toString()};
+  //   } finally {
+  //     await _deleteTemporaryCompressedFile(compressedImageFile, imageFile);
+  //   }
+  // }
 
   /// Upload profile image and save URL to database (with automatic rollback on failure)
   ///
@@ -638,37 +1307,48 @@ class SupabaseService {
 
     // Track which resources were successfully created for cleanup
     String? uploadedImagePath;
+    File? compressedImageFile;
 
     try {
       // ==================== STEP 1: Upload Image to Storage ====================
-      final extension = _getFileExtension(imageFile.path);
-      final path = '$userId/profile_image.$extension';
-      final mimeType = lookupMimeType(imageFile.path) ?? 'image/jpeg';
+      compressedImageFile = await _compressImageForUpload(
+        imageFile,
+        fileNamePrefix: 'profile_image',
+        maxDimension: _profileImageMaxDimension,
+        quality: _profileImageQuality,
+      );
+      print(
+        '$_debugMediaPrefix Uploading profile image to Supabase: ${compressedImageFile.path} (${_formatBytes(await compressedImageFile.length())})',
+      );
 
+      final extension = _getFileExtension(compressedImageFile.path);
+      final path = '$userId/profile_image.$extension';
       // Upload file to storage
       await _uploadService.uploadFile(
-        file: imageFile,
+        file: compressedImageFile,
         bucketName: 'profile_images',
         path: path,
       );
 
       uploadedImagePath = path;
 
-      // ==================== STEP 2: Generate Public URL ====================
-      var imageUrl = client.storage.from('profile_images').getPublicUrl(path);
+      final updatedAt = DateTime.now().toIso8601String();
 
-      // Add cache-busting query parameter (timestamp)
-      // Since we overwrite the same file, this forces CDN and Image.network to fetch fresh
-      final timestamp = DateTime.now().millisecondsSinceEpoch;
-      imageUrl = '$imageUrl?t=$timestamp';
+      // ==================== STEP 2: Generate Public URL ====================
+      final imageUrl = await _resolveProfileImageUrl(
+        path,
+        updatedAt: updatedAt,
+      );
 
       // ==================== STEP 3: Save URL to Database ====================
-      // Prepare update data with username
+      // Persist the storage path only, not the generated URL.
+      // This keeps the database stable if the public URL format, bucket access
+      // strategy, or cache-busting approach changes later.
       final updateData = {
         'id': userId,
         'username': username,
-        'profileUrl': imageUrl,
-        'updated_at': DateTime.now().toIso8601String(),
+        'profileUrl': path,
+        'updated_at': updatedAt,
       };
 
       await client
@@ -694,11 +1374,12 @@ class SupabaseService {
 
       // FAILURE
       return {'success': false, 'error': e.toString()};
+    } finally {
+      await _deleteTemporaryCompressedFile(compressedImageFile, imageFile);
     }
   }
 
   // ==================== UTILITY OPERATIONS ====================
-
   /// Fetch all thumbnail URLs for the current user's videos
   ///
   /// Retrieves all video records from the database and generates signed URLs
@@ -710,7 +1391,7 @@ class SupabaseService {
   /// Returns a list of VideoThumbnail models containing:
   /// - id: Unique video identifier (UUID)
   /// - thumbnailUrl: Signed URL for the thumbnail image (7 days expiry)
-  /// - videoUrl: Signed URL for the video file (7 days expiry)
+  /// - videoUrl: Storage path for the video file (resolved lazily on playback)
   /// - title: Video title (String)
   /// - description: Video description (String)
   /// - viewCount: Number of views (int)
@@ -731,14 +1412,14 @@ class SupabaseService {
       final videos = await client
           .from('my_videos')
           .select(
-            'id, thumbnail_url, video_url, title, description, view_count, average_rating, created_at',
+            'id, thumbnail_url, video_url, title, sport_id, subcategory_id, subcategory_name, description, view_count, average_rating, created_at',
           )
           .eq('user_id', userId)
           .order('created_at', ascending: false);
 
       final thumbnailData = <VideoThumbnailModel>[];
       for (final video in videos) {
-        final videoData = await _buildVideoUrlData(video);
+        final videoData = await _buildProfileThumbnailData(video);
         thumbnailData.add(VideoThumbnailModel.fromJson(videoData));
       }
 
@@ -766,24 +1447,73 @@ class SupabaseService {
 
   /// Fetch a user's public profile info together with all uploaded videos.
   ///
+  /// Visibility rules:
+  /// - When the current user is viewing their own profile, videos come from
+  ///   `my_videos`, which is the owner's personal upload collection.
+  /// - When viewing someone else's profile, videos come from `sport_videos`,
+  ///   which is the public/discovery-facing dataset used by feed surfaces.
+  ///
+  /// This split is intentional. Feed screens navigate to creator profiles from
+  /// public `sport_videos` records, so reading another user's profile from
+  /// `my_videos` can return an empty list even when that user has public videos
+  /// visible elsewhere in the app.
+  ///
+  /// Egress behavior:
+  /// - This method fetches database rows plus thumbnail URLs for grid display.
+  /// - It does not download video bytes up front.
+  /// - Video playback remains lazy and only resolves the storage path into a
+  ///   signed/public URL when the user opens a specific video.
+  ///
+  /// Pagination behavior:
+  /// - Only one page of videos is fetched per call.
+  /// - Use [limit] and [offset] to load profile grids incrementally.
+  /// - `totalVideoCount` reports the creator's full video count from the same
+  ///   backing source used for the current profile view.
+  /// - `hasMoreVideos` is computed from `offset + loadedVideos < totalVideoCount`
+  ///   so the UI can decide whether to request the next page.
+  ///
   /// Returns:
-  /// - {success: true, profile, videos} on success
+  /// - {success: true, profile, videos, totalVideoCount, hasMoreVideos} on success
   /// - {success: false, error} on failure
   Future<Map<String, dynamic>> fetchUserProfileWithUploadedVideos(
-    String userId,
-  ) async {
+    String userId, [
+    int limit = 20,
+    int offset = 0,
+  ]) async {
     try {
       final profile = await _fetchUserPersonalProfileById(userId);
       if (profile == null) {
         return {'success': false, 'error': 'User profile not found'};
       }
 
-      final videos = await _getThumbnailUrlsForUserId(userId);
+      final currentUserId = getCurrentUserId();
+      final isOwnProfile = currentUserId == userId;
+      // Use the owner's private upload collection only for self-profile views.
+      // For other users, load the public linked/discovery videos so creator
+      // profiles match what users can already see in home/discovery feeds.
+      final totalVideoCount = isOwnProfile
+          ? await _getVideoCountForUserId(userId)
+          : await _getPublicVideoCountForUserId(userId);
+      if (totalVideoCount == 0 || offset >= totalVideoCount) {
+        return {
+          'success': true,
+          'profile': profile,
+          'videos': const <VideoThumbnailModel>[],
+          'totalVideoCount': totalVideoCount,
+          'hasMoreVideos': false,
+        };
+      }
+
+      final videos = isOwnProfile
+          ? await _getThumbnailUrlsForUserId(userId, limit, offset)
+          : await _getPublicThumbnailUrlsForUserId(userId, limit, offset);
 
       return {
         'success': true,
         'profile': profile,
         'videos': videos,
+        'totalVideoCount': totalVideoCount,
+        'hasMoreVideos': offset + videos.length < totalVideoCount,
       };
     } catch (e) {
       print('Error fetching profile with videos for userId=$userId: $e');
@@ -796,7 +1526,7 @@ class SupabaseService {
   ) async {
     final data = await client
         .from('user_personal_profiles')
-        .select('username, profileUrl')
+        .select('username, profileUrl, updated_at')
         .eq('id', userId)
         .maybeSingle();
 
@@ -804,30 +1534,131 @@ class SupabaseService {
       return null;
     }
 
-    return UserPersonalProfile(
-      username: data['username'] as String,
-      profileUrl: data['profileUrl'] as String?,
-    );
+    return _buildUserPersonalProfile(data);
   }
 
   Future<List<VideoThumbnailModel>> _getThumbnailUrlsForUserId(
-    String userId,
-  ) async {
-    final videos = await client
-        .from('my_videos')
-        .select(
-          'id, thumbnail_url, video_url, title, description, view_count, average_rating, created_at',
-        )
-        .eq('user_id', userId)
-        .order('created_at', ascending: false);
+    String userId, [
+    int? limit,
+    int offset = 0,
+  ]) async {
+    // Private/self profile source: query the owner's personal upload table.
+    final videos = limit == null
+        ? await client
+              .from('my_videos')
+              .select(
+                'id, thumbnail_url, video_url, title, sport_id, subcategory_id, subcategory_name, description, view_count, average_rating, created_at',
+              )
+              .eq('user_id', userId)
+              .order('created_at', ascending: false)
+        : await client
+              .from('my_videos')
+              .select(
+                'id, thumbnail_url, video_url, title, sport_id, subcategory_id, subcategory_name, description, view_count, average_rating, created_at',
+              )
+              .eq('user_id', userId)
+              .order('created_at', ascending: false)
+              .range(offset, offset + limit - 1);
 
     final thumbnailData = <VideoThumbnailModel>[];
     for (final video in videos) {
-      final videoData = await _buildVideoUrlData(video);
+      final videoData = await _buildProfileThumbnailData(video);
       thumbnailData.add(VideoThumbnailModel.fromJson(videoData));
     }
 
     return thumbnailData;
+  }
+
+  Future<List<VideoThumbnailModel>> _getPublicThumbnailUrlsForUserId(
+    String userId, [
+    int? limit,
+    int offset = 0,
+  ]) async {
+    // Public/other profile source: query the discovery table that powers feeds.
+    // These rows represent videos the user has linked publicly to a sport or
+    // category, so they are safe to show on another user's creator profile.
+    final videos = limit == null
+        ? await client
+              .from('sport_videos')
+              .select(
+                'id, thumbnail_url, video_url, title, sport_id, subcategory_id, description, view_count, average_rating, created_at',
+              )
+              .eq('user_id', userId)
+              .order('created_at', ascending: false)
+        : await client
+              .from('sport_videos')
+              .select(
+                'id, thumbnail_url, video_url, title, sport_id, subcategory_id, description, view_count, average_rating, created_at',
+              )
+              .eq('user_id', userId)
+              .order('created_at', ascending: false)
+              .range(offset, offset + limit - 1);
+
+    final thumbnailData = <VideoThumbnailModel>[];
+    for (final video in videos) {
+      final videoData = await _buildProfileThumbnailData(video);
+      thumbnailData.add(VideoThumbnailModel.fromJson(videoData));
+    }
+
+    return thumbnailData;
+  }
+
+  Future<int> _getVideoCountForUserId(String userId) async {
+    return client
+        .from('my_videos')
+        .count(CountOption.exact)
+        .eq('user_id', userId);
+  }
+
+  Future<int> _getPublicVideoCountForUserId(String userId) async {
+    return client
+        .from('sport_videos')
+        .count(CountOption.exact)
+        .eq('user_id', userId);
+  }
+
+  Future<UserPersonalProfile> _buildUserPersonalProfile(
+    Map<String, dynamic> data,
+  ) async {
+    // Profile rows store only the storage path. Resolve it here so the rest of
+    // the app can continue treating profileUrl as a display-ready network URL.
+    return UserPersonalProfile(
+      username: data['username'] as String,
+      profileUrl: await _resolveProfileImageUrl(
+        data['profileUrl'] as String?,
+        updatedAt: data['updated_at'] as String?,
+      ),
+    );
+  }
+
+  Future<UserProfileSummary> _buildUserProfileSummary(
+    Map<String, dynamic> data,
+  ) async {
+    return UserProfileSummary(
+      id: data['id'] as String,
+      username: data['username'] as String? ?? 'Unknown User',
+      profileUrl: await _resolveProfileImageUrl(
+        data['profileUrl'] as String?,
+        updatedAt: data['updated_at'] as String?,
+      ),
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> _normalizeUserProfileMaps(
+    List<Map<String, dynamic>> profiles,
+  ) {
+    // Follower/following queries return raw maps instead of model objects, so
+    // normalize profile image paths into network URLs before the UI consumes them.
+    return Future.wait(
+      profiles.map((profile) async {
+        final normalizedProfile = Map<String, dynamic>.from(profile);
+        normalizedProfile['profileUrl'] = await _resolveProfileImageUrl(
+          normalizedProfile['profileUrl'] as String?,
+          updatedAt: normalizedProfile['updated_at'] as String?,
+        );
+        return normalizedProfile;
+      }),
+    );
   }
 
   /// Helper method to convert a storage path to a URL
@@ -845,24 +1676,191 @@ class SupabaseService {
     }
   }
 
-  /// Helper method to build video data with URLs
-  /// Converts storage paths to accessible signed URLs for display
-  Future<Map<String, dynamic>> _buildVideoUrlData(
+  /// Convert a stored profile image path into a UI-ready URL.
+  ///
+  /// The database stores only the storage key. The UI still needs a concrete
+  /// URL, so this method resolves the path on read and appends a cache-busting
+  /// token derived from updated_at because profile images overwrite a stable key.
+  Future<String?> _resolveProfileImageUrl(
+    String? storedValue, {
+    String? updatedAt,
+  }) async {
+    if (storedValue == null || storedValue.isEmpty) {
+      return storedValue;
+    }
+
+    final imageUrl = await _pathToUrl('profile_images', storedValue);
+    final cacheBustingValue = _profileImageCacheBustingValue(updatedAt);
+    if (cacheBustingValue == null || cacheBustingValue.isEmpty) {
+      return imageUrl;
+    }
+
+    final separator = imageUrl.contains('?') ? '&' : '?';
+    return '$imageUrl${separator}t=$cacheBustingValue';
+  }
+
+  // Reuse updated_at as a deterministic cache-busting token so clients fetch
+  // the new bytes after a profile image overwrite without storing URLs in the DB.
+  String? _profileImageCacheBustingValue(String? updatedAt) {
+    if (updatedAt == null || updatedAt.isEmpty) {
+      return null;
+    }
+
+    try {
+      return DateTime.parse(updatedAt).millisecondsSinceEpoch.toString();
+    } catch (_) {
+      return Uri.encodeQueryComponent(updatedAt);
+    }
+  }
+
+  /// Helper method to build profile/grid thumbnail data.
+  ///
+  /// Profile-style grids only need the thumbnail URL up front. The video path is
+  /// preserved and resolved into a playback URL only when the user opens a video.
+  Future<Map<String, dynamic>> _buildProfileThumbnailData(
     Map<String, dynamic> video,
   ) async {
     final thumbnailPath = video['thumbnail_url'] as String;
     final videoPath = video['video_url'] as String;
 
     final thumbnailUrl = await _pathToUrl('my-thumbnails', thumbnailPath);
-    final videoUrl = await _pathToUrl('my_videos', videoPath);
 
     return _createVideoDataMap(
       video,
       thumbnailUrl,
-      videoUrl,
+      videoPath,
       thumbnailPath,
       videoPath,
     );
+  }
+
+  /// Resolve a stored video path into a playable URL when needed.
+  Future<String> resolveVideoPlaybackUrl(String videoPathOrUrl) async {
+    final isNetworkUrl =
+        videoPathOrUrl.startsWith('http://') ||
+        videoPathOrUrl.startsWith('https://');
+
+    if (isNetworkUrl) {
+      return videoPathOrUrl;
+    }
+
+    return _pathToUrl('my_videos', videoPathOrUrl);
+  }
+
+  Future<File> _compressImageForUpload(
+    File sourceFile, {
+    required String fileNamePrefix,
+    required int maxDimension,
+    required int quality,
+  }) async {
+    final mimeType = lookupMimeType(sourceFile.path) ?? '';
+    if (!mimeType.startsWith('image/')) {
+      return sourceFile;
+    }
+
+    final originalBytes = await sourceFile.length();
+    print(
+      '$_debugMediaPrefix Compressing image "$fileNamePrefix": original size ${_formatBytes(originalBytes)}, maxDimension=$maxDimension, quality=$quality',
+    );
+
+    final tempDir = await getTemporaryDirectory();
+    final compressedPath = p.join(
+      tempDir.path,
+      '${fileNamePrefix}_${const Uuid().v4()}.jpg',
+    );
+
+    final compressedFile = await FlutterImageCompress.compressAndGetFile(
+      sourceFile.absolute.path,
+      compressedPath,
+      minWidth: maxDimension,
+      minHeight: maxDimension,
+      quality: quality,
+      format: CompressFormat.jpeg,
+    );
+
+    if (compressedFile == null) {
+      print(
+        '$_debugMediaPrefix Image compression returned null, using original file instead.',
+      );
+      return sourceFile;
+    }
+
+    final compressedFileAsFile = File(compressedFile.path);
+    final compressedBytes = await compressedFileAsFile.length();
+    final savingsPercent = originalBytes == 0
+        ? 0.0
+        : (1 - (compressedBytes / originalBytes)) * 100;
+    print(
+      '$_debugMediaPrefix Compressed image "$fileNamePrefix": ${_formatBytes(originalBytes)} -> ${_formatBytes(compressedBytes)} (${savingsPercent.toStringAsFixed(1)}% smaller)',
+    );
+
+    return compressedFileAsFile;
+  }
+
+  Future<File> _compressVideoForUpload(
+    File sourceFile, {
+    required VideoQuality quality,
+  }) async {
+    final mimeType = lookupMimeType(sourceFile.path) ?? '';
+    if (!mimeType.startsWith('video/')) {
+      return sourceFile;
+    }
+
+    final originalBytes = await sourceFile.length();
+    print(
+      '$_debugMediaPrefix Compressing video: original size ${_formatBytes(originalBytes)}, quality=${quality.name}',
+    );
+
+    final mediaInfo = await VideoCompress.compressVideo(
+      sourceFile.path,
+      quality: quality,
+      deleteOrigin: false,
+      includeAudio: true,
+    );
+
+    final compressedFile = mediaInfo?.file;
+    if (compressedFile == null) {
+      print(
+        '$_debugMediaPrefix Video compression returned null, using original file instead.',
+      );
+      return sourceFile;
+    }
+
+    final compressedBytes = await compressedFile.length();
+    final savingsPercent = originalBytes == 0
+        ? 0.0
+        : (1 - (compressedBytes / originalBytes)) * 100;
+    print(
+      '$_debugMediaPrefix Compressed video: ${_formatBytes(originalBytes)} -> ${_formatBytes(compressedBytes)} (${savingsPercent.toStringAsFixed(1)}% smaller)',
+    );
+    print(
+      '$_debugMediaPrefix Uploading video file to Supabase: ${compressedFile.path} (${_formatBytes(compressedBytes)})',
+    );
+
+    return compressedFile;
+  }
+
+  Future<void> _deleteTemporaryCompressedFile(
+    File? candidate,
+    File original,
+  ) async {
+    if (candidate == null || candidate.path == original.path) {
+      return;
+    }
+
+    if (await candidate.exists()) {
+      await candidate.delete();
+    }
+  }
+
+  String _formatBytes(int bytes) {
+    if (bytes >= 1000 * 1000) {
+      return '${(bytes / (1000 * 1000)).toStringAsFixed(2)} MB';
+    }
+    if (bytes >= 1000) {
+      return '${(bytes / 1000).toStringAsFixed(1)} KB';
+    }
+    return '$bytes B';
   }
 
   /// Helper method to create video data map
@@ -873,6 +1871,7 @@ class SupabaseService {
     String thumbnailPath,
     String videoPath,
   ) {
+    final sportId = video['sport_id'] as String?;
     return {
       'id': video['id'] as String,
       'thumbnail_url': thumbnailUrl,
@@ -880,6 +1879,9 @@ class SupabaseService {
       'thumbnail_path': thumbnailPath,
       'video_path': videoPath,
       'title': video['title'] as String? ?? 'Untitled',
+      'sport_id': sportId,
+      'subcategory_id': video['subcategory_id'],
+      'subcategory_name': video['subcategory_name'] as String?,
       'description': video['description'] as String? ?? '',
       'view_count': video['view_count'] as int? ?? 0,
       'average_rating': video['average_rating'] as num? ?? 0.0,
@@ -1160,7 +2162,6 @@ class SupabaseService {
   ///
   /// Parameters:
   /// - [linkedVideoId]: The ID from sport_videos table (not my_videos)
-  /// - [increment]: Amount to increment (default: 1)
   ///
   /// Returns: {success: true} or {success: false, error}
   ///
@@ -1168,13 +2169,15 @@ class SupabaseService {
   /// Safe for concurrent views - no race conditions, no lost counts.
   Future<Map<String, dynamic>> updateCategoryVideoViewCount({
     required String linkedVideoId,
-    int increment = 1,
   }) async {
     try {
       // Call single atomic RPC function that updates both tables
+      print(
+        '🎯 updateCategoryVideoViewCount: calling increment_both_view_counts with linked_video_id=$linkedVideoId',
+      );
       await client.rpc(
         'increment_both_view_counts',
-        params: {'linked_video_id': linkedVideoId, 'increment_by': increment},
+        params: {'linked_video_id': linkedVideoId},
       );
 
       print(
@@ -1256,11 +2259,11 @@ class SupabaseService {
   /// - Recalculates Bayesian score for ranking
   ///
   /// Parameters:
-  /// - [videoId]: UUID of the sport_videos table record
+  /// - [videoId]: UUID of the my_videos table record
   /// - [rating]: Rating value (must be 1-10 inclusive)
   ///
   /// Returns:
-  /// - {success: true, ratingId} - Rating submitted/updated successfully
+  /// - {success: true} - Rating submitted/updated successfully
   /// - {success: false, error} - Error message if validation fails
   Future<Map<String, dynamic>> rateVideo({
     required String videoId,
@@ -1277,16 +2280,20 @@ class SupabaseService {
         return {'success': false, 'error': 'Rating must be between 1 and 10'};
       }
 
-      // Upsert: inserts new rating if user hasn't rated, updates if they have
-      // UNIQUE constraint on (user_id, sport_video_id) ensures one vote per user per video
-      final result = await client.from('video_ratings').upsert({
+      // Upsert: inserts new rating if user hasn't rated, updates if they have.
+      // The live schema stores ratings against my_videos.id via video_id.
+      await client.from('video_ratings').upsert({
         'user_id': userId,
-        'sport_video_id': videoId,
+        'video_id': videoId,
         'rating': rating,
-      });
+      }, onConflict: 'video_id,user_id');
 
       print('✓ User rated video $videoId with rating $rating');
-      return {'success': true, 'ratingId': result[0]['id']};
+      return {'success': true};
+    } on PostgrestException catch (e) {
+      print('Error rating video: $e');
+
+      return {'success': false, 'error': e.message};
     } catch (e) {
       print('Error rating video: $e');
       return {'success': false, 'error': e.toString()};
@@ -1299,7 +2306,7 @@ class SupabaseService {
   /// Used to display which rating button should be highlighted in the UI.
   ///
   /// Parameters:
-  /// - [videoId]: UUID of the sport_videos table record
+  /// - [videoId]: UUID of the my_videos table record
   ///
   /// Returns:
   /// - {success: true, rating: 8} - User's rating (1-10)
@@ -1312,12 +2319,12 @@ class SupabaseService {
         return {'success': false, 'rating': null};
       }
 
-      // Query video_ratings table for this user's vote on this video
+      // Query video_ratings for this user's vote on the original my_videos row.
       // maybeSingle() returns null if no rating exists (graceful, no error)
       final result = await client
           .from('video_ratings')
           .select()
-          .eq('sport_video_id', videoId)
+          .eq('video_id', videoId)
           .eq('user_id', userId)
           .maybeSingle();
 
@@ -1337,10 +2344,11 @@ class SupabaseService {
   /// Delete the current user's rating for a video
   ///
   /// Removes the user's rating from the video_ratings table.
-  /// The PostgreSQL trigger automatically recalculates the video's bayesian_score.
+  /// The PostgreSQL trigger automatically recalculates the linked
+  /// sport_videos row by matching sport_videos.user_video_id to this my_videos id.
   ///
   /// Parameters:
-  /// - [videoId]: UUID of the sport_videos table record
+  /// - [videoId]: UUID of the my_videos table record
   ///
   /// Returns:
   /// - {success: true} - Rating deleted successfully
@@ -1356,7 +2364,7 @@ class SupabaseService {
       await client
           .from('video_ratings')
           .delete()
-          .eq('sport_video_id', videoId)
+          .eq('video_id', videoId)
           .eq('user_id', userId);
 
       print('✓ Deleted rating for video $videoId');
@@ -1500,13 +2508,15 @@ class SupabaseService {
       // Fetch profile data for all followed users
       final profiles = await client
           .from('user_personal_profiles')
-          .select('id, username, profileUrl')
+          .select('id, username, profileUrl, updated_at')
           .inFilter('id', followedUserIds);
 
       print(
         '✓ Fetched ${profiles.length} users that current user is following',
       );
-      return List<Map<String, dynamic>>.from(profiles as List<dynamic>);
+      return _normalizeUserProfileMaps(
+        List<Map<String, dynamic>>.from(profiles as List<dynamic>),
+      );
     } catch (e) {
       print('Error fetching following list: $e');
       return [];
@@ -1556,13 +2566,75 @@ class SupabaseService {
       // Fetch profile data for all followers
       final profiles = await client
           .from('user_personal_profiles')
-          .select('id, username, profileUrl')
+          .select('id, username, profileUrl, updated_at')
           .inFilter('id', followerUserIds);
 
       print('✓ Fetched ${profiles.length} followers for current user');
-      return List<Map<String, dynamic>>.from(profiles as List<dynamic>);
+      return _normalizeUserProfileMaps(
+        List<Map<String, dynamic>>.from(profiles as List<dynamic>),
+      );
     } catch (e) {
       print('Error fetching followers list: $e');
+      return [];
+    }
+  }
+
+  /// Search within the current user's following list by username.
+  Future<List<Map<String, dynamic>>> searchFollowingUsers({
+    required String query,
+    int limit = 20,
+    int offset = 0,
+  }) async {
+    final normalizedQuery = query.trim();
+    if (normalizedQuery.isEmpty) {
+      return getFollowing(limit: limit, offset: offset);
+    }
+
+    try {
+      final response = await client.rpc(
+        'search_my_following',
+        params: {
+          'p_query': normalizedQuery,
+          'p_limit': limit,
+          'p_offset': offset,
+        },
+      );
+
+      return _normalizeUserProfileMaps(
+        List<Map<String, dynamic>>.from(response as List<dynamic>),
+      );
+    } catch (e) {
+      print('Error searching following users: $e');
+      return [];
+    }
+  }
+
+  /// Search within the current user's followers list by username.
+  Future<List<Map<String, dynamic>>> searchFollowersUsers({
+    required String query,
+    int limit = 20,
+    int offset = 0,
+  }) async {
+    final normalizedQuery = query.trim();
+    if (normalizedQuery.isEmpty) {
+      return getFollowers(limit: limit, offset: offset);
+    }
+
+    try {
+      final response = await client.rpc(
+        'search_my_followers',
+        params: {
+          'p_query': normalizedQuery,
+          'p_limit': limit,
+          'p_offset': offset,
+        },
+      );
+
+      return _normalizeUserProfileMaps(
+        List<Map<String, dynamic>>.from(response as List<dynamic>),
+      );
+    } catch (e) {
+      print('Error searching followers users: $e');
       return [];
     }
   }
@@ -1699,15 +2771,16 @@ class SupabaseService {
     return client.storage.from(bucketName).getPublicUrl(path);
   }
 
-  /// Convert video object paths to URLs (for service-layer transformation)
+  /// Convert feed video object paths for list/grid consumption.
   ///
-  /// Takes a video map from the database (with paths) and returns a copy with
-  /// full URLs for consumption by the UI layer.
+  /// Thumbnails are resolved immediately because the UI renders them in grids.
+  /// Video storage paths are preserved and resolved lazily only when playback
+  /// starts.
   ///
   /// Parameters:
   /// - [video]: Video object from database with path fields
   ///
-  /// Returns: Video object with accessible URLs instead of storage paths
+  /// Returns: Video object with thumbnail URL and original video storage path
   Future<Map<String, dynamic>> _convertVideoPathsToUrls(
     Map<String, dynamic> video,
   ) async {
@@ -1721,12 +2794,11 @@ class SupabaseService {
       print('🔄 Convert thumbnail: "$thumbnailPath" → "$thumbnailUrl"');
     }
 
-    // Convert video_url path to an accessible URL for playback
+    // Keep video_url as a storage path and resolve it only when playback starts.
     if (updated['video_url'] != null) {
       final videoPath = updated['video_url'] as String;
-      final videoUrl = await _pathToUrl('my_videos', videoPath);
-      updated['video_url'] = videoUrl;
-      print('🔄 Convert video: "$videoPath" → "$videoUrl"');
+      updated['video_url'] = videoPath;
+      print('🔄 Preserve video path for lazy playback: "$videoPath"');
     }
 
     return updated;

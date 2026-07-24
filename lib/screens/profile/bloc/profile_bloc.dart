@@ -11,12 +11,15 @@ import 'package:beat_that/services/permission_service.dart';
 import 'package:beat_that/services/preferences_service.dart';
 import 'package:beat_that/services/supabase_service.dart';
 import 'package:beat_that/services/video_picker_service.dart';
+import 'package:bloc_presentation/bloc_presentation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:permission_handler/permission_handler.dart';
 part 'profile_event.dart';
+part 'profile_presentation_event.dart';
 part 'profile_state.dart';
 
-class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
+class ProfileBloc extends Bloc<ProfileEvent, ProfileState>
+    with BlocPresentationMixin<ProfileState, ProfilePresentationEvent> {
   final permissionService = locator<PermissionService>();
   final supabaseService = locator<SupabaseService>();
   final authService = locator<AuthService>();
@@ -35,11 +38,10 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
 
   /// Load profile data and fetch thumbnail URLs
   ///
-  /// This event performs four sequential operations:
+  /// This event performs three sequential operations:
   /// 1. Check camera and gallery permssions
   /// 2. Fetch all thumbnail URLs for the current user's videos
   /// 3. Fetch the username from preferences
-  /// 4. Fetch the follower and following counts
   Future<void> _onLoadProfile(
     LoadProfileEvent event,
     Emitter<ProfileState> emit,
@@ -59,14 +61,7 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
       // Step 3: Fetch the username from preferences and cache at block level
       userProfile = await preferencesService.fetchUserProfile();
 
-      // Step 4: Fetch the follower and following counts
-      final followerCountResult = await supabaseService.getFollowerCount();
-      final followingCountResult = await supabaseService.getFollowingCount();
-
-      final followers = followerCountResult['success'] ? followerCountResult['count'] : 786;
-      final following = followingCountResult['success'] ? followingCountResult['count'] : 786;
-
-      // Initialize with permissions, thumbnails, username, and follower/following counts
+      // Initialize with permissions, thumbnails, and cached profile data.
       emit(
         ProfileLoaded(
           cameraPermissionEnabled: cameraPermissionEnabled,
@@ -74,8 +69,6 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
           thumbnails: thumbnails,
           username: userProfile?.username,
           profileUrl: userProfile?.profileUrl,
-          followers: followers,
-          following: following,
         ),
       );
     } catch (e) {
@@ -174,62 +167,44 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
   }
 
   /// Handle deleting a video
-  /// Deletes video file, thumbnail, and database record
+  /// Deletes a video through the Supabase Edge Function.
   Future<void> _onDeleteVideo(
     DeleteVideoEvent event,
     Emitter<ProfileState> emit,
   ) async {
+    print('Attempting to delete video with ID: ${event.videoId}');
+
     try {
       // Save current state before emitting loading
       final previousState = state;
       emit(ProfileLoading());
 
-      // Delete video with thumbnail and database record
-      final deleteResult = await supabaseService.deleteVideo(
+      // Call Supabase service to delete the video
+      final deleteResult = await supabaseService.deleteMyVideoViaEdgeFunction(
         videoId: event.videoId,
-        videoPath: event.videoPath,
-        thumbnailPath: event.thumbnailPath,
       );
 
       if (deleteResult['success']) {
-        // Fetch updated thumbnails list after deletion
+        print('✓ Video deleted successfully!');
+
+        // Fetch updated thumbnails after deletion
         final updatedThumbnails = await supabaseService.getAllThumbnailUrls();
 
         // Emit success with updated thumbnails
         if (previousState is ProfileLoaded) {
           emit(previousState.copyWith(thumbnails: updatedThumbnails));
         } else {
-          // Fallback if state is not ProfileLoaded - reload entire profile
-          final updatedProfile = await supabaseService
-              .fetchUserPersonalProfile();
-          if (updatedProfile != null) {
-            userProfile = updatedProfile;
-            emit(
-              ProfileLoaded(
-                cameraPermissionEnabled: previousState is ProfileLoaded
-                    ? (previousState).cameraPermissionEnabled
-                    : false,
-                galleryPermissionEnabled: previousState is ProfileLoaded
-                    ? (previousState).galleryPermissionEnabled
-                    : false,
-                thumbnails: updatedThumbnails,
-                username: updatedProfile.username,
-                profileUrl: updatedProfile.profileUrl,
-              ),
-            );
-          }
+          // Fallback: just trigger full profile load
+          add(LoadProfileEvent());
         }
       } else {
         emit(
           ProfileError(
-            message:
-                'Failed to delete video: ${deleteResult['error'] ?? 'Unknown error'}',
+            message: 'Failed to delete video: ${deleteResult['error']}',
           ),
         );
       }
-    } catch (e, stackTrace) {
-      print('Error in _onDeleteVideo: $e');
-      print('Stack trace: $stackTrace');
+    } catch (e) {
       emit(ProfileError(message: 'Failed to delete video: $e'));
     }
   }

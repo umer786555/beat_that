@@ -2,7 +2,6 @@ import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as supabase;
 import 'package:mime/mime.dart';
-import 'package:beat_that/constants/supabase_config.dart';
 
 /// DioUploadService handles file uploads to Supabase Storage with progress tracking
 /// 
@@ -29,11 +28,9 @@ class DioUploadService {
   late final Dio _dio;
   late final String _baseUrl;
 
-  /// Initialize DioUploadService with Supabase URL from configuration
+  /// Initialize DioUploadService with the active Supabase project's storage URL
   DioUploadService() {
-    // Get the Supabase base URL from configuration (debug/release specific)
-    final supabaseUrl = SupabaseConfig.getSupabaseUrl();
-    _baseUrl = '$supabaseUrl/storage/v1/object';
+    _baseUrl = '${supabase.Supabase.instance.client.storage.url}/object';
     
     _dio = Dio(_getBaseOptions());
     _addInterceptors();

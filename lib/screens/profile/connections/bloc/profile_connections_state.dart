@@ -16,12 +16,20 @@ final class ProfileConnectionsLoading extends ProfileConnectionsState {
 }
 
 final class ProfileConnectionsLoaded extends ProfileConnectionsState {
-  const ProfileConnectionsLoaded({required this.users});
+  const ProfileConnectionsLoaded({
+    required this.users,
+    this.hasMoreContent = true,
+    this.isLoadingMore = false,
+    this.searchQuery = '',
+  });
 
   final List<UserProfileSummary> users;
+  final bool hasMoreContent;
+  final bool isLoadingMore;
+  final String searchQuery;
 
   @override
-  List<Object> get props => [users];
+  List<Object> get props => [users, hasMoreContent, isLoadingMore, searchQuery];
 }
 
 final class ProfileConnectionsError extends ProfileConnectionsState {

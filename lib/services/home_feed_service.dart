@@ -26,8 +26,8 @@ class HomeFeedService {
   static const double TRENDING_WEIGHT = 0.20;
   static const double DISCOVERY_WEIGHT = 0.10;
 
-  /// Buffer multiplier for deduplication (fetch extra to account for duplicates)
-  static const double DEDUP_BUFFER = 1.15;
+  /// Buffer multiplier for deduplication (fetch a small cushion for overlap)
+  static const double DEDUP_BUFFER = 1.05;
 
   /// Cache of fetched feeds by offset
   final Map<int, List<Map<String, dynamic>>> _feedCache = {};
@@ -87,7 +87,10 @@ class HomeFeedService {
           offset: offset,
         ),
         supabaseService.getTrendingVideos(limit: trendingCount, offset: offset),
-        supabaseService.getRandomDiscoveryVideos(limit: discoveryCount),
+        if (offset == 0)
+          supabaseService.getRandomDiscoveryVideos(limit: discoveryCount)
+        else
+          Future.value(<Map<String, dynamic>>[]),
       ]);
 
       final personalizedVideos = results[0];

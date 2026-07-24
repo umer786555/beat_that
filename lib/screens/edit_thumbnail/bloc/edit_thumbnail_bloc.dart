@@ -26,6 +26,7 @@ class EditThumbnailBloc extends Bloc<EditThumbnailEvent, EditThumbnailState>
   static const int _thumbnailWidth = 512;
   static const int _thumbnailHeight = 512;
   static const int _imageQuality = 100;
+  static const Duration _minimumUploadDuration = Duration(seconds: 10);
 
   final String videoPath;
   final Duration videoDuration;
@@ -164,6 +165,15 @@ class EditThumbnailBloc extends Bloc<EditThumbnailEvent, EditThumbnailState>
     print('Selected subcategory: $selectedSubcategory');
     print('sport: ${sport.displayName} (ID: ${sport.id})');
     try {
+      if (videoDuration < _minimumUploadDuration) {
+        emitPresentation(
+          VideoTooShortEvent(
+            message: 'Video must be at least 10 seconds long.',
+          ),
+        );
+        return;
+      }
+
       if (selectedThumbnail == null) {
         emitPresentation(
           ThumbnailErrorEvent(message: 'No thumbnail selected'),
@@ -194,6 +204,16 @@ class EditThumbnailBloc extends Bloc<EditThumbnailEvent, EditThumbnailState>
         thumbnailFile: thumbnailFile,
         title: event.title,
         description: '', // Optional: add description if available
+        sportId: sport.id,
+        subcategoryId: selectedSubcategory != null && selectedSubcategory!.isNotEmpty
+            ? sport.subcategories
+                .firstWhere(
+                  (sub) => sub.name == selectedSubcategory,
+                  orElse: () => throw Exception('Subcategory not found: $selectedSubcategory'),
+                )
+                .id
+            : null,
+        subcategoryName: selectedSubcategory,
         // Progress callback for video upload
         onVideoProgress: (sent, total) {
           final progressPercent = (sent / total * 100).toStringAsFixed(0);

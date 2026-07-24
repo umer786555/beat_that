@@ -7,6 +7,7 @@ import 'package:beat_that/widgets/shimmer_loading.dart';
 import 'package:beat_that/widgets/video_feed_card.dart';
 import 'package:bloc_test/bloc_test.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
@@ -21,6 +22,7 @@ void main() {
     {
       'id': 'video-1',
       'thumbnail_url': 'https://example.com/thumb1.jpg',
+      'title': 'Top spin rally',
       'username': 'user1',
       'view_count': 100,
       'average_rating': 4.5,
@@ -29,6 +31,7 @@ void main() {
     {
       'id': 'video-2',
       'thumbnail_url': 'https://example.com/thumb2.jpg',
+      'title': 'Winning serve',
       'username': 'user2',
       'view_count': 50,
       'average_rating': 4.0,
@@ -85,6 +88,7 @@ void main() {
     await tester.pump();
 
     expect(find.byType(VideoFeedCard), findsNWidgets(2));
+    expect(find.text('Top spin rally'), findsOneWidget);
     expect(find.text('@user1'), findsOneWidget);
     expect(find.byType(ShimmerLoading), findsNothing);
 
@@ -120,6 +124,17 @@ void main() {
   testWidgets('refresh waits for the next terminal bloc state', (tester) async {
     final controller = StreamController<HomeState>();
     addTearDown(controller.close);
+    final platformCalls = <MethodCall>[];
+
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(SystemChannels.platform, (call) async {
+          platformCalls.add(call);
+          return null;
+        });
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(SystemChannels.platform, null);
+    });
 
     const loadedState = FeedLoaded(
       videos: loadedVideos,
@@ -145,6 +160,14 @@ void main() {
     await tester.pump();
 
     verify(() => homeBloc.add(const RefreshFeedEvent())).called(1);
+    expect(
+      platformCalls.any(
+        (call) =>
+            call.method == 'HapticFeedback.vibrate' &&
+            call.arguments == 'HapticFeedbackType.mediumImpact',
+      ),
+      isTrue,
+    );
     expect(refreshCompleted, isFalse);
 
     controller.add(const FeedLoading(offset: 0, isFirstLoad: true));
@@ -157,5 +180,39 @@ void main() {
 
     await refreshFuture;
     expect(refreshCompleted, isTrue);
+  });
+
+  testWidgets('shows pull-to-refresh on empty feed state', (tester) async {
+    const emptyState = FeedLoaded(videos: [], offset: 0, hasMoreContent: false);
+
+    when(() => homeBloc.state).thenReturn(emptyState);
+    whenListen(
+      homeBloc,
+      Stream<HomeState>.value(emptyState),
+      initialState: emptyState,
+    );
+
+    await tester.pumpWidget(buildTestApp(homeBloc));
+    await tester.pump();
+
+    expect(find.byType(RefreshIndicator), findsOneWidget);
+    expect(find.text('No videos yet'), findsOneWidget);
+  });
+
+  testWidgets('shows pull-to-refresh on error state', (tester) async {
+    const errorState = FeedError(message: 'network failed');
+
+    when(() => homeBloc.state).thenReturn(errorState);
+    whenListen(
+      homeBloc,
+      Stream<HomeState>.value(errorState),
+      initialState: errorState,
+    );
+
+    await tester.pumpWidget(buildTestApp(homeBloc));
+    await tester.pump();
+
+    expect(find.byType(RefreshIndicator), findsOneWidget);
+    expect(find.text('Failed to load videos'), findsOneWidget);
   });
 }

@@ -37,17 +37,11 @@ class AddProfileImageEvent extends ProfileEvent {
 
 class DeleteVideoEvent extends ProfileEvent {
   final String videoId;
-  final String videoPath;
-  final String thumbnailPath;
 
-  const DeleteVideoEvent({
-    required this.videoId,
-    required this.videoPath,
-    required this.thumbnailPath,
-  });
+  const DeleteVideoEvent({required this.videoId});
 
   @override
-  List<Object> get props => [videoId, videoPath, thumbnailPath];
+  List<Object> get props => [videoId];
 }
 
 class RefreshVideosEvent extends ProfileEvent {

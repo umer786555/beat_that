@@ -5,23 +5,27 @@ import 'package:flutter/material.dart';
 class VideoFeedCard extends StatelessWidget {
   final String videoId;
   final String thumbnailUrl;
+  final String? title;
   final String? username;
   final String? sportId;
   final int viewCount;
   final double rating;
   final VoidCallback onTap;
   final VoidCallback? onLongPress;
+  final VoidCallback? onUsernameTap;
 
   const VideoFeedCard({
     super.key,
     required this.videoId,
     required this.thumbnailUrl,
+    this.title,
     this.username,
     this.sportId,
     required this.viewCount,
     required this.rating,
     required this.onTap,
     this.onLongPress,
+    this.onUsernameTap,
   });
 
   /// Format view count as 1.2M, 500K, etc.
@@ -39,6 +43,10 @@ class VideoFeedCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final formattedViews = _formatViewCount(viewCount);
     final theme = Theme.of(context);
+    final trimmedTitle = title?.trim();
+    final hasTitle = trimmedTitle != null && trimmedTitle.isNotEmpty;
+    final trimmedUsername = username?.trim();
+    final hasUsername = trimmedUsername != null && trimmedUsername.isNotEmpty;
     final sportLabel = sportId != null && sportId!.isNotEmpty
         ? getDisplayNameForSport(sportId!)
         : null;
@@ -46,190 +54,153 @@ class VideoFeedCard extends StatelessWidget {
         ? getIconForSport(sportId!)
         : null;
 
-    // Debug: log the thumbnail URL
-    print(
-      '🖼️ VideoFeedCard build - videoId: $videoId, thumbnailUrl: $thumbnailUrl',
-    );
-
     return GestureDetector(
       onTap: onTap,
       onLongPress: onLongPress,
-      child: Column(
-        children: [
-          /// Main video thumbnail container
-          Expanded(
-            child: Container(
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            Image.network(
+              thumbnailUrl,
+              fit: BoxFit.cover,
+              errorBuilder: (context, error, stackTrace) {
+                return Container(
+                  color: const Color(0xFF323846),
+                  child: const Center(
+                    child: Icon(
+                      Icons.video_library_outlined,
+                      color: Colors.white70,
+                      size: 36,
+                    ),
+                  ),
+                );
+              },
+              loadingBuilder: (context, child, loadingProgress) {
+                if (loadingProgress == null) return child;
+                return Container(color: const Color(0xFFCDD3DD));
+              },
+            ),
+            DecoratedBox(
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(18),
-                color: Colors.grey[300],
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.12),
-                    blurRadius: 18,
-                    offset: const Offset(0, 10),
+                border: Border.all(color: Colors.white.withOpacity(0.10)),
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Colors.black.withOpacity(0.02),
+                    Colors.black.withOpacity(0.10),
+                    Colors.black.withOpacity(0.78),
+                  ],
+                  stops: const [0.0, 0.42, 1.0],
+                ),
+              ),
+            ),
+            Positioned(
+              top: 12,
+              left: 12,
+              right: 12,
+              child: Align(
+                alignment: Alignment.topLeft,
+                child: sportLabel != null && sportIcon != null
+                    ? _OverlayChip(
+                        icon: sportIcon,
+                        label: sportLabel,
+                      )
+                    : const SizedBox.shrink(),
+              ),
+            ),
+            Positioned(
+              left: 12,
+              right: 12,
+              bottom: 12,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (hasUsername)
+                    GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: onUsernameTap,
+                      child: Text(
+                        '@$trimmedUsername',
+                        style: theme.textTheme.labelLarge?.copyWith(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  if (hasUsername && hasTitle) const SizedBox(height: 4),
+                  if (hasTitle)
+                    Text(
+                      trimmedTitle,
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                        height: 1.18,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  if (hasTitle || hasUsername) const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      _InlineStat(
+                        icon: Icons.visibility_outlined,
+                        label: formattedViews,
+                      ),
+                      const Spacer(),
+                      _InlineStat(
+                        icon: Icons.star_rounded,
+                        label: rating.toStringAsFixed(1),
+                        iconColor: const Color(0xFFFFC94D),
+                      ),
+                    ],
                   ),
                 ],
               ),
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  /// Thumbnail image
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(18),
-                    child: Image.network(
-                      thumbnailUrl,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) {
-                        print(
-                          '❌ VideoFeedCard Image.network ERROR - videoId: $videoId',
-                        );
-                        print('   URL attempted: $thumbnailUrl');
-                        print('   Error: $error');
-                        print('   StackTrace: $stackTrace');
-                        return Container(
-                          color: Colors.grey[400],
-                          child: const Center(
-                            child: Icon(
-                              Icons.video_library_outlined,
-                              color: Colors.white70,
-                              size: 40,
-                            ),
-                          ),
-                        );
-                      },
-                      loadingBuilder: (context, child, loadingProgress) {
-                        if (loadingProgress == null) return child;
-                        return Container(
-                          color: Colors.grey[300],
-                          child: const Center(child: SizedBox.shrink()),
-                        );
-                      },
-                    ),
-                  ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
 
-                  DecoratedBox(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(18),
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          Colors.black.withOpacity(0.06),
-                          Colors.black.withOpacity(0.18),
-                          Colors.black.withOpacity(0.78),
-                        ],
-                        stops: const [0.0, 0.38, 1.0],
-                      ),
-                    ),
-                  ),
+class _OverlayChip extends StatelessWidget {
+  final IconData icon;
+  final String label;
 
-                  /// Play button overlay
-                  Center(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.42),
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: Colors.white.withOpacity(0.28),
-                        ),
-                      ),
-                      padding: const EdgeInsets.all(14),
-                      child: const Icon(
-                        Icons.play_arrow,
-                        color: Colors.white,
-                        size: 32,
-                      ),
-                    ),
-                  ),
+  const _OverlayChip({
+    required this.icon,
+    required this.label,
+  });
 
-                  if (sportLabel != null && sportIcon != null)
-                    Positioned(
-                      top: 14,
-                      left: 14,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 8,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.48),
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(
-                            color: Colors.white.withOpacity(0.26),
-                          ),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(sportIcon, size: 14, color: Colors.white),
-                                const SizedBox(width: 6),
-                                Text(
-                                  sportLabel,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w700,
-                                    letterSpacing: 0.2,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-
-                  /// Bottom left info (username + view count + rating)
-                  Positioned(
-                    bottom: 12,
-                    left: 12,
-                    right: 12,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        /// Username with avatar
-                        if (username != null)
-                          Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  '@$username',
-                                  style: theme.textTheme.labelLarge?.copyWith(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ],
-                          ),
-                        const SizedBox(height: 8),
-
-                        /// View count + Rating + Source
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: [
-                            _StatChip(
-                              icon: Icons.visibility_outlined,
-                              label: formattedViews,
-                            ),
-                            _StatChip(
-                              icon: Icons.star_rounded,
-                              label: rating.toStringAsFixed(1),
-                              iconColor: Colors.amber,
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.38),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: Colors.white.withOpacity(0.10)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 13, color: Colors.white),
+          const SizedBox(width: 5),
+          Flexible(
+            child: Text(
+              label,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.2,
               ),
             ),
           ),
@@ -239,12 +210,12 @@ class VideoFeedCard extends StatelessWidget {
   }
 }
 
-class _StatChip extends StatelessWidget {
+class _InlineStat extends StatelessWidget {
   final IconData icon;
   final String label;
   final Color iconColor;
 
-  const _StatChip({
+  const _InlineStat({
     required this.icon,
     required this.label,
     this.iconColor = Colors.white,
@@ -252,27 +223,19 @@ class _StatChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-      decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.28),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: Colors.white.withOpacity(0.12)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, color: iconColor, size: 12),
-          const SizedBox(width: 4),
-          Text(
-            label,
-            style: Theme.of(context).textTheme.labelMedium?.copyWith(
-              color: Colors.white,
-              fontWeight: FontWeight.w600,
-            ),
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, color: iconColor, size: 13),
+        const SizedBox(width: 4),
+        Text(
+          label,
+          style: Theme.of(context).textTheme.labelMedium?.copyWith(
+            color: Colors.white.withOpacity(0.92),
+            fontWeight: FontWeight.w600,
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }

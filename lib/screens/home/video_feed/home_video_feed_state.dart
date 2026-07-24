@@ -1,6 +1,8 @@
 import 'package:equatable/equatable.dart';
 
 class HomeVideoFeedState extends Equatable {
+  static const Object _sentinel = Object();
+
   final List<Map<String, dynamic>> videos;
   final int currentIndex;
   final int nextOffset;
@@ -8,6 +10,8 @@ class HomeVideoFeedState extends Equatable {
   final bool isLoadingMore;
   final int controllerGeneration;
   final String? errorMessage;
+  final int? currentUserRating;
+  final bool isSubmittingRating;
 
   const HomeVideoFeedState({
     required this.videos,
@@ -17,6 +21,8 @@ class HomeVideoFeedState extends Equatable {
     this.isLoadingMore = false,
     this.controllerGeneration = 0,
     this.errorMessage,
+    this.currentUserRating,
+    this.isSubmittingRating = false,
   });
 
   HomeVideoFeedState copyWith({
@@ -27,6 +33,8 @@ class HomeVideoFeedState extends Equatable {
     bool? isLoadingMore,
     int? controllerGeneration,
     String? errorMessage,
+    Object? currentUserRating = _sentinel,
+    bool? isSubmittingRating,
     bool clearErrorMessage = false,
   }) {
     return HomeVideoFeedState(
@@ -39,6 +47,10 @@ class HomeVideoFeedState extends Equatable {
       errorMessage: clearErrorMessage
           ? null
           : (errorMessage ?? this.errorMessage),
+      currentUserRating: identical(currentUserRating, _sentinel)
+          ? this.currentUserRating
+          : currentUserRating as int?,
+      isSubmittingRating: isSubmittingRating ?? this.isSubmittingRating,
     );
   }
 
@@ -51,5 +63,7 @@ class HomeVideoFeedState extends Equatable {
     isLoadingMore,
     controllerGeneration,
     errorMessage,
+    currentUserRating,
+    isSubmittingRating,
   ];
 }

@@ -10,3 +10,11 @@ sealed class CreatorProfileEvent extends Equatable {
 final class LoadCreatorProfileEvent extends CreatorProfileEvent {
   const LoadCreatorProfileEvent();
 }
+
+final class ToggleFollowStatusEvent extends CreatorProfileEvent {
+  const ToggleFollowStatusEvent();
+}
+
+final class LoadMoreCreatorProfileVideosEvent extends CreatorProfileEvent {
+  const LoadMoreCreatorProfileVideosEvent();
+}

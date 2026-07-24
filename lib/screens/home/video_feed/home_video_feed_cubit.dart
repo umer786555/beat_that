@@ -1,17 +1,29 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:bloc_presentation/bloc_presentation.dart';
 import 'package:beat_that/service_locator.dart';
 import 'package:beat_that/services/home_feed_service.dart';
 import 'package:beat_that/services/home_video_feed_session_store.dart';
+import 'package:beat_that/services/supabase_service.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:video_player/video_player.dart';
 
+import 'home_video_feed_presentation_event.dart';
 import 'home_video_feed_state.dart';
 
-class HomeVideoFeedCubit extends Cubit<HomeVideoFeedState> {
+class HomeVideoFeedCubit extends Cubit<HomeVideoFeedState>
+    with
+        BlocPresentationMixin<
+          HomeVideoFeedState,
+          HomeVideoFeedPresentationEvent
+        > {
+  static const Duration _viewCountThreshold = Duration(seconds: 8);
+  static const Duration _replayResetThreshold = Duration(milliseconds: 600);
+
   HomeVideoFeedCubit({required this.sessionId, required int initialIndex})
     : _homeFeedService = locator<HomeFeedService>(),
+      _supabaseService = locator<SupabaseService>(),
       _sessionStore = locator<HomeVideoFeedSessionStore>(),
       _seenVideoIds = _requireSession(sessionId).seenVideoIds,
       super(
@@ -38,15 +50,19 @@ class HomeVideoFeedCubit extends Cubit<HomeVideoFeedState> {
 
   final String sessionId;
   final HomeFeedService _homeFeedService;
+  final SupabaseService _supabaseService;
   final HomeVideoFeedSessionStore _sessionStore;
   final Set<String> _seenVideoIds;
   final Map<int, VideoPlayerController> _controllers = {};
   final Map<int, Future<void>> _controllerInitializers = {};
+  final Map<int, void Function()> _controllerListeners = {};
+  final Set<int> _viewThresholdReachedIndexes = {};
 
   VideoPlayerController? controllerFor(int index) => _controllers[index];
 
   Future<void> initialize() async {
     await _activateIndex(state.currentIndex);
+    await _loadUserRatingForIndex(state.currentIndex);
     await _loadMoreIfNeeded(state.currentIndex);
   }
 
@@ -55,9 +71,16 @@ class HomeVideoFeedCubit extends Cubit<HomeVideoFeedState> {
       return;
     }
 
-    emit(state.copyWith(currentIndex: index, clearErrorMessage: true));
+    emit(
+      state.copyWith(
+        currentIndex: index,
+        clearErrorMessage: true,
+        currentUserRating: null,
+      ),
+    );
 
     await _activateIndex(index);
+    await _loadUserRatingForIndex(index);
     await _loadMoreIfNeeded(index);
   }
 
@@ -72,6 +95,7 @@ class HomeVideoFeedCubit extends Cubit<HomeVideoFeedState> {
     } else {
       await _pauseAllExcept(index);
       await controller.play();
+      _trackViewProgress(index);
     }
 
     _bumpControllerGeneration();
@@ -84,9 +108,45 @@ class HomeVideoFeedCubit extends Cubit<HomeVideoFeedState> {
     await _activateIndex(currentIndex);
   }
 
+  Future<bool> submitRating(int rating) async {
+    final videoId = _videoIdForIndex(state.currentIndex);
+    if (videoId == null || videoId.isEmpty) {
+      emitPresentation(
+        HomeVideoFeedRatingErrorEvent('This video cannot be rated right now.'),
+      );
+      return false;
+    }
+
+    emit(state.copyWith(isSubmittingRating: true));
+
+    final result = await _supabaseService.rateVideo(
+      videoId: videoId,
+      rating: rating,
+    );
+
+    if (result['success'] == true) {
+      emit(
+        state.copyWith(currentUserRating: rating, isSubmittingRating: false),
+      );
+      emitPresentation(
+        HomeVideoFeedRatingSuccessEvent(
+          'Your $rating/10 rating has been added.',
+        ),
+      );
+      return true;
+    }
+
+    emit(state.copyWith(isSubmittingRating: false));
+    emitPresentation(
+      HomeVideoFeedRatingErrorEvent(
+        result['error'] as String? ?? 'Could not submit your rating.',
+      ),
+    );
+    return false;
+  }
+
   Future<void> _activateIndex(int index) async {
     await _ensureController(index, autoplay: true);
-    await _ensureController(index + 1);
 
     await _disposeStaleControllers(index);
 
@@ -103,6 +163,7 @@ class HomeVideoFeedCubit extends Cubit<HomeVideoFeedState> {
     if (existingController != null) {
       if (autoplay) {
         await existingController.play();
+        _trackViewProgress(index);
       }
       return;
     }
@@ -113,6 +174,7 @@ class HomeVideoFeedCubit extends Cubit<HomeVideoFeedState> {
       final initializedController = _controllers[index];
       if (autoplay && initializedController != null) {
         await initializedController.play();
+        _trackViewProgress(index);
         _bumpControllerGeneration();
       }
       return;
@@ -138,18 +200,26 @@ class HomeVideoFeedCubit extends Cubit<HomeVideoFeedState> {
 
     final isNetworkUrl =
         videoUrl.startsWith('http://') || videoUrl.startsWith('https://');
+    final localFile = File(videoUrl);
+    final isLocalFile = !isNetworkUrl && await localFile.exists();
 
     final controller = isNetworkUrl
         ? VideoPlayerController.networkUrl(Uri.parse(videoUrl))
-        : VideoPlayerController.file(File(videoUrl));
+        : isLocalFile
+        ? VideoPlayerController.file(localFile)
+        : VideoPlayerController.networkUrl(
+            Uri.parse(await _supabaseService.resolveVideoPlaybackUrl(videoUrl)),
+          );
 
     try {
       await controller.initialize();
       await controller.setLooping(true);
 
       _controllers[index] = controller;
+      _attachViewTrackingListener(index, controller);
       if (autoplay && index == state.currentIndex) {
         await controller.play();
+        _trackViewProgress(index);
       }
 
       _bumpControllerGeneration();
@@ -161,6 +231,30 @@ class HomeVideoFeedCubit extends Cubit<HomeVideoFeedState> {
         );
       }
     }
+  }
+
+  Future<void> _loadUserRatingForIndex(int index) async {
+    final videoId = _videoIdForIndex(index);
+    if (videoId == null || videoId.isEmpty) {
+      emit(state.copyWith(currentUserRating: null));
+      return;
+    }
+
+    final result = await _supabaseService.getUserRating(videoId: videoId);
+    final currentUserRating = result['success'] == true
+        ? result['rating'] as int?
+        : null;
+
+    emit(state.copyWith(currentUserRating: currentUserRating));
+  }
+
+  String? _videoIdForIndex(int index) {
+    if (index < 0 || index >= state.videos.length) {
+      return null;
+    }
+
+    final video = state.videos[index];
+    return video['user_video_id'] as String? ?? video['video_id'] as String?;
   }
 
   Future<void> _loadMoreIfNeeded(int index) async {
@@ -211,8 +305,6 @@ class HomeVideoFeedCubit extends Cubit<HomeVideoFeedState> {
         nextOffset: nextOffset,
         hasMoreContent: hasMoreContent,
       );
-
-      await _ensureController(state.currentIndex + 1);
     } catch (_) {
       emit(
         state.copyWith(
@@ -246,11 +338,112 @@ class HomeVideoFeedCubit extends Cubit<HomeVideoFeedState> {
   }
 
   Future<void> _disposeControllerAt(int index) async {
+    _detachViewTrackingListener(index);
     final controller = _controllers.remove(index);
     if (controller != null) {
       await controller.dispose();
       _bumpControllerGeneration();
     }
+  }
+
+  void _attachViewTrackingListener(
+    int index,
+    VideoPlayerController controller,
+  ) {
+    if (_controllerListeners.containsKey(index)) {
+      return;
+    }
+
+    void listener() {
+      _trackViewProgress(index);
+    }
+
+    _controllerListeners[index] = listener;
+    controller.addListener(listener);
+  }
+
+  void _detachViewTrackingListener(int index) {
+    final listener = _controllerListeners.remove(index);
+    final controller = _controllers[index];
+    if (listener != null && controller != null) {
+      controller.removeListener(listener);
+    }
+
+    _viewThresholdReachedIndexes.remove(index);
+  }
+
+  void _trackViewProgress(int index) {
+    if (index != state.currentIndex) {
+      return;
+    }
+
+    final controller = _controllers[index];
+    if (controller == null) {
+      return;
+    }
+
+    final value = controller.value;
+    if (!value.isInitialized) {
+      return;
+    }
+
+    if (value.position <= _replayResetThreshold) {
+      _viewThresholdReachedIndexes.remove(index);
+    }
+
+    if (!value.isPlaying) {
+      return;
+    }
+
+    if (_viewThresholdReachedIndexes.contains(index)) {
+      return;
+    }
+
+    if (value.position < _viewCountThreshold) {
+      return;
+    }
+
+    _viewThresholdReachedIndexes.add(index);
+    unawaited(_incrementViewCount(index));
+  }
+
+  Future<void> _incrementViewCount(int index) async {
+    final linkedVideoId = _linkedVideoIdForIndex(index);
+    if (linkedVideoId == null || linkedVideoId.isEmpty) {
+      print(
+        '⚠️ HomeVideoFeedCubit: Skipping view count update because linked video id is missing for index $index',
+      );
+      return;
+    }
+
+    try {
+      final result = await _supabaseService.updateCategoryVideoViewCount(
+        linkedVideoId: linkedVideoId,
+      );
+
+      if (result['success'] == true) {
+        print(
+          '✅ HomeVideoFeedCubit: View count updated for linkedVideoId=$linkedVideoId',
+        );
+        return;
+      }
+
+      print(
+        '⚠️ HomeVideoFeedCubit: View count update failed for linkedVideoId=$linkedVideoId. Error: ${result['error']}',
+      );
+    } catch (e) {
+      print(
+        '⚠️ HomeVideoFeedCubit: View count update threw unexpectedly for linkedVideoId=$linkedVideoId. Error: $e',
+      );
+    }
+  }
+
+  String? _linkedVideoIdForIndex(int index) {
+    if (index < 0 || index >= state.videos.length) {
+      return null;
+    }
+
+    return state.videos[index]['id'] as String?;
   }
 
   void _bumpControllerGeneration() {
@@ -259,6 +452,14 @@ class HomeVideoFeedCubit extends Cubit<HomeVideoFeedState> {
 
   @override
   Future<void> close() async {
+    for (final entry in _controllerListeners.entries) {
+      final controller = _controllers[entry.key];
+      if (controller != null) {
+        controller.removeListener(entry.value);
+      }
+    }
+    _controllerListeners.clear();
+    _viewThresholdReachedIndexes.clear();
     for (final controller in _controllers.values) {
       await controller.dispose();
     }

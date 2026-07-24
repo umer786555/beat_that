@@ -5,11 +5,23 @@ class VideoThumbnailModel {
   /// Signed URL for the thumbnail image (7 days expiry)
   final String thumbnailUrl;
 
-  /// Signed URL for the video file (7 days expiry)
+  /// Video playback reference.
+  ///
+  /// For profile-style grids this may be a storage path resolved lazily on
+  /// playback. Other flows may populate it with an already resolved URL.
   final String videoUrl;
 
   /// Video title
   final String title;
+
+  /// Sport identifier associated with the video, when available
+  final String? sportId;
+
+  /// Sport subcategory identifier associated with the video, when available
+  final int? subcategoryId;
+
+  /// Sport subcategory name associated with the video, when available
+  final String? subcategoryName;
 
   /// Video description
   final String description;
@@ -34,6 +46,9 @@ class VideoThumbnailModel {
     required this.thumbnailUrl,
     required this.videoUrl,
     required this.title,
+    this.sportId,
+    this.subcategoryId,
+    this.subcategoryName,
     required this.description,
     required this.viewCount,
     required this.averageRating,
@@ -49,6 +64,9 @@ class VideoThumbnailModel {
       thumbnailUrl: json['thumbnail_url'] as String,
       videoUrl: json['video_url'] as String,
       title: json['title'] as String? ?? 'Untitled',
+      sportId: json['sport_id'] as String?,
+      subcategoryId: json['subcategory_id'] as int?,
+      subcategoryName: json['subcategory_name'] as String?,
       description: json['description'] as String? ?? '',
       viewCount: json['view_count'] as int? ?? 0,
       averageRating: (json['average_rating'] as num?)?.toDouble() ?? 0.0,

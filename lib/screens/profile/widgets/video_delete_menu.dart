@@ -1,15 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
-/// Instagram-style delete menu for video items
-/// Shows a bottom sheet with a red delete option
-void showVideoDeleteMenu(
+/// Shows a delete menu followed by a confirmation dialog.
+///
+/// Returns `true` only when the user explicitly confirms deletion.
+Future<bool> showVideoDeleteConfirmation(
   BuildContext context, {
-  required VoidCallback onDelete,
   required bool isDark,
   required String videoTitle,
   required String thumbnailUrl,
-}) {
-  showModalBottomSheet(
+}) async {
+  final shouldOpenConfirmation = await showModalBottomSheet<bool>(
     context: context,
     builder: (BuildContext context) {
       return Container(
@@ -35,14 +36,8 @@ void showVideoDeleteMenu(
             // Delete option (red, Instagram style)
             GestureDetector(
               onTap: () {
-                Navigator.pop(context);
-                _showDeleteConfirmation(
-                  context,
-                  onDelete: onDelete,
-                  isDark: isDark,
-                  videoTitle: videoTitle,
-                  thumbnailUrl: thumbnailUrl,
-                );
+                HapticFeedback.heavyImpact();
+                Navigator.pop(context, true);
               },
               child: Container(
                 width: double.infinity,
@@ -65,7 +60,10 @@ void showVideoDeleteMenu(
             ),
             // Cancel option
             GestureDetector(
-              onTap: () => Navigator.pop(context),
+              onTap: () {
+                HapticFeedback.lightImpact();
+                Navigator.pop(context, false);
+              },
               child: Container(
                 width: double.infinity,
                 padding: const EdgeInsets.symmetric(vertical: 16),
@@ -87,17 +85,29 @@ void showVideoDeleteMenu(
       );
     },
   );
+
+  if (shouldOpenConfirmation != true || !context.mounted) {
+    return false;
+  }
+
+  final confirmed = await _showDeleteConfirmation(
+    context,
+    isDark: isDark,
+    videoTitle: videoTitle,
+    thumbnailUrl: thumbnailUrl,
+  );
+
+  return confirmed ?? false;
 }
 
 /// Shows Instagram-style delete confirmation dialog
-void _showDeleteConfirmation(
+Future<bool?> _showDeleteConfirmation(
   BuildContext context, {
-  required VoidCallback onDelete,
   required bool isDark,
   required String videoTitle,
   required String thumbnailUrl,
 }) {
-  showDialog(
+  return showDialog<bool>(
     context: context,
     builder: (BuildContext context) {
       return AlertDialog(
@@ -171,7 +181,10 @@ void _showDeleteConfirmation(
         actions: [
           // Cancel button
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () {
+              HapticFeedback.lightImpact();
+              Navigator.pop(context, false);
+            },
             child: Text(
               'Cancel',
               style: TextStyle(
@@ -183,18 +196,15 @@ void _showDeleteConfirmation(
           // Delete button (red, solid style)
           TextButton(
             onPressed: () {
-              Navigator.pop(context);
-              onDelete();
+              HapticFeedback.heavyImpact();
+              Navigator.pop(context, true);
             },
             style: TextButton.styleFrom(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             ),
             child: const Text(
               'Delete',
-              style: TextStyle(
-                color: Colors.red,
-                fontWeight: FontWeight.w600,
-              ),
+              style: TextStyle(color: Colors.red, fontWeight: FontWeight.w600),
             ),
           ),
         ],

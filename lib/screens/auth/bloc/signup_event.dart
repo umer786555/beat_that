@@ -40,18 +40,10 @@ class ConfirmPasswordChanged extends SignupEvent {
 
 /// Event triggered when signup form is submitted
 class SignupSubmitted extends SignupEvent {
-  final String email;
-  final String password;
-  final String confirmPassword;
-
-  const SignupSubmitted({
-    required this.email,
-    required this.password,
-    required this.confirmPassword,
-  });
+  const SignupSubmitted();
 
   @override
-  List<Object?> get props => [email, password, confirmPassword];
+  List<Object?> get props => [];
 }
 
 /// Event triggered when user wants to toggle password visibility

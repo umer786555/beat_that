@@ -55,6 +55,28 @@ class _PlayUploadedVideoScreenState extends State<PlayUploadedVideoScreen> {
     super.dispose();
   }
 
+  Widget _buildCoverVideoPlayer(
+    VideoPlayerController videoController, {
+    VoidCallback? onTap,
+  }) {
+    return Center(
+      child: GestureDetector(
+        onTap: onTap,
+        child: SizedBox.expand(
+          child: FittedBox(
+            fit: BoxFit.cover,
+            clipBehavior: Clip.hardEdge,
+            child: SizedBox(
+              width: videoController.value.size.width,
+              height: videoController.value.size.height,
+              child: VideoPlayer(videoController),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return BlocProvider(
@@ -208,16 +230,11 @@ class _PlayUploadedVideoScreenState extends State<PlayUploadedVideoScreen> {
         child: Stack(
           children: [
             // Full-screen video player
-            Center(
-              child: GestureDetector(
-                onTap: state is PlayUploadedVideoPlaying
-                    ? () => _showControlsTemporarily()
-                    : null,
-                child: AspectRatio(
-                  aspectRatio: videoController.value.aspectRatio,
-                  child: VideoPlayer(videoController),
-                ),
-              ),
+            _buildCoverVideoPlayer(
+              videoController,
+              onTap: state is PlayUploadedVideoPlaying
+                  ? () => _showControlsTemporarily()
+                  : null,
             ),
 
             // Play/Pause button overlay (center)
@@ -398,16 +415,11 @@ class _PlayUploadedVideoScreenState extends State<PlayUploadedVideoScreen> {
       child: Stack(
         children: [
           // Full-screen video player
-          Center(
-            child: GestureDetector(
-              onTap: state is PlayUploadedVideoPlaying
-                  ? () => _showControlsTemporarily()
-                  : null,
-              child: AspectRatio(
-                aspectRatio: videoController.value.aspectRatio,
-                child: VideoPlayer(videoController),
-              ),
-            ),
+          _buildCoverVideoPlayer(
+            videoController,
+            onTap: state is PlayUploadedVideoPlaying
+                ? () => _showControlsTemporarily()
+                : null,
           ),
 
           // Play/Pause button overlay (center)

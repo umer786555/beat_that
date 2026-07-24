@@ -46,6 +46,9 @@ class EditThumbnailScreen extends StatelessWidget {
               switch (event) {
                 case ThumbnailErrorEvent():
                   showErrorSnackBar(context, message: event.message);
+                case VideoTooShortEvent():
+                  showErrorSnackBar(context, message: event.message);
+                  if (context.mounted) context.pop();
                 case SaveSuccessEvent():
                   showSuccessSnackBar(context, message: event.message);
                   // Trigger ProfileBloc to refresh videos

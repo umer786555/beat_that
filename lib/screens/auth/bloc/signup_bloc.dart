@@ -60,6 +60,8 @@ class SignupBloc extends Bloc<SignupEvent, SignupState> {
       return AppStrings.thisEmailIsAlreadyRegisteredPleaseSignInInstead;
     } else if (error.contains('User already registered')) {
       return AppStrings.thisEmailIsAlreadyRegisteredPleaseSignInInstead;
+    } else if (error.contains('Error sending confirmation email')) {
+      return AppStrings.confirmationEmailCouldNotBeSent;
     } else if (error.contains('Password')) {
       return AppStrings.passwordMustBeAtLeast6Characters;
     } else if (error.contains('Email')) {
@@ -120,20 +122,24 @@ class SignupBloc extends Bloc<SignupEvent, SignupState> {
     SignupSubmitted event,
     Emitter<SignupState> emit,
   ) async {
+    final email = _email.trim();
+    final password = _password;
+    final confirmPassword = _confirmPassword;
+
     // Validate email
-    if (!_isValidEmail(event.email)) {
+    if (!_isValidEmail(email)) {
       emit(SignupFailure(error: AppStrings.pleaseEnterAValidEmail));
       return;
     }
 
     // Validate password
-    if (!_isValidPassword(event.password)) {
+    if (!_isValidPassword(password)) {
       emit(SignupFailure(error: AppStrings.passwordMustBeAtLeast6Characters));
       return;
     }
 
     // Check if passwords match
-    if (event.password.trim() != event.confirmPassword.trim()) {
+    if (password.trim() != confirmPassword.trim()) {
       emit(SignupFailure(error: AppStrings.passwordsDoNotMatch));
       return;
     }
@@ -144,10 +150,10 @@ class SignupBloc extends Bloc<SignupEvent, SignupState> {
 
       // Attempt signup
       await authService.signup(
-        email: event.email.trim(),
-        password: event.password,
+        email: email,
+        password: password,
         userData: {
-          'email': event.email.trim(),
+          'email': email,
           'created_at': DateTime.now().toIso8601String(),
         },
       );

@@ -204,11 +204,7 @@ class SignupScreen extends StatelessWidget {
                           : () {
                               HapticFeedback.mediumImpact();
                               context.read<SignupBloc>().add(
-                                SignupSubmitted(
-                                  email: email,
-                                  password: password,
-                                  confirmPassword: confirmPassword,
-                                ),
+                                const SignupSubmitted(),
                               );
                             },
                       style: getAuthElevatedButtonStyle(),

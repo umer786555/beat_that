@@ -1,5 +1,10 @@
 import 'package:beat_that/constants/app_colors.dart';
 import 'package:beat_that/routes/app_router.dart';
+import 'package:beat_that/screens/home/video_feed/home_video_feed_presentation_event.dart';
+import 'package:beat_that/widgets/custom_snackbar.dart';
+import 'package:beat_that/widgets/video_rating_bottom_sheet.dart';
+import 'package:beat_that/widgets/interactive_button.dart';
+import 'package:bloc_presentation/bloc_presentation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -45,64 +50,126 @@ class _HomeVideoFeedScreenState extends State<HomeVideoFeedScreen> {
         sessionId: widget.sessionId,
         initialIndex: widget.initialIndex,
       )..initialize(),
-      child: BlocBuilder<HomeVideoFeedCubit, HomeVideoFeedState>(
-        builder: (context, state) {
-          final cubit = context.read<HomeVideoFeedCubit>();
+      child:
+          BlocPresentationListener<
+            HomeVideoFeedCubit,
+            HomeVideoFeedPresentationEvent
+          >(
+            listener: (context, event) {
+              switch (event) {
+                case HomeVideoFeedRatingSuccessEvent():
+                  showSuccessSnackBar(context, message: event.message);
+                case HomeVideoFeedRatingErrorEvent():
+                  showErrorSnackBar(context, message: event.message);
+              }
+            },
+            child: BlocBuilder<HomeVideoFeedCubit, HomeVideoFeedState>(
+              builder: (context, state) {
+                final cubit = context.read<HomeVideoFeedCubit>();
 
-          return AnnotatedRegion<SystemUiOverlayStyle>(
-            value: SystemUiOverlayStyle.light,
-            child: Scaffold(
-              backgroundColor: Colors.black,
-              body: Stack(
-                children: [
-                  PageView.builder(
-                    controller: _pageController,
-                    scrollDirection: Axis.vertical,
-                    itemCount: state.videos.length,
-                    onPageChanged: (index) {
-                      HapticFeedback.lightImpact();
-                      cubit.onPageChanged(index);
-                    },
-                    itemBuilder: (context, index) {
-                      final video = state.videos[index];
-                      final controller = cubit.controllerFor(index);
-                      final isCurrentVideo = index == state.currentIndex;
-                      final errorMessage = isCurrentVideo
-                          ? state.errorMessage
-                          : null;
+                return AnnotatedRegion<SystemUiOverlayStyle>(
+                  value: SystemUiOverlayStyle.light,
+                  child: Scaffold(
+                    backgroundColor: Colors.black,
+                    body: Stack(
+                      children: [
+                        PageView.builder(
+                          controller: _pageController,
+                          scrollDirection: Axis.vertical,
+                          itemCount: state.videos.length,
+                          onPageChanged: (index) {
+                            HapticFeedback.lightImpact();
+                            cubit.onPageChanged(index);
+                          },
+                          itemBuilder: (context, index) {
+                            final video = state.videos[index];
+                            final controller = cubit.controllerFor(index);
+                            final isCurrentVideo = index == state.currentIndex;
+                            final errorMessage = isCurrentVideo
+                                ? state.errorMessage
+                                : null;
 
-                      return _VideoFeedPage(
-                        key: ValueKey(video['id'] ?? index),
-                        video: video,
-                        controller: controller,
-                        isCurrentVideo: isCurrentVideo,
-                        errorMessage: errorMessage,
-                        isLoadingMore:
-                            state.isLoadingMore &&
-                            index == state.videos.length - 1,
-                        onTogglePlayback: () => cubit.togglePlayback(index),
-                        onRetry: isCurrentVideo ? cubit.retryActiveVideo : null,
-                      );
-                    },
-                  ),
-                  SafeArea(
-                    child: Align(
-                      alignment: Alignment.topLeft,
-                      child: IconButton(
-                        icon: const Icon(
-                          Icons.arrow_back_ios_new,
-                          color: Colors.white,
+                            return _VideoFeedPage(
+                              key: ValueKey(video['id'] ?? index),
+                              video: video,
+                              controller: controller,
+                              isCurrentVideo: isCurrentVideo,
+                              errorMessage: errorMessage,
+                              isLoadingMore:
+                                  state.isLoadingMore &&
+                                  index == state.videos.length - 1,
+                              onTogglePlayback: () =>
+                                  cubit.togglePlayback(index),
+                              currentUserRating: isCurrentVideo
+                                  ? state.currentUserRating
+                                  : null,
+                              onOpenRating: isCurrentVideo
+                                  ? () => _showRatingSheet(
+                                      context,
+                                      cubit: cubit,
+                                      onSubmitRating: cubit.submitRating,
+                                    )
+                                  : null,
+                              onRetry: isCurrentVideo
+                                  ? cubit.retryActiveVideo
+                                  : null,
+                            );
+                          },
                         ),
-                        onPressed: () => context.pop(),
-                      ),
+                        SafeArea(
+                          child: Align(
+                            alignment: Alignment.topLeft,
+                            child: IconButton(
+                              icon: const Icon(
+                                Icons.arrow_back_ios_new,
+                                color: Colors.white,
+                              ),
+                              onPressed: () => context.pop(),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                ],
-              ),
+                );
+              },
             ),
-          );
-        },
-      ),
+          ),
+    );
+  }
+
+  Future<void> _showRatingSheet(
+    BuildContext context, {
+    required HomeVideoFeedCubit cubit,
+    required SubmitVideoRating onSubmitRating,
+  }) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (sheetContext) {
+        return BlocProvider.value(
+          value: cubit,
+          child:
+              BlocSelector<
+                HomeVideoFeedCubit,
+                HomeVideoFeedState,
+                ({int? currentUserRating, bool isSubmittingRating})
+              >(
+                selector: (state) => (
+                  currentUserRating: state.currentUserRating,
+                  isSubmittingRating: state.isSubmittingRating,
+                ),
+                builder: (context, ratingState) {
+                  return VideoRatingBottomSheet(
+                    initialRating: ratingState.currentUserRating,
+                    isSubmittingRating: ratingState.isSubmittingRating,
+                    onSubmitRating: onSubmitRating,
+                  );
+                },
+              ),
+        );
+      },
     );
   }
 }
@@ -116,6 +183,8 @@ class _VideoFeedPage extends StatelessWidget {
     required this.errorMessage,
     required this.isLoadingMore,
     required this.onTogglePlayback,
+    required this.currentUserRating,
+    this.onOpenRating,
     this.onRetry,
   });
 
@@ -125,6 +194,8 @@ class _VideoFeedPage extends StatelessWidget {
   final String? errorMessage;
   final bool isLoadingMore;
   final VoidCallback onTogglePlayback;
+  final int? currentUserRating;
+  final VoidCallback? onOpenRating;
   final VoidCallback? onRetry;
 
   @override
@@ -148,7 +219,7 @@ class _VideoFeedPage extends StatelessWidget {
                 if (value.isInitialized) {
                   return ColoredBox(
                     color: Colors.black,
-                    child: Center(
+                    child: SizedBox.expand(
                       child: FittedBox(
                         fit: BoxFit.cover,
                         clipBehavior: Clip.hardEdge,
@@ -322,6 +393,21 @@ class _VideoFeedPage extends StatelessWidget {
               ],
             ),
           ),
+          Positioned(
+            right: 16,
+            bottom: 48,
+            child: SafeArea(
+              top: false,
+              child: _VideoActionButton(
+                icon: Icons.star_rounded,
+                label: currentUserRating == null
+                    ? 'Rate'
+                    : '${currentUserRating!}/10',
+                accentColor: Colors.amber,
+                onTap: onOpenRating,
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -335,6 +421,59 @@ class _VideoFeedPage extends StatelessWidget {
       return '${(count / 1000).toStringAsFixed(1)}K';
     }
     return count.toString();
+  }
+}
+
+class _VideoActionButton extends StatelessWidget {
+  const _VideoActionButton({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.accentColor = Colors.white,
+  });
+
+  final IconData icon;
+  final String label;
+  final Color accentColor;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InteractiveButton(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(24),
+      child: Container(
+        width: 64,
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+        decoration: BoxDecoration(
+          color: Colors.black.withValues(alpha: 0.34),
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.22),
+              blurRadius: 18,
+              offset: const Offset(0, 10),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: accentColor, size: 28),
+            const SizedBox(height: 6),
+            Text(
+              label,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

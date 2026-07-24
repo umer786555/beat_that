@@ -236,7 +236,7 @@ void main() {
 
         when(
           () => mockHomeFeedService.getHomeFeed(
-            limit: 50,
+            limit: 24,
             offset: 2,
             forceRefresh: false,
           ),
@@ -250,7 +250,7 @@ void main() {
 
         await untilCalled(
           () => mockHomeFeedService.getHomeFeed(
-            limit: 50,
+            limit: 24,
             offset: 2,
             forceRefresh: false,
           ),
@@ -259,7 +259,7 @@ void main() {
 
         verify(
           () => mockHomeFeedService.getHomeFeed(
-            limit: 50,
+            limit: 24,
             offset: 2,
             forceRefresh: false,
           ),

@@ -25,10 +25,7 @@ class PermissionService {
   /// Request both camera and microphone permissions
   /// Returns: true if both granted, false otherwise
   static Future<bool> requestCameraAndMicrophonePermission() async {
-    final statuses = await [
-      Permission.camera,
-      Permission.microphone,
-    ].request();
+    final statuses = await [Permission.camera, Permission.microphone].request();
 
     final cameraGranted = statuses[Permission.camera]?.isGranted ?? false;
     final micGranted = statuses[Permission.microphone]?.isGranted ?? false;
@@ -44,7 +41,7 @@ class PermissionService {
 
   /// Check camera permission status on screen load
   /// Returns: true if camera permission is enabled, false otherwise
-   Future<bool> checkCameraPermissionOnLoad() async {
+  Future<bool> checkCameraPermissionOnLoad() async {
     final status = await Permission.camera.status;
     return status.isGranted;
   }

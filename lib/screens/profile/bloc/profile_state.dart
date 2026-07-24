@@ -15,8 +15,7 @@ final class ProfileLoaded extends ProfileState {
   final List<VideoThumbnailModel> thumbnails;
   final String? username;
   final String? profileUrl;
-  final int followers;
-  final int following;
+  final bool isDeletingVideo;
 
   const ProfileLoaded({
     required this.cameraPermissionEnabled,
@@ -24,12 +23,18 @@ final class ProfileLoaded extends ProfileState {
     this.thumbnails = const [],
     this.username,
     this.profileUrl,
-    this.followers = 0,
-    this.following = 0,
+    this.isDeletingVideo = false,
   });
 
   @override
-  List<Object> get props => [cameraPermissionEnabled, galleryPermissionEnabled, thumbnails, username ?? '', profileUrl ?? '', followers, following];
+  List<Object> get props => [
+    cameraPermissionEnabled,
+    galleryPermissionEnabled,
+    thumbnails,
+    username ?? '',
+    profileUrl ?? '',
+    isDeletingVideo,
+  ];
 
   ProfileLoaded copyWith({
     AppThemeMode? currentTheme,
@@ -38,17 +43,17 @@ final class ProfileLoaded extends ProfileState {
     List<VideoThumbnailModel>? thumbnails,
     String? username,
     String? profileUrl,
-    int? followers,
-    int? following,
+    bool? isDeletingVideo,
   }) {
     return ProfileLoaded(
-      cameraPermissionEnabled: cameraPermissionEnabled ?? this.cameraPermissionEnabled,
-      galleryPermissionEnabled: galleryPermissionEnabled ?? this.galleryPermissionEnabled,
+      cameraPermissionEnabled:
+          cameraPermissionEnabled ?? this.cameraPermissionEnabled,
+      galleryPermissionEnabled:
+          galleryPermissionEnabled ?? this.galleryPermissionEnabled,
       thumbnails: thumbnails ?? this.thumbnails,
       username: username ?? this.username,
       profileUrl: profileUrl ?? this.profileUrl,
-      followers: followers ?? this.followers,
-      following: following ?? this.following,
+      isDeletingVideo: isDeletingVideo ?? this.isDeletingVideo,
     );
   }
 }
@@ -64,18 +69,14 @@ final class ProfileError extends ProfileState {
   List<Object> get props => [message];
 }
 
-
 final class CameraPermissionDenied extends ProfileState {
   final bool isPermanentlyDenied;
 
-  const CameraPermissionDenied({
-    this.isPermanentlyDenied = false,
-  });
+  const CameraPermissionDenied({this.isPermanentlyDenied = false});
 
   @override
-  List<Object> get props => [ isPermanentlyDenied];
+  List<Object> get props => [isPermanentlyDenied];
 }
-
 
 // Video upload states
 final class RecordVideoMode extends ProfileState {
@@ -85,5 +86,3 @@ final class RecordVideoMode extends ProfileState {
 final class UploadFromGalleryMode extends ProfileState {
   const UploadFromGalleryMode();
 }
-
-

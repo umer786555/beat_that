@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:beat_that/constants/app_colors.dart';
 
 /// A reusable widget that displays a permission denied error message.
@@ -113,7 +114,10 @@ class PermissionDeniedCard extends StatelessWidget {
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
-                    onPressed: onButtonPressed,
+                    onPressed: () {
+                      HapticFeedback.mediumImpact();
+                      onButtonPressed();
+                    },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.blue,
                       foregroundColor: Colors.white,

@@ -10,6 +10,13 @@ final class ThumbnailErrorEvent extends EditThumbnailPresentationEvent {
   ThumbnailErrorEvent({required this.message});
 }
 
+/// Emitted when the selected video is too short for upload.
+final class VideoTooShortEvent extends EditThumbnailPresentationEvent {
+  final String message;
+
+  VideoTooShortEvent({required this.message});
+}
+
 /// Emitted when video upload succeeds - shows snack bar and pops screen
 final class SaveSuccessEvent extends EditThumbnailPresentationEvent {
   final String message;
