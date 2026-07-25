@@ -113,10 +113,19 @@ class _MyAppState extends State<MyApp> {
       child: BlocBuilder<ThemeBloc, ThemeState>(
         bloc: _themeBloc,
         builder: (context, themeState) {
+          // return MaterialApp.router(
+          //   title: 'Beat That',
+          //   theme: AppThemes.lightTheme,
+          //   darkTheme: AppThemes.darkTheme,
+          //   themeMode: themeState.themeMode.isDark
+          //       ? ThemeMode.dark
+          //       : ThemeMode.light,
+          //   routerConfig: _appRouter.router,
+          // );
           return MaterialApp.router(
             title: 'Beat That',
-            theme: AppThemes.lightTheme,
-            darkTheme: AppThemes.darkTheme,
+            theme: AppThemes.lightTheme(),
+            darkTheme: AppThemes.darkTheme(),
             themeMode: themeState.themeMode.isDark
                 ? ThemeMode.dark
                 : ThemeMode.light,

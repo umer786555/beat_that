@@ -230,6 +230,7 @@ class _ExploreViewState extends State<_ExploreView> {
                       ),
                       Expanded(
                         child: RefreshIndicator(
+                          
                           onRefresh: onRefresh,
                           child: GridView.builder(
                             controller: _scrollController,
@@ -357,13 +358,17 @@ class _SearchHeader extends StatelessWidget {
       child: Column(
         children: [
           TextField(
+            cursorColor: AppColors.cyan,
             controller: controller,
             onChanged: onChanged,
             textInputAction: TextInputAction.search,
-            decoration: buildFormFieldDecoration(
+            decoration: InputDecoration(
               hintText: 'Search videos by title',
               labelText: 'Search',
-              prefixIconData: Icons.search_rounded,
+              prefixIcon: Icon(
+                Icons.search_rounded,
+                size: 20,
+              ),
               suffixIcon: controller.text.isEmpty
                   ? null
                   : IconButton(

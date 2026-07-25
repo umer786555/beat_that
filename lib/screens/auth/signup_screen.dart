@@ -88,7 +88,7 @@ class SignupScreen extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 12),
-                     Text(
+                    Text(
                       AppStrings.joinBeatThatToday,
                       textAlign: TextAlign.center,
                       style: TextStyle(
@@ -102,7 +102,7 @@ class SignupScreen extends StatelessWidget {
 
                     // Email field
                     TextFormField(
-                      cursorColor: AppColors.white,
+                      cursorColor: AppColors.cyan,
                       onChanged: (value) {
                         HapticFeedback.lightImpact();
                         context.read<SignupBloc>().add(
@@ -113,17 +113,20 @@ class SignupScreen extends StatelessWidget {
                       keyboardType: TextInputType.emailAddress,
                       initialValue: email,
                       style: getAuthTextFormFieldStyle(),
-                      decoration: buildFormFieldDecoration(
+                      decoration: InputDecoration(
                         hintText: AppStrings.enterYourEmail,
                         labelText: AppStrings.email,
-                        prefixIconData: Icons.email_outlined,
+                        prefixIcon: Icon(
+                          Icons.email_outlined,
+                          size: 20,
+                        ),
                       ),
                     ),
                     const SizedBox(height: 16),
 
                     // Password field
                     TextFormField(
-                      cursorColor: AppColors.white,
+                      cursorColor: AppColors.cyan,
                       onChanged: (value) {
                         HapticFeedback.lightImpact();
                         context.read<SignupBloc>().add(
@@ -134,10 +137,13 @@ class SignupScreen extends StatelessWidget {
                       obscureText: obscurePassword,
                       initialValue: password,
                       style: getAuthTextFormFieldStyle(),
-                      decoration: buildFormFieldDecoration(
+                      decoration: InputDecoration(
                         hintText: AppStrings.createAPassword,
                         labelText: AppStrings.password,
-                        prefixIconData: Icons.lock_outline,
+                        prefixIcon: Icon(
+                          Icons.lock_outline,
+                          size: 20,
+                        ),
                         suffixIcon: IconButton(
                           icon: Icon(
                             obscurePassword
@@ -161,7 +167,7 @@ class SignupScreen extends StatelessWidget {
 
                     // Confirm Password field
                     TextFormField(
-                      cursorColor: AppColors.white,
+                      cursorColor: AppColors.cyan,
                       onChanged: (value) {
                         HapticFeedback.lightImpact();
                         context.read<SignupBloc>().add(
@@ -172,16 +178,18 @@ class SignupScreen extends StatelessWidget {
                       obscureText: obscureConfirmPassword,
                       initialValue: confirmPassword,
                       style: getAuthTextFormFieldStyle(),
-                      decoration: buildFormFieldDecoration(
+                      decoration: InputDecoration(
                         hintText: AppStrings.confirmYourPassword,
                         labelText: AppStrings.confirmPassword,
-                        prefixIconData: Icons.lock_outline,
+                        prefixIcon: Icon(
+                          Icons.lock_outline,
+                          size: 20,
+                        ),
                         suffixIcon: IconButton(
                           icon: Icon(
                             obscureConfirmPassword
                                 ? Icons.visibility_off_outlined
                                 : Icons.visibility_outlined,
-                            color: AppColors.electricMagenta,
                             size: 20,
                           ),
                           onPressed: isLoading

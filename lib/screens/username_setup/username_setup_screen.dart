@@ -102,15 +102,19 @@ class _UsernameSetupScreenState extends State<UsernameSetupScreen> {
                           ),
                           const SizedBox(height: 40),
                           TextField(
+                            cursorColor: AppColors.cyan,
                             controller: _usernameController,
                             enabled: !isLoading,
 
                             style: getAuthTextFormFieldStyle(),
-                            decoration: buildFormFieldDecoration(
+                            decoration: InputDecoration(
                               hintText: 'Enter your username',
                               labelText: 'Username',
-                              prefixIconData: Icons.person,
-                              prefixIconColor: AppColors.cyan,
+                              prefixIcon: Icon(
+                                Icons.person,
+                                color: AppColors.cyan,
+                                size: 20,
+                              ),
                             ),
                           ),
                           const SizedBox(height: 24),

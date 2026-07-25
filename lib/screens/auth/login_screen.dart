@@ -88,7 +88,7 @@ class LoginScreen extends StatelessWidget {
 
                     // Email field
                     TextFormField(
-                      cursorColor: AppColors.white,
+                      cursorColor: AppColors.cyan,
                       onChanged: (value) {
                         HapticFeedback.lightImpact();
                         context.read<LoginBloc>().add(
@@ -99,17 +99,20 @@ class LoginScreen extends StatelessWidget {
                       keyboardType: TextInputType.emailAddress,
                       initialValue: email,
                       style: getAuthTextFormFieldStyle(),
-                      decoration: buildFormFieldDecoration(
+                      decoration: InputDecoration(
                         hintText: AppStrings.enterYourEmail,
                         labelText: AppStrings.email,
-                        prefixIconData: Icons.email_outlined,
+                        prefixIcon: Icon(
+                          Icons.email_outlined,
+                          size: 20,
+                        ),
                       ),
                     ),
                     const SizedBox(height: 16),
 
                     // Password field
                     TextFormField(
-                      cursorColor: AppColors.white,
+                      cursorColor: AppColors.cyan,
                       onChanged: (value) {
                         HapticFeedback.lightImpact();
                         context.read<LoginBloc>().add(
@@ -120,10 +123,13 @@ class LoginScreen extends StatelessWidget {
                       obscureText: obscurePassword,
                       initialValue: password,
                       style: getAuthTextFormFieldStyle(),
-                      decoration: buildFormFieldDecoration(
+                      decoration: InputDecoration(
                         hintText: AppStrings.enterYourPassword,
                         labelText: AppStrings.password,
-                        prefixIconData: Icons.lock_outline,
+                        prefixIcon: Icon(
+                          Icons.lock_outline,
+                          size: 20,
+                        ),
                         suffixIcon: IconButton(
                           icon: Icon(
                             obscurePassword
