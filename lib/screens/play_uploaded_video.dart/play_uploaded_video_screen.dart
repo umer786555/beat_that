@@ -114,7 +114,16 @@ class _PlayUploadedVideoScreenState extends State<PlayUploadedVideoScreen> {
 
           return Scaffold(
             appBar: AppBar(
-              title: const Text('Edit Video'),
+              elevation: 0,
+              backgroundColor: Colors.transparent,
+              centerTitle: true,
+              title: Text(
+                'Edit Video',
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: -0.5,
+                ),
+              ),
               leading: IconButton(
                 icon: const Icon(Icons.arrow_back_ios),
                 onPressed: () {

@@ -47,3 +47,18 @@ class DeleteVideoEvent extends ProfileEvent {
 class RefreshVideosEvent extends ProfileEvent {
   const RefreshVideosEvent();
 }
+
+/// Event triggered when a video approval status is updated in real-time
+/// This fires when the Supabase realtime listener detects an UPDATE event
+class VideoApprovalUpdatedEvent extends ProfileEvent {
+  final String videoId;
+  final bool? approvalStatus; // null, true, or false
+
+  const VideoApprovalUpdatedEvent({
+    required this.videoId,
+    required this.approvalStatus,
+  });
+
+  @override
+  List<Object> get props => [videoId, approvalStatus ?? ''];
+}

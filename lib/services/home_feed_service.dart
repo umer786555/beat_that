@@ -255,8 +255,8 @@ class HomeFeedService {
     // Debug: print URLs in final feed
     for (final video in finalFeed) {
       final videoId = video['id'] as String;
-      final thumbnailUrl = video['thumbnail_url'] as String?;
-      print('📸 Final feed video $videoId: thumbnail_url=$thumbnailUrl');
+      final thumbnailUrl = video['thumbnailUrl'] as String?;
+      print('📸 Final feed video $videoId: thumbnailUrl=$thumbnailUrl');
     }
 
     return finalFeed;

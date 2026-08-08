@@ -1,4 +1,4 @@
-import 'package:beat_that/models/video_thumbnail_model.dart';
+import 'package:beat_that/models/my_video.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shimmer/shimmer.dart';
@@ -10,10 +10,10 @@ import 'package:beat_that/widgets/thumbnail_error_widget.dart';
 /// Displays video thumbnail with YouTube-style loading shimmer and theme support
 /// Supports long-press for Instagram-style deletion
 class VideoThumbnailItem extends StatelessWidget {
-  final VideoThumbnailModel thumbnail;
+  final MyVideo thumbnail;
   final bool isDark;
   final VoidCallback onTap;
-  final Function(VideoThumbnailModel)? onLongPress;
+  final Function(MyVideo)? onLongPress;
 
   const VideoThumbnailItem({
     super.key,
@@ -46,8 +46,8 @@ class VideoThumbnailItem extends StatelessWidget {
   }
 
   /// Format rating for display
-  String _formatRating(double rating) {
-    if (rating == 0) {
+  String _formatRating(double? rating) {
+    if (rating == null || rating == 0) {
       return 'No ratings';
     }
     return rating.toStringAsFixed(1);
@@ -99,7 +99,7 @@ class VideoThumbnailItem extends StatelessWidget {
                   children: [
                     // Main thumbnail image
                     Image.network(
-                      thumbnail.thumbnailUrl,
+                      thumbnail.thumbnailUrl ?? '',
                       fit: BoxFit.cover,
                       loadingBuilder: (context, child, loadingProgress) {
                         if (loadingProgress == null) return child;
@@ -218,7 +218,8 @@ class VideoThumbnailItem extends StatelessWidget {
                             Row(
                               children: [
                                 // Rating badge
-                                if (thumbnail.averageRating > 0)
+                                if (thumbnail.averageRating != null &&
+                                    thumbnail.averageRating! > 0)
                                   Flexible(
                                     child: Row(
                                       mainAxisSize: MainAxisSize.min,
@@ -230,7 +231,9 @@ class VideoThumbnailItem extends StatelessWidget {
                                         ),
                                         const SizedBox(width: 3),
                                         Text(
-                                          _formatRating(thumbnail.averageRating),
+                                          _formatRating(
+                                            thumbnail.averageRating,
+                                          ),
                                           style: TextStyle(
                                             color: Colors.amber[100],
                                             fontSize: 11,

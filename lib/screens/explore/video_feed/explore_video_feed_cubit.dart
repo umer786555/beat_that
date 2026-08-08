@@ -196,23 +196,23 @@ class ExploreVideoFeedCubit extends Cubit<ExploreVideoFeedState>
     }
 
     final video = state.videos[index];
-    final videoUrl = video['video_url'] as String?;
-    if (videoUrl == null || videoUrl.isEmpty) {
+    final videoPath = video['video_path'] as String?;
+    if (videoPath == null || videoPath.isEmpty) {
       emit(state.copyWith(errorMessage: 'This video is unavailable.'));
       return;
     }
 
     final isNetworkUrl =
-        videoUrl.startsWith('http://') || videoUrl.startsWith('https://');
-    final localFile = File(videoUrl);
+      videoPath.startsWith('http://') || videoPath.startsWith('https://');
+    final localFile = File(videoPath);
     final isLocalFile = !isNetworkUrl && await localFile.exists();
 
     final controller = isNetworkUrl
-        ? VideoPlayerController.networkUrl(Uri.parse(videoUrl))
+      ? VideoPlayerController.networkUrl(Uri.parse(videoPath))
         : isLocalFile
         ? VideoPlayerController.file(localFile)
         : VideoPlayerController.networkUrl(
-            Uri.parse(await _supabaseService.resolveVideoPlaybackUrl(videoUrl)),
+        Uri.parse(await _supabaseService.resolveVideoPlaybackUrl(videoPath)),
           );
 
     try {

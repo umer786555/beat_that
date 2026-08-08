@@ -32,7 +32,9 @@ void main() {
     {
       'id': 'video-1',
       'title': 'Test Video 1',
-      'thumbnail_url': 'https://example.com/thumb1.jpg',
+      'thumbnailUrl': 'https://example.com/thumb1.jpg',
+      'thumbnail_path': 'profiles/user-1/thumbnails/thumb1.jpg',
+      'video_path': 'profiles/user-1/videos/video1.mp4',
       'username': 'user1',
       'view_count': 100,
       'average_rating': 4.5,
@@ -41,7 +43,9 @@ void main() {
     {
       'id': 'video-2',
       'title': 'Test Video 2',
-      'thumbnail_url': 'https://example.com/thumb2.jpg',
+      'thumbnailUrl': 'https://example.com/thumb2.jpg',
+      'thumbnail_path': 'profiles/user-2/thumbnails/thumb2.jpg',
+      'video_path': 'profiles/user-2/videos/video2.mp4',
       'username': 'user2',
       'view_count': 50,
       'average_rating': 4.0,
@@ -306,7 +310,9 @@ void main() {
           (i) => {
             'id': 'video-$i',
             'title': 'Test Video $i',
-            'thumbnail_url': 'https://example.com/thumb$i.jpg',
+            'thumbnailUrl': 'https://example.com/thumb$i.jpg',
+            'thumbnail_path': 'profiles/user-$i/thumbnails/thumb$i.jpg',
+            'video_path': 'profiles/user-$i/videos/video$i.mp4',
             'username': 'user$i',
             'view_count': 100 * i,
             'average_rating': 4.0,

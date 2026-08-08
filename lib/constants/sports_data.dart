@@ -265,3 +265,35 @@ IconData getIconForSport(String sportId) {
       return Icons.sports;
   }
 }
+
+/// Get the bundled image asset for a sport when one exists.
+String? getImageAssetPathForSport(String sportId) {
+  switch (sportId) {
+    case 'american_football':
+      return 'assets/american_football_male.jpg';
+    case 'badminton':
+      return 'assets/badmington.png';
+    case 'baseball':
+      return 'assets/baseball_male.jpg';
+    case 'basketball':
+      return 'assets/basketball_male.jpg';
+    case 'boxing':
+      return 'assets/boxing_male.jpg';
+    case 'cricket':
+      return 'assets/cricket_male.jpg';
+    case 'ice_hockey':
+      return 'assets/ice_hockey_male.jpg';
+    case 'pool':
+      return 'assets/pool_male.jpg';
+    case 'soccer':
+      return 'assets/soccer_male.jpg';
+    case 'snooker':
+      return 'assets/snooker_male.jpg';
+    case 'tennis':
+      return 'assets/tennis_male.jpg';
+    case 'weightlifting':
+      return 'assets/weightlifting_male.jpg';
+    default:
+      return null;
+  }
+}

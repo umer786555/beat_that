@@ -31,8 +31,9 @@ void main() {
     'title': 'Personalized Video',
     'bayesian_score': 80.0,
     'user_id': 'user-1',
-    'video_url': 'profiles/user-1/videos/video1.mp4',
-    'thumbnail_url': 'profiles/user-1/thumbnails/thumb1.png',
+    'video_path': 'profiles/user-1/videos/video1.mp4',
+    'thumbnail_path': 'profiles/user-1/thumbnails/thumb1.png',
+    'thumbnailUrl': 'https://example.com/thumb1.png',
   };
 
   final videoFromTrending = {
@@ -40,8 +41,9 @@ void main() {
     'title': 'Trending Video',
     'bayesian_score': 90.0,
     'user_id': 'user-2',
-    'video_url': 'profiles/user-2/videos/video2.mp4',
-    'thumbnail_url': 'profiles/user-2/thumbnails/thumb2.png',
+    'video_path': 'profiles/user-2/videos/video2.mp4',
+    'thumbnail_path': 'profiles/user-2/thumbnails/thumb2.png',
+    'thumbnailUrl': 'https://example.com/thumb2.png',
     'created_at': '2026-06-10T10:00:00Z',
   };
 
@@ -83,44 +85,69 @@ void main() {
 
   group('SupabaseService - Query Methods (Integration with PreferencesService)', () {
     /// ✅ TEST 1: getPersonalizedVideos calls PreferencesService correctly
-    test('getPersonalizedVideos: calls PreferencesService.getTopSubcategories', () async {
-      // Arrange: Mock preferences to return empty (no watched categories)
-      when(() => mockPreferencesService.getTopSubcategories(limit: any(named: 'limit')))
-          .thenAnswer((_) async => []);
+    test(
+      'getPersonalizedVideos: calls PreferencesService.getTopSubcategories',
+      () async {
+        // Arrange: Mock preferences to return empty (no watched categories)
+        when(
+          () => mockPreferencesService.getTopSubcategories(
+            limit: any(named: 'limit'),
+          ),
+        ).thenAnswer((_) async => []);
 
-      // Act: Call REAL SupabaseService method
-      final result = await supabaseService.getPersonalizedVideos(limit: 50, offset: 0);
+        // Act: Call REAL SupabaseService method
+        final result = await supabaseService.getPersonalizedVideos(
+          limit: 50,
+          offset: 0,
+        );
 
-      // Assert: Should return empty list (no watched categories → no personalized videos)
-      expect(result, isA<List<Map<String, dynamic>>>());
-      expect(result, isEmpty);
+        // Assert: Should return empty list (no watched categories → no personalized videos)
+        expect(result, isA<List<Map<String, dynamic>>>());
+        expect(result, isEmpty);
 
-      // Verify PreferencesService was actually called with correct parameters
-      verify(() => mockPreferencesService.getTopSubcategories(limit: 5)).called(1);
-    });
+        // Verify PreferencesService was actually called with correct parameters
+        verify(
+          () => mockPreferencesService.getTopSubcategories(limit: 5),
+        ).called(1);
+      },
+    );
 
     /// ✅ TEST 2: getPersonalizedVideos with watch history
-    test('getPersonalizedVideos: extracts subcategory IDs from top categories', () async {
-      // Arrange: Mock preferences to return top categories
-      when(() => mockPreferencesService.getTopSubcategories(limit: any(named: 'limit')))
-          .thenAnswer((_) async => topSubcategories);
+    test(
+      'getPersonalizedVideos: extracts subcategory IDs from top categories',
+      () async {
+        // Arrange: Mock preferences to return top categories
+        when(
+          () => mockPreferencesService.getTopSubcategories(
+            limit: any(named: 'limit'),
+          ),
+        ).thenAnswer((_) async => topSubcategories);
 
-      // Act: Call REAL SupabaseService method
-      // Note: This calls real Supabase queries which may fail without auth,
-      // but method should handle gracefully and return a list
-      final result = await supabaseService.getPersonalizedVideos(limit: 50, offset: 0);
+        // Act: Call REAL SupabaseService method
+        // Note: This calls real Supabase queries which may fail without auth,
+        // but method should handle gracefully and return a list
+        final result = await supabaseService.getPersonalizedVideos(
+          limit: 50,
+          offset: 0,
+        );
 
-      // Assert: Returns a list (structure is correct)
-      expect(result, isA<List<Map<String, dynamic>>>());
+        // Assert: Returns a list (structure is correct)
+        expect(result, isA<List<Map<String, dynamic>>>());
 
-      // Verify PreferencesService was called with correct limit
-      verify(() => mockPreferencesService.getTopSubcategories(limit: 5)).called(1);
-    });
+        // Verify PreferencesService was called with correct limit
+        verify(
+          () => mockPreferencesService.getTopSubcategories(limit: 5),
+        ).called(1);
+      },
+    );
 
     /// ✅ TEST 3: getTrendingVideos executes without crashing
     test('getTrendingVideos: executes and returns list', () async {
       // Act: Call REAL SupabaseService method
-      final result = await supabaseService.getTrendingVideos(limit: 50, offset: 0);
+      final result = await supabaseService.getTrendingVideos(
+        limit: 50,
+        offset: 0,
+      );
 
       // Assert: Returns a list
       expect(result, isA<List<Map<String, dynamic>>>());
@@ -130,7 +157,10 @@ void main() {
     test('getFollowingVideos: handles no user ID gracefully', () async {
       // Act: Call REAL SupabaseService method
       // Note: getCurrentUserId() returns null when not authenticated
-      final result = await supabaseService.getFollowingVideos(limit: 50, offset: 0);
+      final result = await supabaseService.getFollowingVideos(
+        limit: 50,
+        offset: 0,
+      );
 
       // Assert: Returns empty list (no user ID means no following videos)
       expect(result, isA<List<Map<String, dynamic>>>());
@@ -140,8 +170,11 @@ void main() {
     /// ✅ TEST 5: getRandomDiscoveryVideos with no watch history
     test('getRandomDiscoveryVideos: handles no watch history', () async {
       // Arrange: Mock preferences to return empty
-      when(() => mockPreferencesService.getTopSubcategories(limit: any(named: 'limit')))
-          .thenAnswer((_) async => []);
+      when(
+        () => mockPreferencesService.getTopSubcategories(
+          limit: any(named: 'limit'),
+        ),
+      ).thenAnswer((_) async => []);
 
       // Act: Call REAL SupabaseService method
       final result = await supabaseService.getRandomDiscoveryVideos(limit: 50);
@@ -150,27 +183,35 @@ void main() {
       expect(result, isA<List<Map<String, dynamic>>>());
 
       // Verify PreferencesService was called
-      verify(() => mockPreferencesService.getTopSubcategories(limit: 5)).called(1);
+      verify(
+        () => mockPreferencesService.getTopSubcategories(limit: 5),
+      ).called(1);
     });
 
     /// ✅ TEST 6: Pagination parameters are accepted
     test('query methods: accept limit and offset parameters', () async {
-      when(() => mockPreferencesService.getTopSubcategories(limit: any(named: 'limit')))
-          .thenAnswer((_) async => topSubcategories);
+      when(
+        () => mockPreferencesService.getTopSubcategories(
+          limit: any(named: 'limit'),
+        ),
+      ).thenAnswer((_) async => topSubcategories);
 
       // Act: Call with custom pagination
-      final result = await supabaseService.getPersonalizedVideos(limit: 25, offset: 10);
+      final result = await supabaseService.getPersonalizedVideos(
+        limit: 25,
+        offset: 10,
+      );
 
       // Assert: Executes without error
       expect(result, isA<List<Map<String, dynamic>>>());
     });
 
-    /// ⚠️ IMPORTANT NOTE: 
+    /// ⚠️ IMPORTANT NOTE:
     /// These tests verify that the methods execute and call PreferencesService correctly.
     /// However, they do NOT verify the actual Supabase database queries because
     /// SupabaseService uses `Supabase.instance.client` (static access) which is hard
     /// to mock in unit tests without refactoring to use dependency injection.
-    /// 
+    ///
     /// To properly test the Supabase queries, we would need EITHER:
     /// 1. Refactor SupabaseService to accept a SupabaseClient parameter
     /// 2. Use integration tests with a real/test Supabase instance
@@ -184,8 +225,8 @@ void main() {
       final video = {
         'id': 'v1',
         'title': 'Test Video',
-        'video_url': 'profiles/user-1/videos/video.mp4',
-        'thumbnail_url': 'profiles/user-1/thumbnails/thumb.png',
+        'video_path': 'profiles/user-1/videos/video.mp4',
+        'thumbnail_path': 'profiles/user-1/thumbnails/thumb.png',
         'user_id': 'user-1',
       };
 
@@ -193,8 +234,10 @@ void main() {
       // We access it through a test helper since it's private
       // For now, we test the logic it should implement:
       const projectUrl = 'https://hsyqamsignfrbsifrkmu.supabase.co';
-      final videoUrl = '$projectUrl/storage/v1/object/public/my_videos/${video['video_url']}';
-      final thumbnailUrl = '$projectUrl/storage/v1/object/public/my-thumbnails/${video['thumbnail_url']}';
+      final videoUrl =
+          '$projectUrl/storage/v1/object/public/my_videos/${video['video_path']}';
+      final thumbnailUrl =
+          '$projectUrl/storage/v1/object/public/my-thumbnails/${video['thumbnail_path']}';
 
       // Assert: URL format is correct
       expect(videoUrl, contains('/storage/v1/object/public/'));
@@ -210,8 +253,10 @@ void main() {
       const videoPath = 'profiles/user-1/videos/video.mp4';
       const thumbPath = 'profiles/user-1/thumbnails/thumb.png';
 
-      final videoUrl = '$projectUrl/storage/v1/object/public/my_videos/$videoPath';
-      final thumbUrl = '$projectUrl/storage/v1/object/public/my-thumbnails/$thumbPath';
+      final videoUrl =
+          '$projectUrl/storage/v1/object/public/my_videos/$videoPath';
+      final thumbUrl =
+          '$projectUrl/storage/v1/object/public/my-thumbnails/$thumbPath';
 
       // Assert
       expect(videoUrl, contains('my_videos'));
@@ -250,10 +295,7 @@ void main() {
       final videos = [videoFromPersonalized, videoFromTrending];
 
       // Act: Build username map and apply
-      final usernameMap = <String, String>{
-        'user-1': 'alice',
-        'user-2': 'bob',
-      };
+      final usernameMap = <String, String>{'user-1': 'alice', 'user-2': 'bob'};
 
       final videosWithUsernames = <Map<String, dynamic>>[];
       for (final video in videos) {
@@ -269,30 +311,31 @@ void main() {
     });
 
     /// ✅ TEST 5: Handles missing usernames with default
-    test('_addUsernamesToVideos: defaults to "Unknown User" for missing usernames', () {
-      final usernameMap = <String, String>{
-        'user-1': 'alice',
-      };
+    test(
+      '_addUsernamesToVideos: defaults to "Unknown User" for missing usernames',
+      () {
+        final usernameMap = <String, String>{'user-1': 'alice'};
 
-      final username = usernameMap['user-999'] ?? 'Unknown User';
+        final username = usernameMap['user-999'] ?? 'Unknown User';
 
-      // Assert
-      expect(username, equals('Unknown User'));
-    });
+        // Assert
+        expect(username, equals('Unknown User'));
+      },
+    );
 
     /// ✅ TEST 6: Handles null fields safely
     test('helper methods: handle null fields without crashing', () {
       final video = {
         'id': 'v1',
         'user_id': null,
-        'video_url': null,
-        'thumbnail_url': null,
+        'video_path': null,
+        'thumbnail_path': null,
       };
 
       // Act: Safe field extraction
       final userId = video['user_id'] ?? 'unknown';
-      final videoPath = video['video_url'] ?? '';
-      final thumbnailPath = video['thumbnail_url'] ?? '';
+      final videoPath = video['video_path'] ?? '';
+      final thumbnailPath = video['thumbnail_path'] ?? '';
 
       // Assert: Defaults applied correctly
       expect(userId, equals('unknown'));
@@ -307,13 +350,15 @@ void main() {
         'title': 'Test Video',
         'bayesian_score': 75.0,
         'user_id': 'user-1',
-        'video_url': 'path/to/video.mp4',
+        'video_path': 'path/to/video.mp4',
       };
 
       const projectUrl = 'https://hsyqamsignfrbsifrkmu.supabase.co';
       final converted = {
         ...video,
-        'video_url': '$projectUrl/storage/v1/object/public/my_videos/${video['video_url']}',
+        'video_path': video['video_path'],
+        'videoPublicUrl':
+            '$projectUrl/storage/v1/object/public/my_videos/${video['video_path']}',
       };
 
       // Assert: All original fields preserved
@@ -392,8 +437,11 @@ void main() {
   group('SupabaseService - Error Handling & Edge Cases', () {
     /// ✅ TEST 1: Handles empty preferences gracefully
     test('error handling: empty preferences returns empty feed', () async {
-      when(() => mockPreferencesService.getTopSubcategories(limit: any(named: 'limit')))
-          .thenAnswer((_) async => []);
+      when(
+        () => mockPreferencesService.getTopSubcategories(
+          limit: any(named: 'limit'),
+        ),
+      ).thenAnswer((_) async => []);
 
       final result = await supabaseService.getPersonalizedVideos();
 
@@ -401,16 +449,22 @@ void main() {
     });
 
     /// ✅ TEST 2: Exception throws properly
-    test('error handling: throws exception when preferences service fails', () async {
-      when(() => mockPreferencesService.getTopSubcategories(limit: any(named: 'limit')))
-          .thenThrow(Exception('Preferences service error'));
+    test(
+      'error handling: throws exception when preferences service fails',
+      () async {
+        when(
+          () => mockPreferencesService.getTopSubcategories(
+            limit: any(named: 'limit'),
+          ),
+        ).thenThrow(Exception('Preferences service error'));
 
-      // Act & Assert: Should throw or handle gracefully
-      // Note: getPersonalizedVideos catches the exception and returns empty list
-      // So we can't use throwsException - instead verify it handles it gracefully
-      final result = await supabaseService.getPersonalizedVideos();
-      expect(result, isA<List<Map<String, dynamic>>>());
-    });
+        // Act & Assert: Should throw or handle gracefully
+        // Note: getPersonalizedVideos catches the exception and returns empty list
+        // So we can't use throwsException - instead verify it handles it gracefully
+        final result = await supabaseService.getPersonalizedVideos();
+        expect(result, isA<List<Map<String, dynamic>>>());
+      },
+    );
 
     /// ✅ TEST 3: Null values in videos
     test('null handling: safely extracts user IDs including nulls', () {
@@ -460,7 +514,10 @@ void main() {
     /// ✅ TEST 6: Zero limit handling
     test('pagination: handles zero limit gracefully', () async {
       // Attempting with 0 limit
-      final result = await supabaseService.getPersonalizedVideos(limit: 0, offset: 0);
+      final result = await supabaseService.getPersonalizedVideos(
+        limit: 0,
+        offset: 0,
+      );
 
       // Should still return a list
       expect(result, isA<List<Map<String, dynamic>>>());
@@ -468,11 +525,17 @@ void main() {
 
     /// ✅ TEST 7: Negative offset handling
     test('pagination: handles negative offset', () async {
-      when(() => mockPreferencesService.getTopSubcategories(limit: any(named: 'limit')))
-          .thenAnswer((_) async => topSubcategories);
+      when(
+        () => mockPreferencesService.getTopSubcategories(
+          limit: any(named: 'limit'),
+        ),
+      ).thenAnswer((_) async => topSubcategories);
 
       // Negative offset should still execute (Supabase will handle validation)
-      final result = await supabaseService.getPersonalizedVideos(limit: 50, offset: -10);
+      final result = await supabaseService.getPersonalizedVideos(
+        limit: 50,
+        offset: -10,
+      );
 
       // Should return a list (success or error)
       expect(result, isA<List<Map<String, dynamic>>>());
@@ -482,8 +545,11 @@ void main() {
   group('SupabaseService - Integration & Real Method Calls', () {
     /// ✅ TEST 1: Verify getPersonalizedVideos is actually called
     test('getPersonalizedVideos: method is callable and executable', () async {
-      when(() => mockPreferencesService.getTopSubcategories(limit: any(named: 'limit')))
-          .thenAnswer((_) async => topSubcategories);
+      when(
+        () => mockPreferencesService.getTopSubcategories(
+          limit: any(named: 'limit'),
+        ),
+      ).thenAnswer((_) async => topSubcategories);
 
       // Ensure SupabaseService has access to PreferencesService via locator
       expect(getIt.isRegistered<PreferencesService>(), isTrue);
@@ -508,14 +574,20 @@ void main() {
     });
 
     /// ✅ TEST 4: Verify getRandomDiscoveryVideos is actually called
-    test('getRandomDiscoveryVideos: method is callable and executable', () async {
-      when(() => mockPreferencesService.getTopSubcategories(limit: any(named: 'limit')))
-          .thenAnswer((_) async => topSubcategories);
+    test(
+      'getRandomDiscoveryVideos: method is callable and executable',
+      () async {
+        when(
+          () => mockPreferencesService.getTopSubcategories(
+            limit: any(named: 'limit'),
+          ),
+        ).thenAnswer((_) async => topSubcategories);
 
-      // Act: Call method and verify it returns a Future
-      final result = supabaseService.getRandomDiscoveryVideos();
-      expect(result, isA<Future<List<Map<String, dynamic>>>>());
-    });
+        // Act: Call method and verify it returns a Future
+        final result = supabaseService.getRandomDiscoveryVideos();
+        expect(result, isA<Future<List<Map<String, dynamic>>>>());
+      },
+    );
 
     /// ✅ TEST 5: Service methods are public and exposed
     test('all public methods exist on SupabaseService', () {
@@ -528,8 +600,11 @@ void main() {
 
     /// ✅ TEST 6: Service handles async/await correctly
     test('async/await: service methods return Futures correctly', () async {
-      when(() => mockPreferencesService.getTopSubcategories(limit: any(named: 'limit')))
-          .thenAnswer((_) async => topSubcategories);
+      when(
+        () => mockPreferencesService.getTopSubcategories(
+          limit: any(named: 'limit'),
+        ),
+      ).thenAnswer((_) async => topSubcategories);
 
       // Act: Await each method
       final personalizedFuture = supabaseService.getPersonalizedVideos();
@@ -566,4 +641,3 @@ void main() {
     });
   });
 }
-

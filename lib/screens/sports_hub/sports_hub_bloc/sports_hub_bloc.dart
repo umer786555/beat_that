@@ -62,12 +62,12 @@ class SportsHubBloc extends Bloc<SportsHubEvent, SportsHubState> {
   }
 
   /// Get ordered sport IDs based on locale with fallback chain
-  /// 
+  ///
   /// Priority order:
   /// 1. Full locale match (language_COUNTRY) - e.g., 'en_IN' for India
   /// 2. Language-only match - e.g., 'en' for any English region
   /// 3. Default English ordering - fallback for unknown locales
-  /// 
+  ///
   /// Example:
   /// - User in India (Locale('en', 'IN')) → tries 'en_IN' → if found, return cricket-first order
   /// - User in France (Locale('fr', 'FR')) → tries 'fr_FR' → if not found, tries 'fr' → if found, return soccer-first order
@@ -77,7 +77,7 @@ class SportsHubBloc extends Bloc<SportsHubEvent, SportsHubState> {
 
     // Construct full locale string (e.g., 'en_IN', 'de_DE')
     final fullLocale = '${locale.languageCode}_${locale.countryCode}';
-    
+
     // Try full match first, then language-only, then default
     return sportOrderByLocale[fullLocale] ??
         sportOrderByLocale[locale.languageCode] ??
@@ -85,7 +85,7 @@ class SportsHubBloc extends Bloc<SportsHubEvent, SportsHubState> {
   }
 
   /// Build a Sport object from a sport ID and its subcategories
-  /// 
+  ///
   /// Uses helper functions to infer the display name and icon from the sport ID
   /// Subcategories are fetched from Supabase database
   Sport? _buildSport(String sportId, List<SportSubcategory> subcategories) {
@@ -94,6 +94,7 @@ class SportsHubBloc extends Bloc<SportsHubEvent, SportsHubState> {
       name: sportId,
       displayName: getDisplayNameForSport(sportId),
       icon: getIconForSport(sportId),
+      imageAssetPath: getImageAssetPathForSport(sportId),
       subcategories: subcategories, // From Supabase
     );
   }
@@ -104,9 +105,6 @@ class SportsHubBloc extends Bloc<SportsHubEvent, SportsHubState> {
     RetrySportsEvent event,
     Emitter<SportsHubState> emit,
   ) async {
-    await _onFetchSports(
-      FetchSportsEvent(locale: event.locale),
-      emit,
-    );
+    await _onFetchSports(FetchSportsEvent(locale: event.locale), emit);
   }
 }

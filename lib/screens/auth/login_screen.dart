@@ -40,11 +40,18 @@ class LoginScreen extends StatelessWidget {
           return Scaffold(
             backgroundColor: AppColors.black,
             appBar: AppBar(
-              title: const Text(AppStrings.login),
               elevation: 0,
-              centerTitle: true,
               backgroundColor: AppColors.black,
               foregroundColor: AppColors.white,
+              centerTitle: true,
+              title: Text(
+                AppStrings.login,
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: -0.5,
+                  color: AppColors.white,
+                ),
+              ),
             ),
             body: GestureDetector(
               onTap: () {
@@ -98,7 +105,7 @@ class LoginScreen extends StatelessWidget {
                       enabled: !isLoading,
                       keyboardType: TextInputType.emailAddress,
                       initialValue: email,
-                      style: getAuthTextFormFieldStyle(),
+                    //  style: getAuthTextFormFieldStyle(),
                       decoration: InputDecoration(
                         hintText: AppStrings.enterYourEmail,
                         labelText: AppStrings.email,
@@ -112,6 +119,8 @@ class LoginScreen extends StatelessWidget {
 
                     // Password field
                     TextFormField(
+                      
+                      
                       cursorColor: AppColors.cyan,
                       onChanged: (value) {
                         HapticFeedback.lightImpact();
@@ -122,8 +131,9 @@ class LoginScreen extends StatelessWidget {
                       enabled: !isLoading,
                       obscureText: obscurePassword,
                       initialValue: password,
-                      style: getAuthTextFormFieldStyle(),
+                      //style: getAuthTextFormFieldStyle(),
                       decoration: InputDecoration(
+                        
                         hintText: AppStrings.enterYourPassword,
                         labelText: AppStrings.password,
                         prefixIcon: Icon(

@@ -24,7 +24,18 @@ class SettingsScreen extends StatelessWidget {
         showErrorSnackBar(context, message: state.errorMessage!);
       },
       child: Scaffold(
-        appBar: AppBar(title: const Text(AppStrings.settings)),
+        appBar: AppBar(
+          elevation: 0,
+          backgroundColor: Colors.transparent,
+          centerTitle: true,
+          title: Text(
+            AppStrings.settings,
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.w800,
+              letterSpacing: -0.5,
+            ),
+          ),
+        ),
         body: ListView(
           padding: const EdgeInsets.all(16),
           children: [
@@ -44,6 +55,7 @@ class SettingsScreen extends StatelessWidget {
                 title: const Text(AppStrings.darkTheme),
                 subtitle: const Text(AppStrings.darkThemeDescription),
                 onChanged: (_) {
+                  HapticFeedback.mediumImpact();
                   context.read<ThemeBloc>().add(ToggleThemeEvent());
                 },
               ),

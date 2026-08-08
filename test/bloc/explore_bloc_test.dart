@@ -37,7 +37,9 @@ void main() {
             {
               'id': 'video-1',
               'title': 'Baseline drill',
-              'thumbnail_url': 'https://example.com/thumb1.jpg',
+              'thumbnailUrl': 'https://example.com/thumb1.jpg',
+              'thumbnail_path': 'profiles/user-1/thumbnails/thumb1.jpg',
+              'video_path': 'profiles/user-1/videos/video1.mp4',
               'username': 'coach1',
             },
           ],

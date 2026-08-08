@@ -54,14 +54,18 @@ class VideoFeedCard extends StatelessWidget {
         ? getIconForSport(sportId!)
         : null;
 
-    return GestureDetector(
-      onTap: onTap,
-      onLongPress: onLongPress,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(20),
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        onLongPress: onLongPress,
+        splashFactory: InkSplash.splashFactory,
+        borderRadius: BorderRadius.circular(8),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
             Image.network(
               thumbnailUrl,
               fit: BoxFit.cover,
@@ -84,16 +88,15 @@ class VideoFeedCard extends StatelessWidget {
             ),
             DecoratedBox(
               decoration: BoxDecoration(
-                border: Border.all(color: Colors.white.withOpacity(0.10)),
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: [
-                    Colors.black.withOpacity(0.02),
-                    Colors.black.withOpacity(0.10),
-                    Colors.black.withOpacity(0.78),
+                    Colors.black.withOpacity(0.0),
+                    Colors.black.withOpacity(0.0),
+                    Colors.black.withOpacity(0.60),
                   ],
-                  stops: const [0.0, 0.42, 1.0],
+                  stops: const [0.0, 0.4, 1.0],
                 ),
               ),
             ),
@@ -164,6 +167,7 @@ class VideoFeedCard extends StatelessWidget {
               ),
             ),
           ],
+        ),
         ),
       ),
     );

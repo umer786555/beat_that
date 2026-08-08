@@ -52,11 +52,18 @@ class SignupScreen extends StatelessWidget {
           return Scaffold(
             backgroundColor: AppColors.black,
             appBar: AppBar(
-              title: const Text(AppStrings.signUp),
               elevation: 0,
-              centerTitle: true,
               backgroundColor: AppColors.black,
               foregroundColor: AppColors.white,
+              centerTitle: true,
+              title: Text(
+                AppStrings.signUp,
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: -0.5,
+                  color: AppColors.white,
+                ),
+              ),
             ),
             body: GestureDetector(
               onTap: () {
@@ -112,7 +119,7 @@ class SignupScreen extends StatelessWidget {
                       enabled: !isLoading,
                       keyboardType: TextInputType.emailAddress,
                       initialValue: email,
-                      style: getAuthTextFormFieldStyle(),
+                      //style: getAuthTextFormFieldStyle(),
                       decoration: InputDecoration(
                         hintText: AppStrings.enterYourEmail,
                         labelText: AppStrings.email,
@@ -136,7 +143,7 @@ class SignupScreen extends StatelessWidget {
                       enabled: !isLoading,
                       obscureText: obscurePassword,
                       initialValue: password,
-                      style: getAuthTextFormFieldStyle(),
+                      //style: getAuthTextFormFieldStyle(),
                       decoration: InputDecoration(
                         hintText: AppStrings.createAPassword,
                         labelText: AppStrings.password,
@@ -177,7 +184,7 @@ class SignupScreen extends StatelessWidget {
                       enabled: !isLoading,
                       obscureText: obscureConfirmPassword,
                       initialValue: confirmPassword,
-                      style: getAuthTextFormFieldStyle(),
+                      //style: getAuthTextFormFieldStyle(),
                       decoration: InputDecoration(
                         hintText: AppStrings.confirmYourPassword,
                         labelText: AppStrings.confirmPassword,

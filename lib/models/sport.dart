@@ -7,6 +7,7 @@ class Sport {
   final String name;
   final String displayName;
   final IconData icon;
+  final String? imageAssetPath;
   final List<SportSubcategory> subcategories;
 
   const Sport({
@@ -14,6 +15,7 @@ class Sport {
     required this.name,
     required this.displayName,
     required this.icon,
+    this.imageAssetPath,
     required this.subcategories,
   });
 }

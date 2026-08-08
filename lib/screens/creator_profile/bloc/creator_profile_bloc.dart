@@ -1,5 +1,5 @@
 import 'package:beat_that/models/user_personal_profile.dart';
-import 'package:beat_that/models/video_thumbnail_model.dart';
+import 'package:beat_that/models/my_video.dart';
 import 'package:beat_that/service_locator.dart';
 import 'package:beat_that/services/supabase_service.dart';
 import 'package:bloc_presentation/bloc_presentation.dart';
@@ -53,7 +53,7 @@ class CreatorProfileBloc extends Bloc<CreatorProfileEvent, CreatorProfileState>
       }
 
       final profile = result['profile'] as UserPersonalProfile;
-      final videos = result['videos'] as List<VideoThumbnailModel>;
+      final videos = result['videos'] as List<MyVideo>;
       final totalVideoCount =
           result['totalVideoCount'] as int? ?? videos.length;
       final hasMoreVideos = result['hasMoreVideos'] == true;
@@ -106,7 +106,7 @@ class CreatorProfileBloc extends Bloc<CreatorProfileEvent, CreatorProfileState>
         return;
       }
 
-      final newVideos = result['videos'] as List<VideoThumbnailModel>;
+      final newVideos = result['videos'] as List<MyVideo>;
       final hasMoreVideos = result['hasMoreVideos'] == true;
       if (newVideos.isEmpty) {
         emit(currentState.copyWith(hasMoreVideos: false, isLoadingMore: false));

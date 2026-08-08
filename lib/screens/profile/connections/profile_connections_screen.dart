@@ -1,9 +1,13 @@
 import 'dart:async';
 
 import 'package:beat_that/constants/app_colors.dart';
-import 'package:beat_that/models/user_profile_summary.dart';
 import 'package:beat_that/routes/app_router.dart';
 import 'package:beat_that/screens/profile/connections/bloc/profile_connections_bloc.dart';
+import 'package:beat_that/screens/profile/connections/connection_list_tile.dart';
+import 'package:beat_that/screens/profile/connections/connections_list_footer.dart';
+import 'package:beat_that/screens/profile/connections/connections_search_field.dart';
+import 'package:beat_that/screens/profile/connections/empty_connections_widget.dart';
+import 'package:beat_that/widgets/error_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -24,17 +28,14 @@ class _ProfileConnectionsScreenState extends State<ProfileConnectionsScreen> {
   static const double _scrollTriggerDistance = 200;
   final TextEditingController _searchController = TextEditingController();
   late final ScrollController _scrollController;
+  late final ProfileConnectionsBloc _bloc;
   Timer? _debounce;
-
-  String get _title {
-    return widget.connectionType == ProfileConnectionsType.followers
-        ? 'Followers'
-        : 'Following';
-  }
 
   @override
   void initState() {
     super.initState();
+    _bloc = ProfileConnectionsBloc(connectionType: widget.connectionType)
+      ..add(const LoadProfileConnectionsEvent());
     _scrollController = ScrollController()..addListener(_onScroll);
   }
 
@@ -45,6 +46,7 @@ class _ProfileConnectionsScreenState extends State<ProfileConnectionsScreen> {
     _scrollController
       ..removeListener(_onScroll)
       ..dispose();
+    _bloc.close();
     super.dispose();
   }
 
@@ -56,9 +58,7 @@ class _ProfileConnectionsScreenState extends State<ProfileConnectionsScreen> {
     final triggerDistance =
         _scrollController.position.maxScrollExtent - _scrollTriggerDistance;
     if (_scrollController.position.pixels >= triggerDistance) {
-      context.read<ProfileConnectionsBloc>().add(
-        const LoadMoreProfileConnectionsEvent(),
-      );
+      _bloc.add(const LoadMoreProfileConnectionsEvent());
     }
   }
 
@@ -70,9 +70,7 @@ class _ProfileConnectionsScreenState extends State<ProfileConnectionsScreen> {
     _debounce?.cancel();
 
     if (value.trim().isEmpty) {
-      context.read<ProfileConnectionsBloc>().add(
-        const SearchProfileConnectionsEvent(query: ''),
-      );
+      _bloc.add(const SearchProfileConnectionsEvent(query: ''));
       return;
     }
 
@@ -81,9 +79,7 @@ class _ProfileConnectionsScreenState extends State<ProfileConnectionsScreen> {
         return;
       }
 
-      context.read<ProfileConnectionsBloc>().add(
-        SearchProfileConnectionsEvent(query: value),
-      );
+      _bloc.add(SearchProfileConnectionsEvent(query: value));
     });
   }
 
@@ -92,129 +88,125 @@ class _ProfileConnectionsScreenState extends State<ProfileConnectionsScreen> {
     _debounce?.cancel();
     _searchController.clear();
     setState(() {});
-    context.read<ProfileConnectionsBloc>().add(
-      const SearchProfileConnectionsEvent(query: ''),
-    );
+    _bloc.add(const SearchProfileConnectionsEvent(query: ''));
   }
 
   Future<void> _onRefresh() async {
-    final bloc = context.read<ProfileConnectionsBloc>();
-    final refreshCompletion = bloc.stream.firstWhere(
+    final refreshCompletion = _bloc.stream.firstWhere(
       (state) =>
           state is ProfileConnectionsLoaded || state is ProfileConnectionsError,
     );
 
-    bloc.add(const LoadProfileConnectionsEvent(forceRefresh: true));
+    _bloc.add(const LoadProfileConnectionsEvent(forceRefresh: true));
     await refreshCompletion;
   }
 
   @override
   Widget build(BuildContext context) {
+    final isFollowers =
+        widget.connectionType == ProfileConnectionsType.followers;
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final title = isFollowers ? 'Followers' : 'Following';
+    final searchHint = isFollowers ? 'Search followers' : 'Search following';
+    final emptyTitle = isFollowers
+        ? 'No followers yet'
+        : 'Not following anyone';
+    final emptyDescription = isFollowers
+        ? 'When people follow you, they will appear here.'
+        : 'When you follow people, they will appear here.';
+    final emptyIcon = isFollowers
+        ? Icons.group_outlined
+        : Icons.person_add_alt_1_outlined;
+    final emptyAccent = isFollowers
+        ? (isDark ? AppColors.cyan : AppColors.blue)
+        : (isDark ? AppColors.greenLight : AppColors.green);
+    final noResultsAccent = isDark ? AppColors.orangeLight : AppColors.orange;
 
-    return BlocProvider(
-      create: (context) =>
-          ProfileConnectionsBloc(connectionType: widget.connectionType)
-            ..add(const LoadProfileConnectionsEvent()),
+    return BlocProvider.value(
+      value: _bloc,
       child: Scaffold(
-        appBar: AppBar(title: Text(_title)),
-        body: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-              child: TextField(
-                controller: _searchController,
-                onChanged: _onQueryChanged,
-                textInputAction: TextInputAction.search,
-                decoration: InputDecoration(
-                  hintText:
-                      widget.connectionType == ProfileConnectionsType.followers
-                      ? 'Search followers'
-                      : 'Search following',
-                  prefixIcon: const Icon(Icons.search),
-                  suffixIcon: _searchController.text.isEmpty
-                      ? null
-                      : IconButton(
-                          onPressed: _clearSearch,
-                          icon: const Icon(Icons.close),
-                        ),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  contentPadding: const EdgeInsets.symmetric(vertical: 14),
-                ),
-              ),
+        appBar: AppBar(
+          elevation: 0,
+          backgroundColor: Colors.transparent,
+          centerTitle: true,
+          title: Text(
+            title,
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.w800,
+              letterSpacing: -0.5,
             ),
-            Expanded(
-              child: BlocBuilder<ProfileConnectionsBloc, ProfileConnectionsState>(
-                builder: (context, state) {
-                  if (state is ProfileConnectionsLoading ||
-                      state is ProfileConnectionsInitial) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
+          ),
+        ),
+        body: BlocBuilder<ProfileConnectionsBloc, ProfileConnectionsState>(
+          builder: (context, state) {
+            if (state is ProfileConnectionsLoading ||
+                state is ProfileConnectionsInitial) {
+              return const Center(child: CircularProgressIndicator());
+            }
 
-                  if (state is ProfileConnectionsError) {
-                    return Center(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 24),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.error_outline,
-                              size: 56,
-                              color: isDark
-                                  ? AppColors.cyan
-                                  : AppColors.electricMagenta,
-                            ),
-                            const SizedBox(height: 16),
-                            Text(
-                              state.message,
-                              textAlign: TextAlign.center,
-                              style: const TextStyle(color: Colors.grey),
-                            ),
-                            const SizedBox(height: 24),
-                            ElevatedButton(
-                              onPressed: () {
-                                context.read<ProfileConnectionsBloc>().add(
-                                  const LoadProfileConnectionsEvent(
-                                    forceRefresh: true,
-                                  ),
-                                );
-                              },
-                              child: const Text('Retry'),
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  }
+            if (state is ProfileConnectionsError) {
+              return ErrorScreen(
+                message: state.message,
+                primaryButtonText: 'Retry',
+                primaryButtonCallback: () {
+                  _bloc.add(
+                    const LoadProfileConnectionsEvent(forceRefresh: true),
+                  );
+                },
+              );
+            }
 
-                  final loadedState = state as ProfileConnectionsLoaded;
-                  if (loadedState.users.isEmpty) {
-                    final hasSearchQuery = loadedState.searchQuery.isNotEmpty;
-                    return Center(
-                      child: Text(
-                        hasSearchQuery
-                            ? widget.connectionType ==
-                                      ProfileConnectionsType.followers
-                                  ? 'No followers match your search'
-                                  : 'No following users match your search'
-                            : widget.connectionType ==
-                                  ProfileConnectionsType.followers
-                            ? 'No followers yet'
-                            : 'Not following anyone yet',
-                        style: const TextStyle(color: Colors.grey),
-                      ),
-                    );
-                  }
+            final loadedState = state as ProfileConnectionsLoaded;
+            final hasSearchQuery = loadedState.searchQuery.isNotEmpty;
+            final isInitialEmptyState =
+                loadedState.users.isEmpty && !hasSearchQuery;
 
-                  final showLoadingFooter = loadedState.isLoadingMore;
-                  final showEndFooter =
-                      !loadedState.hasMoreContent && !loadedState.isLoadingMore;
-                  final hasSearchQuery = loadedState.searchQuery.isNotEmpty;
+            if (isInitialEmptyState) {
+              return EmptyConnectionsWidget(
+                title: emptyTitle,
+                description: emptyDescription,
+                icon: emptyIcon,
+                accentColor: emptyAccent,
+              );
+            }
 
-                  return RefreshIndicator(
+            if (loadedState.users.isEmpty) {
+              return Column(
+                children: [
+                  ConnectionsSearchField(
+                    controller: _searchController,
+                    hintText: searchHint,
+                    onChanged: _onQueryChanged,
+                    onClear: _clearSearch,
+                  ),
+                  Expanded(
+                    child: EmptyConnectionsWidget(
+                      title: 'No matches found',
+                      description: isFollowers
+                          ? 'No followers match your search. Try a different name or username.'
+                          : 'No following users match your search. Try a different name or username.',
+                      icon: Icons.search_off_rounded,
+                      accentColor: noResultsAccent,
+                    ),
+                  ),
+                ],
+              );
+            }
+
+            final showLoadingFooter = loadedState.isLoadingMore;
+            final showEndFooter =
+                !loadedState.hasMoreContent && !loadedState.isLoadingMore;
+
+            return Column(
+              children: [
+                ConnectionsSearchField(
+                  controller: _searchController,
+                  hintText: searchHint,
+                  onChanged: _onQueryChanged,
+                  onClear: _clearSearch,
+                ),
+                Expanded(
+                  child: RefreshIndicator(
                     onRefresh: _onRefresh,
                     child: ListView.separated(
                       controller: _scrollController,
@@ -226,82 +218,34 @@ class _ProfileConnectionsScreenState extends State<ProfileConnectionsScreen> {
                           const Divider(height: 1),
                       itemBuilder: (context, index) {
                         if (index >= loadedState.users.length) {
-                          if (showLoadingFooter) {
-                            return const Padding(
-                              padding: EdgeInsets.symmetric(vertical: 16),
-                              child: Center(child: CircularProgressIndicator()),
-                            );
-                          }
-
-                          return Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 20),
-                            child: Center(
-                              child: Text(
-                                hasSearchQuery
-                                    ? 'You have reached the end of your search results'
-                                    : widget.connectionType ==
-                                          ProfileConnectionsType.followers
-                                    ? 'You have reached the end of your followers list'
-                                    : 'You have reached the end of your following list',
-                                style: TextStyle(
-                                  color: Colors.grey.shade600,
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                                textAlign: TextAlign.center,
-                              ),
-                            ),
+                          return ConnectionsListFooter(
+                            isLoading: showLoadingFooter,
+                            message: hasSearchQuery
+                                ? 'You have reached the end of your search results'
+                                : isFollowers
+                                ? 'You have reached the end of your followers list'
+                                : 'You have reached the end of your following list',
                           );
                         }
 
                         final user = loadedState.users[index];
-                        return _ConnectionListTile(user: user, isDark: isDark);
+                        return ConnectionListTile(
+                          user: user,
+                          onTap: () {
+                            context.pushNamed(
+                              'creator-profile',
+                              extra: CreatorProfileExtra(userId: user.id),
+                            );
+                          },
+                        );
                       },
                     ),
-                  );
-                },
-              ),
-            ),
-          ],
+                  ),
+                ),
+              ],
+            );
+          },
         ),
-      ),
-    );
-  }
-}
-
-class _ConnectionListTile extends StatelessWidget {
-  const _ConnectionListTile({required this.user, required this.isDark});
-
-  final UserProfileSummary user;
-  final bool isDark;
-
-  @override
-  Widget build(BuildContext context) {
-    return ListTile(
-      onTap: () {
-        HapticFeedback.mediumImpact();
-        context.pushNamed(
-          'creator-profile',
-          extra: CreatorProfileExtra(userId: user.id),
-        );
-      },
-      leading: CircleAvatar(
-        backgroundColor: isDark
-            ? AppColors.cyan.withValues(alpha: 0.14)
-            : AppColors.electricMagenta.withValues(alpha: 0.12),
-        backgroundImage: user.profileUrl != null && user.profileUrl!.isNotEmpty
-            ? NetworkImage(user.profileUrl!)
-            : null,
-        child: user.profileUrl == null || user.profileUrl!.isEmpty
-            ? Icon(
-                Icons.person,
-                color: isDark ? AppColors.cyan : AppColors.electricMagenta,
-              )
-            : null,
-      ),
-      title: Text(
-        user.username,
-        style: const TextStyle(fontWeight: FontWeight.w600),
       ),
     );
   }

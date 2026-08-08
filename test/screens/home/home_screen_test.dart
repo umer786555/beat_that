@@ -21,7 +21,9 @@ void main() {
   const loadedVideos = [
     {
       'id': 'video-1',
-      'thumbnail_url': 'https://example.com/thumb1.jpg',
+      'thumbnailUrl': 'https://example.com/thumb1.jpg',
+      'thumbnail_path': 'profiles/user-1/thumbnails/thumb1.jpg',
+      'video_path': 'profiles/user-1/videos/video1.mp4',
       'title': 'Top spin rally',
       'username': 'user1',
       'view_count': 100,
@@ -30,7 +32,9 @@ void main() {
     },
     {
       'id': 'video-2',
-      'thumbnail_url': 'https://example.com/thumb2.jpg',
+      'thumbnailUrl': 'https://example.com/thumb2.jpg',
+      'thumbnail_path': 'profiles/user-2/thumbnails/thumb2.jpg',
+      'video_path': 'profiles/user-2/videos/video2.mp4',
       'title': 'Winning serve',
       'username': 'user2',
       'view_count': 50,

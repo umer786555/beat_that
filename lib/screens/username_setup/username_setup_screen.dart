@@ -106,7 +106,7 @@ class _UsernameSetupScreenState extends State<UsernameSetupScreen> {
                             controller: _usernameController,
                             enabled: !isLoading,
 
-                            style: getAuthTextFormFieldStyle(),
+                           // style: getAuthTextFormFieldStyle(),
                             decoration: InputDecoration(
                               hintText: 'Enter your username',
                               labelText: 'Username',

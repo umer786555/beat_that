@@ -9,8 +9,9 @@ void main() {
         'title': 'Test Video',
         'description': 'Test description',
         'user_id': 'user-1',
-        'thumbnail_url': 'https://example.com/thumb.jpg',
-        'video_url': 'https://example.com/video.mov',
+        'thumbnailUrl': 'https://example.com/thumb.jpg',
+        'thumbnail_path': 'profiles/user-1/thumbnails/thumb.jpg',
+        'video_path': 'profiles/user-1/videos/video.mov',
         'view_count': 100,
         'average_rating': 4.5,
         'bayesian_score': 75.0,
@@ -21,8 +22,9 @@ void main() {
       expect(video['id'], isNotEmpty);
       expect(video['title'], isNotEmpty);
       expect(video['user_id'], isNotEmpty);
-      expect(video['thumbnail_url'], isNotEmpty);
-      expect(video['video_url'], isNotEmpty);
+      expect(video['thumbnailUrl'], isNotEmpty);
+      expect(video['thumbnail_path'], isNotEmpty);
+      expect(video['video_path'], isNotEmpty);
       expect(video['view_count'], isA<int>());
       expect(video['average_rating'], isA<double>());
     });
@@ -33,8 +35,9 @@ void main() {
         'id': 'video-1',
         'title': 'Test Video',
         'user_id': 'user-1',
-        'thumbnail_url': 'https://example.com/thumb.jpg',
-        'video_url': 'https://example.com/video.mov',
+        'thumbnailUrl': 'https://example.com/thumb.jpg',
+        'thumbnail_path': 'profiles/user-1/thumbnails/thumb.jpg',
+        'video_path': 'profiles/user-1/videos/video.mov',
         'view_count': 100,
         'average_rating': 4.5,
         'bayesian_score': 75.0,
@@ -283,13 +286,13 @@ void main() {
         'id': 'v1',
         'title': 'Video',
         'user_id': 'u1',
-        'thumbnail_url': 'https://example.com/thumb.jpg',
+        'thumbnailUrl': 'https://example.com/thumb.jpg',
       };
 
       expect(video['id'], isNotNull);
       expect(video['title'], isNotNull);
       expect(video['user_id'], isNotNull);
-      expect(video['thumbnail_url'], isNotNull);
+      expect(video['thumbnailUrl'], isNotNull);
     });
   });
 }

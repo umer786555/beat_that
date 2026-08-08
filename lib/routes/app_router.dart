@@ -170,6 +170,7 @@ class _RouteExtraDecoder extends Converter<Object?, Object?> {
                 name: sportId,
                 displayName: getDisplayNameForSport(sportId),
                 icon: getIconForSport(sportId),
+                imageAssetPath: getImageAssetPathForSport(sportId),
                 subcategories: [],
               )
             : null,
@@ -187,6 +188,7 @@ class _RouteExtraDecoder extends Converter<Object?, Object?> {
           name: sportId,
           displayName: getDisplayNameForSport(sportId),
           icon: getIconForSport(sportId),
+          imageAssetPath: getImageAssetPathForSport(sportId),
           subcategories: [],
         ),
         selectedSubcategory: selectedSubcategory,
@@ -205,6 +207,7 @@ class _RouteExtraDecoder extends Converter<Object?, Object?> {
         name: sportId,
         displayName: getDisplayNameForSport(sportId),
         icon: getIconForSport(sportId),
+        imageAssetPath: getImageAssetPathForSport(sportId),
         subcategories: subcategories,
       );
       return SportDetailsExtra(sport: sport);
@@ -746,7 +749,18 @@ class AppRouter {
 
       /// Error handling for undefined routes
       errorBuilder: (context, state) => Scaffold(
-        appBar: AppBar(title: const Text('Error')),
+        appBar: AppBar(
+          elevation: 0,
+          backgroundColor: Colors.transparent,
+          centerTitle: true,
+          title: Text(
+            'Error',
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.w800,
+              letterSpacing: -0.5,
+            ),
+          ),
+        ),
         body: Center(child: Text('Page not found: ${state.error}')),
       ),
     );

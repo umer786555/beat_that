@@ -5,11 +5,8 @@ class VideoThumbnailModel {
   /// Signed URL for the thumbnail image (7 days expiry)
   final String thumbnailUrl;
 
-  /// Video playback reference.
-  ///
-  /// For profile-style grids this may be a storage path resolved lazily on
-  /// playback. Other flows may populate it with an already resolved URL.
-  final String videoUrl;
+  /// Storage path for the video (used for playback resolution)
+  final String videoPath;
 
   /// Video title
   final String title;
@@ -38,13 +35,10 @@ class VideoThumbnailModel {
   /// Storage path for the thumbnail (used for deletion)
   final String thumbnailPath;
 
-  /// Storage path for the video (used for deletion)
-  final String videoPath;
-
   VideoThumbnailModel({
     required this.id,
     required this.thumbnailUrl,
-    required this.videoUrl,
+    required this.videoPath,
     required this.title,
     this.sportId,
     this.subcategoryId,
@@ -54,15 +48,14 @@ class VideoThumbnailModel {
     required this.averageRating,
     required this.createdAt,
     required this.thumbnailPath,
-    required this.videoPath,
   });
 
   /// Create VideoThumbnailModel from JSON response
   factory VideoThumbnailModel.fromJson(Map<String, dynamic> json) {
     return VideoThumbnailModel(
       id: json['id'] as String,
-      thumbnailUrl: json['thumbnail_url'] as String,
-      videoUrl: json['video_url'] as String,
+      thumbnailUrl: json['thumbnailUrl'] as String,
+      videoPath: json['video_path'] as String,
       title: json['title'] as String? ?? 'Untitled',
       sportId: json['sport_id'] as String?,
       subcategoryId: json['subcategory_id'] as int?,
@@ -72,7 +65,6 @@ class VideoThumbnailModel {
       averageRating: (json['average_rating'] as num?)?.toDouble() ?? 0.0,
       createdAt: json['created_at'] as String,
       thumbnailPath: json['thumbnail_path'] as String,
-      videoPath: json['video_path'] as String,
     );
   }
 }

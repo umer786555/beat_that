@@ -12,7 +12,7 @@ final class ProfileInitial extends ProfileState {}
 final class ProfileLoaded extends ProfileState {
   final bool cameraPermissionEnabled;
   final bool galleryPermissionEnabled;
-  final List<VideoThumbnailModel> thumbnails;
+  final List<MyVideo> myVideo;
   final String? username;
   final String? profileUrl;
   final bool isDeletingVideo;
@@ -20,7 +20,7 @@ final class ProfileLoaded extends ProfileState {
   const ProfileLoaded({
     required this.cameraPermissionEnabled,
     required this.galleryPermissionEnabled,
-    this.thumbnails = const [],
+    this.myVideo = const [],
     this.username,
     this.profileUrl,
     this.isDeletingVideo = false,
@@ -30,7 +30,7 @@ final class ProfileLoaded extends ProfileState {
   List<Object> get props => [
     cameraPermissionEnabled,
     galleryPermissionEnabled,
-    thumbnails,
+    myVideo,
     username ?? '',
     profileUrl ?? '',
     isDeletingVideo,
@@ -40,7 +40,7 @@ final class ProfileLoaded extends ProfileState {
     AppThemeMode? currentTheme,
     bool? cameraPermissionEnabled,
     bool? galleryPermissionEnabled,
-    List<VideoThumbnailModel>? thumbnails,
+    List<MyVideo>? thumbnails,
     String? username,
     String? profileUrl,
     bool? isDeletingVideo,
@@ -50,7 +50,7 @@ final class ProfileLoaded extends ProfileState {
           cameraPermissionEnabled ?? this.cameraPermissionEnabled,
       galleryPermissionEnabled:
           galleryPermissionEnabled ?? this.galleryPermissionEnabled,
-      thumbnails: thumbnails ?? this.thumbnails,
+      myVideo: thumbnails ?? this.myVideo,
       username: username ?? this.username,
       profileUrl: profileUrl ?? this.profileUrl,
       isDeletingVideo: isDeletingVideo ?? this.isDeletingVideo,

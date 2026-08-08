@@ -281,9 +281,9 @@ class AppThemes {
           vertical: 18,
         ),
 
-        hintStyle: TextStyle(color: AppColors.white, fontSize: 14),
+        hintStyle: const TextStyle(color: AppColors.white, fontSize: 14),
 
-        labelStyle: TextStyle(
+        labelStyle: const TextStyle(
           color: AppColors.white,
           fontSize: 13,
           fontWeight: FontWeight.w500,

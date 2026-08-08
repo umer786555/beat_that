@@ -1,5 +1,5 @@
 import 'package:beat_that/models/user_personal_profile.dart';
-import 'package:beat_that/models/video_thumbnail_model.dart';
+import 'package:beat_that/models/my_video.dart';
 import 'package:beat_that/service_locator.dart';
 import 'package:equatable/equatable.dart';
 import 'dart:io';
@@ -14,6 +14,7 @@ import 'package:beat_that/services/video_picker_service.dart';
 import 'package:bloc_presentation/bloc_presentation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' show RealtimeChannel;
 part 'profile_event.dart';
 part 'profile_presentation_event.dart';
 part 'profile_state.dart';
@@ -29,11 +30,16 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState>
   // Cache user profile at block level for access across all handlers
   late UserPersonalProfile? userProfile;
 
+  // Realtime channel for listening to video approval changes
+  // Stored at bloc level to enable proper cleanup on close()
+  RealtimeChannel? _approvalChannel;
+
   ProfileBloc() : super(ProfileInitial()) {
     on<LoadProfileEvent>(_onLoadProfile);
     on<AddProfileImageEvent>(_onAddProfileImage);
     on<DeleteVideoEvent>(_onDeleteVideo);
     on<RefreshVideosEvent>(_onRefreshVideos);
+    on<VideoApprovalUpdatedEvent>(_onVideoApprovalUpdated);
   }
 
   /// Load profile data and fetch thumbnail URLs
@@ -55,8 +61,8 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState>
       final galleryPermissionEnabled = await permissionService
           .checkPhotosPermissionOnLoad();
 
-      // Step 2: Fetch all thumbnail URLs
-      final thumbnails = await supabaseService.getAllThumbnailUrls();
+      // Step 2: Fetch all thumbnail URLs for the current user's videos from Supabase 
+      final myVideos = await supabaseService.getMyVideo();
 
       // Step 3: Fetch the username from preferences and cache at block level
       userProfile = await preferencesService.fetchUserProfile();
@@ -66,13 +72,45 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState>
         ProfileLoaded(
           cameraPermissionEnabled: cameraPermissionEnabled,
           galleryPermissionEnabled: galleryPermissionEnabled,
-          thumbnails: thumbnails,
+          myVideo: myVideos,
           username: userProfile?.username,
           profileUrl: userProfile?.profileUrl,
         ),
       );
+
+      // ==================== Setup Realtime Listener ====================
+      // Only subscribe to approval changes if any video has a null approved status
+      final hasNullApproval = myVideos.any((video) => video.approved == null);
+
+      if (hasNullApproval) {
+        print('[PROFILE] Videos with null approval detected - subscribing to realtime updates');
+        _subscribeToApprovalChanges();
+      } else {
+        print('[PROFILE] All videos have approval status - realtime listener not needed');
+      }
     } catch (e) {
       emit(ProfileError(message: '${AppStrings.failedToLoadProfile}: $e'));
+    }
+  }
+
+  /// Subscribe to real-time approval status changes
+  ///
+  /// Sets up a Supabase realtime channel to listen for UPDATE events on the
+  /// my_videos table. When the approved field changes, emits VideoApprovalUpdatedEvent.
+  void _subscribeToApprovalChanges() {
+    try {
+      _approvalChannel = supabaseService.subscribeToVideoApprovalChanges(
+        onApprovalChanged: (videoId, approvalStatus) {
+          // Emit event to handle the approval status change
+          add(VideoApprovalUpdatedEvent(
+            videoId: videoId,
+            approvalStatus: approvalStatus,
+          ));
+        },
+      );
+      print('[PROFILE] Successfully subscribed to approval changes');
+    } catch (e) {
+      print('[ERROR] Failed to subscribe to approval changes: $e');
     }
   }
 
@@ -188,7 +226,7 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState>
         print('✓ Video deleted successfully!');
 
         // Fetch updated thumbnails after deletion
-        final updatedThumbnails = await supabaseService.getAllThumbnailUrls();
+        final updatedThumbnails = await supabaseService.getMyVideo();
 
         // Emit success with updated thumbnails
         if (previousState is ProfileLoaded) {
@@ -222,7 +260,7 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState>
       emit(ProfileLoading());
 
       // Fetch updated thumbnails
-      final updatedThumbnails = await supabaseService.getAllThumbnailUrls();
+      final updatedThumbnails = await supabaseService.getMyVideo();
 
       // Emit success with updated thumbnails
       if (previousState is ProfileLoaded) {
@@ -234,6 +272,77 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState>
     } catch (e) {
       emit(ProfileError(message: 'Failed to refresh videos: $e'));
     }
+  }
+
+  /// Handle real-time video approval status updates
+  ///
+  /// When a video's approval status changes in Supabase, this handler:
+  /// 1. Finds the video in the current state by ID
+  /// 2. Updates the video's approved field with the new value
+  /// 3. Emits a new ProfileLoaded state with the updated videos
+  ///
+  /// This maintains the reactive nature of the bloc while only updating the
+  /// specific video that changed, rather than refreshing all videos.
+  Future<void> _onVideoApprovalUpdated(
+    VideoApprovalUpdatedEvent event,
+    Emitter<ProfileState> emit,
+  ) async {
+    try {
+      final currentState = state;
+
+      // Only process if we're in ProfileLoaded state
+      if (currentState is! ProfileLoaded) {
+        print('[PROFILE] Ignoring approval update - not in ProfileLoaded state');
+        return;
+      }
+
+      // Find the video that was updated
+      final videoIndex = currentState.myVideo
+          .indexWhere((video) => video.id == event.videoId);
+
+      if (videoIndex == -1) {
+        print(
+          '[PROFILE] Video not found for approval update: ${event.videoId}',
+        );
+        return;
+      }
+
+      // Create updated video with new approval status
+      final updatedVideo = currentState.myVideo[videoIndex].copyWith(
+        approved: event.approvalStatus,
+      );
+
+      // Create new videos list with updated video
+      final updatedVideos = List<MyVideo>.from(currentState.myVideo);
+      updatedVideos[videoIndex] = updatedVideo;
+
+      print(
+        '[PROFILE] Updated video approval: ${event.videoId} -> ${event.approvalStatus}',
+      );
+
+      // Emit updated state with modified videos list
+      emit(currentState.copyWith(thumbnails: updatedVideos));
+    } catch (e) {
+      print('[ERROR] Failed to handle approval update: $e');
+    }
+  }
+
+  /// Clean up resources when the bloc is closed
+  ///
+  /// Unsubscribes from the realtime channel to prevent memory leaks
+  /// and stop receiving approval change updates.
+  @override
+  Future<void> close() async {
+    if (_approvalChannel != null) {
+      try {
+        print('[PROFILE] Unsubscribing from approval changes');
+        await _approvalChannel!.unsubscribe();
+        _approvalChannel = null;
+      } catch (e) {
+        print('[ERROR] Failed to unsubscribe from approval changes: $e');
+      }
+    }
+    return super.close();
   }
 
   /// Handle logout

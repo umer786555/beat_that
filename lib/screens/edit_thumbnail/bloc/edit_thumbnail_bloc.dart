@@ -236,28 +236,28 @@ class EditThumbnailBloc extends Bloc<EditThumbnailEvent, EditThumbnailState>
         final videoId = result['videoId'];
 
         // If a subcategory was selected, link the video to it
-        if (selectedSubcategory != null && selectedSubcategory!.isNotEmpty) {
+       // if (selectedSubcategory != null && selectedSubcategory!.isNotEmpty) {
           // Find the subcategory ID from the selected subcategory name
-          final subcategory = sport.subcategories.firstWhere(
-            (sub) => sub.name == selectedSubcategory,
-            orElse: () => throw Exception('Subcategory not found: $selectedSubcategory'),
-          );
+          // final subcategory = sport.subcategories.firstWhere(
+          //   (sub) => sub.name == selectedSubcategory,
+          //   orElse: () => throw Exception('Subcategory not found: $selectedSubcategory'),
+        //  );
 
-          final linkResult = await supabaseService.linkVideoToSubcategory(
-            videoId: videoId,
-            sportId: sport.id,
-            subcategoryId: subcategory.id.toString(), // Convert subcategory ID to string
-          );
+        //   final linkResult = await supabaseService.linkVideoToSubcategory(
+        //     videoId: videoId,
+        //     sportId: sport.id,
+        //     subcategoryId: subcategory.id.toString(), // Convert subcategory ID to string
+        //   );
 
-          if (!linkResult['success']) {
-            emitPresentation(
-              ThumbnailErrorEvent(
-                message: 'Upload succeeded but linking failed: ${linkResult['error']}',
-              ),
-            );
-            return;
-          }
-        }
+        //   if (!linkResult['success']) {
+        //     emitPresentation(
+        //       ThumbnailErrorEvent(
+        //         message: 'Upload succeeded but linking failed: ${linkResult['error']}',
+        //       ),
+        //     );
+        //     return;
+        //   }
+        // }
 
         // Reset to initial state to hide overlay
         emit(
@@ -268,13 +268,13 @@ class EditThumbnailBloc extends Bloc<EditThumbnailEvent, EditThumbnailState>
         );
         
         // Emit success presentation event - UI will show snack bar and pop
-        String message = 'Video uploaded successfully!\nTitle: ${event.title}';
-        if (selectedSubcategory != null) {
-          message += '\nLinked to: $selectedSubcategory';
-        }
+        // String message = 'Video uploaded successfully!\nTitle: ${event.title}';
+        // if (selectedSubcategory != null && selectedSubcategory!.isNotEmpty) {
+        //   message += '\nSaved for: $selectedSubcategory';
+        // }
         
         emitPresentation(
-          SaveSuccessEvent(message: message),
+          SaveSuccessEvent(message: 'Video uploaded successfully!'),
         );
       } else {
         emitPresentation(

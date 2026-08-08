@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:bloc_presentation/bloc_presentation.dart';
 import 'package:beat_that/service_locator.dart';
@@ -192,24 +191,19 @@ class HomeVideoFeedCubit extends Cubit<HomeVideoFeedState>
 
   Future<void> _initializeController(int index, {bool autoplay = false}) async {
     final video = state.videos[index];
-    final videoUrl = video['video_url'] as String?;
-    if (videoUrl == null || videoUrl.isEmpty) {
+    final videoPath = video['video_path'] as String?;
+    if (videoPath == null || videoPath.isEmpty) {
       emit(state.copyWith(errorMessage: 'This video is unavailable.'));
       return;
     }
 
-    final isNetworkUrl =
-        videoUrl.startsWith('http://') || videoUrl.startsWith('https://');
-    final localFile = File(videoUrl);
-    final isLocalFile = !isNetworkUrl && await localFile.exists();
-
-    final controller = isNetworkUrl
-        ? VideoPlayerController.networkUrl(Uri.parse(videoUrl))
-        : isLocalFile
-        ? VideoPlayerController.file(localFile)
-        : VideoPlayerController.networkUrl(
-            Uri.parse(await _supabaseService.resolveVideoPlaybackUrl(videoUrl)),
-          );
+    // Home feed items store a bucket-relative video path, not a ready-to-play URL.
+    final playbackUrl = await _supabaseService.resolveVideoPlaybackUrl(
+      videoPath,
+    );
+    final controller = VideoPlayerController.networkUrl(
+      Uri.parse(playbackUrl),
+    );
 
     try {
       await controller.initialize();

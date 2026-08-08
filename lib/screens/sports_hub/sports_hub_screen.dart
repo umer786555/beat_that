@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
-import 'package:beat_that/constants/app_colors.dart';
 import 'package:beat_that/widgets/sport_grid_item.dart';
 import 'package:beat_that/widgets/loading_screen.dart';
 import 'package:beat_that/widgets/error_screen.dart';
@@ -22,19 +21,31 @@ class SportsHubScreen extends StatelessWidget {
     final platformLocale = WidgetsBinding.instance.platformDispatcher.locale;
 
     return BlocProvider(
-      create: (context) => SportsHubBloc()
-        ..add(FetchSportsEvent(locale: platformLocale)),
+      create: (context) =>
+          SportsHubBloc()..add(FetchSportsEvent(locale: platformLocale)),
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('Sports Hub'),
           elevation: 0,
+          backgroundColor: Colors.transparent,
+          centerTitle: false,
+          title: Row(
+            children: [
+              const Text('🔥', style: TextStyle(fontSize: 24)),
+              const SizedBox(width: 8),
+              Text(
+                'Beat That',
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: -0.5,
+                ),
+              ),
+            ],
+          ),
         ),
         body: BlocBuilder<SportsHubBloc, SportsHubState>(
           builder: (context, state) {
             if (state is SportsHubLoading) {
-              return const BeatLoadingScreen(
-                message: 'Loading sports...',
-              );
+              return const BeatLoadingScreen(message: 'Loading sports...');
             }
 
             if (state is SportsHubError) {
@@ -43,8 +54,8 @@ class SportsHubScreen extends StatelessWidget {
                 primaryButtonText: 'Retry',
                 primaryButtonCallback: () {
                   context.read<SportsHubBloc>().add(
-                        RetrySportsEvent(locale: platformLocale),
-                      );
+                    RetrySportsEvent(locale: platformLocale),
+                  );
                 },
                 secondaryButtonText: 'Go Back',
                 secondaryButtonCallback: () {
@@ -57,42 +68,39 @@ class SportsHubScreen extends StatelessWidget {
               final sports = state.sports;
 
               return Padding(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'Popular Sports',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                      ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Pick Your Challenge',
+                      style: Theme.of(context).textTheme.headlineSmall
+                          ?.copyWith(fontWeight: FontWeight.w700),
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'Ordered by popularity in your region',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: AppColors.grey,
+                      'Upload your best move and battle for the top spot on the leaderboard',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
                       ),
                     ),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 20),
                     Expanded(
                       child: GridView.builder(
                         gridDelegate:
                             const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 2,
-                          mainAxisSpacing: 16,
-                          crossAxisSpacing: 16,
-                          childAspectRatio: 1.0,
-                        ),
+                              crossAxisCount: 2,
+                              mainAxisSpacing: 16,
+                              crossAxisSpacing: 12,
+                              childAspectRatio: 0.85,
+                            ),
                         itemCount: sports.length,
                         itemBuilder: (context, index) {
                           final sport = sports[index];
                           return SportGridItem(
                             sport: sport,
                             onTap: () {
-                              // Navigate to sport details screen using GoRouter
                               HapticFeedback.lightImpact();
                               GoRouter.of(context).pushNamed(
                                 'sport-details',
@@ -109,9 +117,7 @@ class SportsHubScreen extends StatelessWidget {
             }
 
             // Fallback to initial state
-            return const BeatLoadingScreen(
-              message: 'Loading sports...',
-            );
+            return const BeatLoadingScreen(message: 'Loading sports...');
           },
         ),
       ),

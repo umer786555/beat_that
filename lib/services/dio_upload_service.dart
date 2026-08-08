@@ -69,10 +69,18 @@ class DioUploadService {
     _dio.interceptors.add(
       InterceptorsWrapper(
         onRequest: (options, handler) {
-          final token = supabase.Supabase.instance.client.auth.currentSession?.accessToken;
+          final client = supabase.Supabase.instance.client;
+          final token = client.auth.currentSession?.accessToken;
+          final apiKey = client.headers['apikey'];
+
+          if (apiKey != null && apiKey.isNotEmpty) {
+            options.headers['apikey'] = apiKey;
+          }
+
           if (token != null) {
             options.headers['Authorization'] = 'Bearer $token';
           }
+
           return handler.next(options);
         },
       ),

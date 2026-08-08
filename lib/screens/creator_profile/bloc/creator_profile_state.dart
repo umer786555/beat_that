@@ -28,7 +28,7 @@ final class CreatorProfileLoaded extends CreatorProfileState {
   });
 
   final UserPersonalProfile profile;
-  final List<VideoThumbnailModel> videos;
+  final List<MyVideo> videos;
   final int totalVideoCount;
   final bool isFollowing;
   final bool isOwnProfile;
@@ -38,7 +38,7 @@ final class CreatorProfileLoaded extends CreatorProfileState {
 
   CreatorProfileLoaded copyWith({
     UserPersonalProfile? profile,
-    List<VideoThumbnailModel>? videos,
+    List<MyVideo>? videos,
     int? totalVideoCount,
     bool? isFollowing,
     bool? isOwnProfile,

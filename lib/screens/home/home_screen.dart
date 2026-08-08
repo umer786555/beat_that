@@ -73,9 +73,16 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Home'),
         elevation: 0,
-        centerTitle: false,
+        backgroundColor: Colors.transparent,
+        centerTitle: true,
+        title: Text(
+          'Home',
+          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+            fontWeight: FontWeight.w800,
+            letterSpacing: -0.5,
+          ),
+        ),
       ),
       body: BlocConsumer<HomeBloc, HomeState>(
         /// Listener: Handle navigation and side effects
@@ -178,13 +185,13 @@ class _HomeScreenState extends State<HomeScreen> {
           /// Main grid
           GridView.builder(
             controller: _scrollController,
-            padding: const EdgeInsets.all(8),
+            padding: const EdgeInsets.all(6),
             physics: const AlwaysScrollableScrollPhysics(),
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              crossAxisSpacing: 8,
-              mainAxisSpacing: 8,
-              childAspectRatio: 9 / 14,
+              crossAxisCount: 3,
+              crossAxisSpacing: 6,
+              mainAxisSpacing: 6,
+              childAspectRatio: 9 / 16,
             ),
             itemCount: videos.length + (isLoading ? 2 : 0),
             itemBuilder: (context, index) {
@@ -206,7 +213,7 @@ class _HomeScreenState extends State<HomeScreen> {
               final video = videos[index];
               return VideoFeedCard(
                 videoId: video['id'] ?? '',
-                thumbnailUrl: video['thumbnail_url'] ?? '',
+                thumbnailUrl: video['thumbnailUrl'] ?? '',
                 title: video['title'] as String?,
                 username: video['username'] ?? '',
                 sportId: video['sport_id'] as String?,

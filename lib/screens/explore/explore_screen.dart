@@ -5,7 +5,6 @@ import 'package:beat_that/constants/sports_data.dart';
 import 'package:beat_that/routes/app_router.dart';
 import 'package:beat_that/screens/explore/bloc/explore_bloc.dart';
 import 'package:beat_that/screens/explore/video_feed/explore_video_feed_route_extra.dart';
-import 'package:beat_that/widgets/form_input_decoration.dart';
 import 'package:beat_that/widgets/video_feed_card.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -149,7 +148,7 @@ class _ExploreViewState extends State<_ExploreView> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final onRefresh = () async {
+    Future<void> onRefresh() async {
       final exploreBloc = context.read<ExploreBloc>();
       final refreshCompletion = exploreBloc.stream.firstWhere(
         (state) => state is ExploreLoaded || state is ExploreError,
@@ -158,10 +157,21 @@ class _ExploreViewState extends State<_ExploreView> {
       HapticFeedback.mediumImpact();
       exploreBloc.add(const RefreshExploreVideosEvent());
       await refreshCompletion;
-    };
+    }
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Explore')),
+      appBar: AppBar(
+        elevation: 0,
+        backgroundColor: Colors.transparent,
+        centerTitle: true,
+        title: Text(
+          'Explore',
+          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+            fontWeight: FontWeight.w800,
+            letterSpacing: -0.5,
+          ),
+        ),
+      ),
       body: SafeArea(
         child: Column(
           children: [
@@ -230,7 +240,6 @@ class _ExploreViewState extends State<_ExploreView> {
                       ),
                       Expanded(
                         child: RefreshIndicator(
-                          
                           onRefresh: onRefresh,
                           child: GridView.builder(
                             controller: _scrollController,
@@ -254,14 +263,16 @@ class _ExploreViewState extends State<_ExploreView> {
                               final video = loadedState.videos[index];
                               return VideoFeedCard(
                                 videoId: video['id'] ?? '',
-                                thumbnailUrl: video['thumbnail_url'] ?? '',
+                                thumbnailUrl: video['thumbnailUrl'] ?? '',
                                 title: video['title'] as String?,
                                 username: video['username'] as String?,
                                 sportId: video['sport_id'] as String?,
                                 viewCount:
                                     (video['view_count'] as num?)?.toInt() ?? 0,
                                 rating:
-                                    (video['average_rating'] as num?)?.toDouble() ?? 0.0,
+                                    (video['average_rating'] as num?)
+                                        ?.toDouble() ??
+                                    0.0,
                                 onTap: () {
                                   HapticFeedback.mediumImpact();
 
@@ -365,10 +376,7 @@ class _SearchHeader extends StatelessWidget {
             decoration: InputDecoration(
               hintText: 'Search videos by title',
               labelText: 'Search',
-              prefixIcon: Icon(
-                Icons.search_rounded,
-                size: 20,
-              ),
+              prefixIcon: Icon(Icons.search_rounded, size: 20),
               suffixIcon: controller.text.isEmpty
                   ? null
                   : IconButton(
@@ -554,16 +562,16 @@ class _NoResultsState extends StatelessWidget {
             const SizedBox(height: 16),
             Text(
               selectedSportId == null
-                  ? 'No videos found for "$query"'
+                  ? 'No matching videos for "$query"'
                   : query.isEmpty
-                  ? 'No videos found in ${getDisplayNameForSport(selectedSportId!)}'
-                  : 'No videos found for "$query" in ${getDisplayNameForSport(selectedSportId!)}',
+                  ? 'No videos in ${getDisplayNameForSport(selectedSportId!)}'
+                  : 'No matching videos for "$query" in ${getDisplayNameForSport(selectedSportId!)}',
               textAlign: TextAlign.center,
               style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 8),
             const Text(
-              'Try a shorter phrase, a different title, or a different sport filter.',
+              'Try a different search or change your filters to see more videos.',
               textAlign: TextAlign.center,
               style: TextStyle(color: Colors.grey),
             ),

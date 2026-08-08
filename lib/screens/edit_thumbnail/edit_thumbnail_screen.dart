@@ -74,7 +74,18 @@ class EditThumbnailScreen extends StatelessWidget {
                   return Stack(
                     children: [
                       Scaffold(
-                        appBar: AppBar(title: const Text('Edit Thumbnail')),
+                        appBar: AppBar(
+                          elevation: 0,
+                          backgroundColor: Colors.transparent,
+                          centerTitle: true,
+                          title: Text(
+                            'Edit Thumbnail',
+                            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: -0.5,
+                            ),
+                          ),
+                        ),
                         body: _buildBody(
                           state,
                           onBack: isSaving ? null : () => context.pop(),

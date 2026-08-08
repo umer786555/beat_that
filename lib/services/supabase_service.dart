@@ -3,7 +3,7 @@ import 'package:beat_that/service_locator.dart';
 import 'package:beat_that/models/user_personal_profile.dart';
 import 'package:beat_that/models/user_profile_summary.dart';
 import 'package:beat_that/models/sport_subcategory.dart';
-import 'package:beat_that/models/video_thumbnail_model.dart';
+import 'package:beat_that/models/my_video.dart';
 import 'package:beat_that/services/dio_upload_service.dart';
 import 'package:beat_that/services/preferences_service.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
@@ -46,6 +46,56 @@ class SupabaseService {
     return client.auth.currentUser?.email;
   }
 
+  /// Subscribe to real-time approval status changes for the current user's videos
+  ///
+  /// Returns a RealtimeChannel that listens for UPDATE events on the my_videos table.
+  /// The callback receives the updated video record when the approved field changes.
+  ///
+  /// The channel should be unsubscribed when no longer needed to avoid memory leaks.
+  /// Best practice: Store the channel reference and unsubscribe in bloc close().
+  ///
+  /// Payload structure:
+  /// - payload.newRecord: Map containing updated row with id and approved fields
+  /// - payload.oldRecord: Map containing previous values (if replica identity full is set)
+  ///
+  /// Example usage:
+  /// ```dart
+  /// final channel = supabaseService.subscribeToVideoApprovalChanges(
+  ///   onApprovalChanged: (videoId, approvalStatus) {
+  ///     // Handle the approval status change
+  ///   },
+  /// );
+  /// // Later: await channel.unsubscribe();
+  /// ```
+  RealtimeChannel subscribeToVideoApprovalChanges({
+    required Function(String videoId, bool? approvalStatus) onApprovalChanged,
+  }) {
+    return client
+        .channel('my-videos-approval-changes')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.update,
+          schema: 'public',
+          table: 'my_videos',
+          callback: (payload) {
+            try {
+              final newRecord = payload.newRecord;
+              final videoId = newRecord['id'] as String?;
+              final approvalStatus = newRecord['approved'] as bool?;
+
+              if (videoId != null) {
+                print(
+                  '[REALTIME] Video approval updated: id=$videoId, approved=$approvalStatus',
+                );
+                onApprovalChanged(videoId, approvalStatus);
+              }
+            } catch (e) {
+              print('[ERROR] Failed to process approval change: $e');
+            }
+          },
+        )
+        .subscribe();
+  }
+
   /// Upload video with thumbnail to Supabase storage and create database record
   ///
   /// This is an atomic operation with 4 steps:
@@ -67,7 +117,7 @@ class SupabaseService {
   /// - [onVideoProgress]: Callback for video upload progress (sent, total)
   ///
   /// Returns on success:
-  /// - {success: true, fileId, videoId, videoUrl, thumbnailUrl, videoPath, thumbnailPath, message}
+  /// - {success: true, fileId, videoId, videoPath, thumbnailPath, videoPublicUrl, thumbnailUrl, message}
   ///
   /// Returns on failure:
   /// - {success: false, message, error}
@@ -147,8 +197,8 @@ class SupabaseService {
         'user_id': userId,
         'title': title,
         'description': description ?? '',
-        'video_url': videoPath, // Store path, not URL
-        'thumbnail_url': thumbnailPath, // Store path, not URL
+        'video_path': videoPath,
+        'thumbnail_path': thumbnailPath,
         'sport_id': sportId,
         'subcategory_id': subcategoryId,
         'subcategory_name': subcategoryName,
@@ -187,7 +237,7 @@ class SupabaseService {
         'success': true,
         'fileId': fileId,
         'videoId': createdVideoId,
-        'videoUrl': videoPublicUrl,
+        'videoPublicUrl': videoPublicUrl,
         'thumbnailUrl': thumbnailPublicUrl,
         'videoPath': videoPath,
         'thumbnailPath': thumbnailPath,
@@ -1183,7 +1233,7 @@ class SupabaseService {
     dynamic query = client
         .from('sport_videos')
         .select(
-          'id, user_video_id, title, description, video_url, thumbnail_url, view_count, user_id, created_at, bayesian_score, total_ratings, average_rating',
+          'id, user_video_id, title, description, video_path, thumbnail_path, view_count, user_id, created_at, bayesian_score, total_ratings, average_rating',
         );
 
     if (ilikePattern != null && ilikePattern.isNotEmpty) {
@@ -1323,12 +1373,30 @@ class SupabaseService {
 
       final extension = _getFileExtension(compressedImageFile.path);
       final path = '$userId/profile_image.$extension';
-      // Upload file to storage
-      await _uploadService.uploadFile(
-        file: compressedImageFile,
-        bucketName: 'profile_images',
-        path: path,
+      final mimeType = lookupMimeType(compressedImageFile.path) ?? 'image/jpeg';
+
+      // Upload directly with the Supabase Storage client.
+      // Profile images reuse a stable path, so enable upsert to overwrite.
+      print(
+        '$_debugMediaPrefix Starting profile image storage upload: bucket=profile_images, path=$path, mimeType=$mimeType, file=${compressedImageFile.path}',
       );
+      try {
+        await client.storage
+            .from('profile_images')
+            .upload(
+              path,
+              compressedImageFile,
+              fileOptions: FileOptions(upsert: true, contentType: mimeType),
+            );
+        print(
+          '$_debugMediaPrefix Profile image storage upload succeeded: bucket=profile_images, path=$path',
+        );
+      } catch (uploadError) {
+        print(
+          '$_debugMediaPrefix Profile image storage upload failed: bucket=profile_images, path=$path, mimeType=$mimeType, error=$uploadError',
+        );
+        rethrow;
+      }
 
       uploadedImagePath = path;
 
@@ -1380,28 +1448,18 @@ class SupabaseService {
   }
 
   // ==================== UTILITY OPERATIONS ====================
-  /// Fetch all thumbnail URLs for the current user's videos
+  /// Fetch all videos for the current user from my_videos table
   ///
-  /// Retrieves all video records from the database and generates signed URLs
-  /// for each thumbnail. Returns strongly-typed VideoThumbnail models for display in the UI.
+  /// Retrieves all video records from the database for the authenticated user.
+  /// Returns strongly-typed MyVideo models for display in the UI.
   ///
-  /// Only fetches necessary columns for better performance:
-  /// - id (UUID), thumbnail_url, video_url, title, description, view_count, created_at (timestampz)
-  ///
-  /// Returns a list of VideoThumbnail models containing:
-  /// - id: Unique video identifier (UUID)
-  /// - thumbnailUrl: Signed URL for the thumbnail image (7 days expiry)
-  /// - videoUrl: Storage path for the video file (resolved lazily on playback)
-  /// - title: Video title (String)
-  /// - description: Video description (String)
-  /// - viewCount: Number of views (int)
-  /// - createdAt: When the video was created (timestampz as String)
-  /// - thumbnailPath: Storage path for deletion
-  /// - videoPath: Storage path for deletion
+  /// Returns a list of MyVideo models containing all video metadata including:
+  /// - id, createdAt, userId, title, videoPath, thumbnailPath, thumbnailUrl
+  /// - viewCount, averageRating, likeCount, subcategoryId, sportId, subcategoryName, approved
   ///
   /// Returns empty list if user not authenticated or no videos found.
   /// Throws exception on database query errors.
-  Future<List<VideoThumbnailModel>> getAllThumbnailUrls() async {
+  Future<List<MyVideo>> getMyVideo() async {
     try {
       final userId = getCurrentUserId();
       if (userId == null) {
@@ -1412,20 +1470,27 @@ class SupabaseService {
       final videos = await client
           .from('my_videos')
           .select(
-            'id, thumbnail_url, video_url, title, sport_id, subcategory_id, subcategory_name, description, view_count, average_rating, created_at',
+            'id, created_at, user_id, title, video_path, thumbnail_path, view_count, average_rating, like_count, subcategory_id, sport_id, subcategory_name, approved',
           )
           .eq('user_id', userId)
           .order('created_at', ascending: false);
 
-      final thumbnailData = <VideoThumbnailModel>[];
-      for (final video in videos) {
-        final videoData = await _buildProfileThumbnailData(video);
-        thumbnailData.add(VideoThumbnailModel.fromJson(videoData));
-      }
+      // Convert storage paths to URLs
+      final videosAsJson = (videos as List<dynamic>)
+          .map((v) => v as Map<String, dynamic>)
+          .toList();
 
-      return thumbnailData;
+      final videosWithUrls = await Future.wait(
+        videosAsJson.map(_convertVideoPathsToUrls),
+      );
+
+      final myVideos = <MyVideo>[];
+      for (final video in videosWithUrls) {
+        final myVideo = MyVideo.fromJson(video);
+        myVideos.add(myVideo);
+      }
+      return myVideos;
     } catch (e) {
-      print('Error fetching thumbnails: $e');
       rethrow;
     }
   }
@@ -1434,11 +1499,9 @@ class SupabaseService {
   ///
   /// Uses the same data shape as the current user's profile video list so it can
   /// be rendered consistently in profile-style UIs.
-  Future<List<VideoThumbnailModel>> getThumbnailUrlsForUserById(
-    String userId,
-  ) async {
+  Future<List<MyVideo>> getVideosForUserById(String userId) async {
     try {
-      return await _getThumbnailUrlsForUserId(userId);
+      return await _getVideosForUserId(userId);
     } catch (e) {
       print('Error fetching uploaded videos for userId=$userId: $e');
       return [];
@@ -1498,15 +1561,15 @@ class SupabaseService {
         return {
           'success': true,
           'profile': profile,
-          'videos': const <VideoThumbnailModel>[],
+          'videos': const <MyVideo>[],
           'totalVideoCount': totalVideoCount,
           'hasMoreVideos': false,
         };
       }
 
       final videos = isOwnProfile
-          ? await _getThumbnailUrlsForUserId(userId, limit, offset)
-          : await _getPublicThumbnailUrlsForUserId(userId, limit, offset);
+          ? await _getVideosForUserId(userId, limit, offset)
+          : await _getPublicVideosForUserId(userId, limit, offset);
 
       return {
         'success': true,
@@ -1537,7 +1600,7 @@ class SupabaseService {
     return _buildUserPersonalProfile(data);
   }
 
-  Future<List<VideoThumbnailModel>> _getThumbnailUrlsForUserId(
+  Future<List<MyVideo>> _getVideosForUserId(
     String userId, [
     int? limit,
     int offset = 0,
@@ -1547,29 +1610,35 @@ class SupabaseService {
         ? await client
               .from('my_videos')
               .select(
-                'id, thumbnail_url, video_url, title, sport_id, subcategory_id, subcategory_name, description, view_count, average_rating, created_at',
+                'id, created_at, user_id, title, video_path, thumbnail_path, view_count, average_rating, like_count, subcategory_id, sport_id, subcategory_name, approved',
               )
               .eq('user_id', userId)
               .order('created_at', ascending: false)
         : await client
               .from('my_videos')
               .select(
-                'id, thumbnail_url, video_url, title, sport_id, subcategory_id, subcategory_name, description, view_count, average_rating, created_at',
+                'id, created_at, user_id, title, video_path, thumbnail_path, view_count, average_rating, like_count, subcategory_id, sport_id, subcategory_name, approved',
               )
               .eq('user_id', userId)
               .order('created_at', ascending: false)
               .range(offset, offset + limit - 1);
 
-    final thumbnailData = <VideoThumbnailModel>[];
-    for (final video in videos) {
-      final videoData = await _buildProfileThumbnailData(video);
-      thumbnailData.add(VideoThumbnailModel.fromJson(videoData));
+    final rawVideos = (videos as List<dynamic>)
+        .map((video) => video as Map<String, dynamic>)
+        .toList();
+    final videosWithUrls = await Future.wait(
+      rawVideos.map(_convertVideoPathsToUrls),
+    );
+
+    final myVideos = <MyVideo>[];
+    for (final video in videosWithUrls) {
+      myVideos.add(MyVideo.fromJson(video));
     }
 
-    return thumbnailData;
+    return myVideos;
   }
 
-  Future<List<VideoThumbnailModel>> _getPublicThumbnailUrlsForUserId(
+  Future<List<MyVideo>> _getPublicVideosForUserId(
     String userId, [
     int? limit,
     int offset = 0,
@@ -1581,26 +1650,32 @@ class SupabaseService {
         ? await client
               .from('sport_videos')
               .select(
-                'id, thumbnail_url, video_url, title, sport_id, subcategory_id, description, view_count, average_rating, created_at',
+                'id, created_at, user_id, title, video_path, thumbnail_path, view_count, average_rating, like_count, subcategory_id, sport_id, subcategory_name',
               )
               .eq('user_id', userId)
               .order('created_at', ascending: false)
         : await client
               .from('sport_videos')
               .select(
-                'id, thumbnail_url, video_url, title, sport_id, subcategory_id, description, view_count, average_rating, created_at',
+                'id, created_at, user_id, title, video_path, thumbnail_path, view_count, average_rating, like_count, subcategory_id, sport_id, subcategory_name',
               )
               .eq('user_id', userId)
               .order('created_at', ascending: false)
               .range(offset, offset + limit - 1);
 
-    final thumbnailData = <VideoThumbnailModel>[];
-    for (final video in videos) {
-      final videoData = await _buildProfileThumbnailData(video);
-      thumbnailData.add(VideoThumbnailModel.fromJson(videoData));
+    final rawVideos = (videos as List<dynamic>)
+        .map((video) => video as Map<String, dynamic>)
+        .toList();
+    final videosWithUrls = await Future.wait(
+      rawVideos.map(_convertVideoPathsToUrls),
+    );
+
+    final myVideos = <MyVideo>[];
+    for (final video in videosWithUrls) {
+      myVideos.add(MyVideo.fromJson(video));
     }
 
-    return thumbnailData;
+    return myVideos;
   }
 
   Future<int> _getVideoCountForUserId(String userId) async {
@@ -1676,11 +1751,6 @@ class SupabaseService {
     }
   }
 
-  /// Convert a stored profile image path into a UI-ready URL.
-  ///
-  /// The database stores only the storage key. The UI still needs a concrete
-  /// URL, so this method resolves the path on read and appends a cache-busting
-  /// token derived from updated_at because profile images overwrite a stable key.
   Future<String?> _resolveProfileImageUrl(
     String? storedValue, {
     String? updatedAt,
@@ -1713,27 +1783,6 @@ class SupabaseService {
     }
   }
 
-  /// Helper method to build profile/grid thumbnail data.
-  ///
-  /// Profile-style grids only need the thumbnail URL up front. The video path is
-  /// preserved and resolved into a playback URL only when the user opens a video.
-  Future<Map<String, dynamic>> _buildProfileThumbnailData(
-    Map<String, dynamic> video,
-  ) async {
-    final thumbnailPath = video['thumbnail_url'] as String;
-    final videoPath = video['video_url'] as String;
-
-    final thumbnailUrl = await _pathToUrl('my-thumbnails', thumbnailPath);
-
-    return _createVideoDataMap(
-      video,
-      thumbnailUrl,
-      videoPath,
-      thumbnailPath,
-      videoPath,
-    );
-  }
-
   /// Resolve a stored video path into a playable URL when needed.
   Future<String> resolveVideoPlaybackUrl(String videoPathOrUrl) async {
     final isNetworkUrl =
@@ -1744,7 +1793,7 @@ class SupabaseService {
       return videoPathOrUrl;
     }
 
-    return _pathToUrl('my_videos', videoPathOrUrl);
+    return _pathToUrl('my_videos', videoPathOrUrl); 
   }
 
   Future<File> _compressImageForUpload(
@@ -1863,32 +1912,6 @@ class SupabaseService {
     return '$bytes B';
   }
 
-  /// Helper method to create video data map
-  Map<String, dynamic> _createVideoDataMap(
-    Map<String, dynamic> video,
-    String thumbnailUrl,
-    String videoUrl,
-    String thumbnailPath,
-    String videoPath,
-  ) {
-    final sportId = video['sport_id'] as String?;
-    return {
-      'id': video['id'] as String,
-      'thumbnail_url': thumbnailUrl,
-      'video_url': videoUrl,
-      'thumbnail_path': thumbnailPath,
-      'video_path': videoPath,
-      'title': video['title'] as String? ?? 'Untitled',
-      'sport_id': sportId,
-      'subcategory_id': video['subcategory_id'],
-      'subcategory_name': video['subcategory_name'] as String?,
-      'description': video['description'] as String? ?? '',
-      'view_count': video['view_count'] as int? ?? 0,
-      'average_rating': video['average_rating'] as num? ?? 0.0,
-      'created_at': video['created_at'] as String,
-    };
-  }
-
   // ==================== SPORT VIDEO OPERATIONS ====================
 
   /// Fetch all subcategories for a specific sport
@@ -1981,7 +2004,7 @@ class SupabaseService {
       // STEP 1: Verify the video belongs to the current user and get video details
       final videoData = await client
           .from('my_videos')
-          .select('id, title, description, video_url, thumbnail_url')
+          .select('id, title, description, video_path, thumbnail_path')
           .eq('id', videoId)
           .eq('user_id', userId)
           .maybeSingle();
@@ -2018,9 +2041,8 @@ class SupabaseService {
         'subcategory_id': subcategoryId,
         'title': videoData['title'] as String,
         'description': videoData['description'] as String? ?? '',
-        'video_url': videoData['video_url'] as String, // Path from my_videos
-        'thumbnail_url':
-            videoData['thumbnail_url'] as String, // Path from my_videos
+        'video_path': videoData['video_path'] as String,
+        'thumbnail_path': videoData['thumbnail_path'] as String,
         'view_count': 0,
         'created_at': DateTime.now().toIso8601String(),
         'updated_at': DateTime.now().toIso8601String(),
@@ -2056,7 +2078,7 @@ class SupabaseService {
   /// - [offset]: Pagination offset (default: 0)
   ///
   /// Returns: List of videos with username included
-  /// Each video contains: {id, title, description, video_url, thumbnail_url, view_count, username, created_at}
+  /// Each video contains: {id, title, description, video_path, thumbnail_path, thumbnailUrl, view_count, username, created_at}
   Future<List<Map<String, dynamic>>> getSportCategoryVideos({
     required String sportId,
     required String subcategoryId,
@@ -2069,7 +2091,7 @@ class SupabaseService {
       final videos = await client
           .from('sport_videos')
           .select(
-            'id, title, description, video_url, thumbnail_url, view_count, user_id, created_at, bayesian_score, total_ratings, average_rating',
+            'id, title, description, video_path, thumbnail_path, view_count, user_id, created_at, bayesian_score, total_ratings, average_rating',
           )
           .eq('sport_id', sportId)
           .eq('subcategory_id', subcategoryId)
@@ -2165,25 +2187,49 @@ class SupabaseService {
   ///
   /// Returns: {success: true} or {success: false, error}
   ///
-  /// Note: This calls increment_both_view_counts() PostgreSQL function.
+  /// Note: This calls the increment-video-views Edge Function, which
+  /// triggers the protected increment_both_view_counts() PostgreSQL function.
   /// Safe for concurrent views - no race conditions, no lost counts.
   Future<Map<String, dynamic>> updateCategoryVideoViewCount({
     required String linkedVideoId,
   }) async {
     try {
-      // Call single atomic RPC function that updates both tables
+      // Call the authenticated Edge Function instead of the protected RPC.
       print(
-        '🎯 updateCategoryVideoViewCount: calling increment_both_view_counts with linked_video_id=$linkedVideoId',
+        '🎯 updateCategoryVideoViewCount: invoking increment-video-views with linked_video_id=$linkedVideoId',
       );
-      await client.rpc(
-        'increment_both_view_counts',
-        params: {'linked_video_id': linkedVideoId},
+      final response = await _invokeAuthenticatedEdgeFunction(
+        'increment-video-views',
+        body: {'linked_video_id': linkedVideoId},
       );
 
+      final data = response.data;
+      if (data is Map<String, dynamic> && data['success'] == false) {
+        return {
+          'success': false,
+          'status': response.status,
+          'data': data,
+          'error':
+              data['error']?.toString() ??
+              data['message']?.toString() ??
+              'Function returned success=false',
+        };
+      }
+
       print(
-        '✓ Atomically incremented view count for linked video $linkedVideoId in both tables',
+        '✓ Incremented view count for linked video $linkedVideoId via Edge Function',
       );
       return {'success': true};
+    } on FunctionException catch (e) {
+      print(
+        'increment-video-views error response (status ${e.status}, reason: ${e.reasonPhrase}): ${e.details}',
+      );
+      return {
+        'success': false,
+        'status': e.status,
+        'data': e.details,
+        'error': e.details?.toString() ?? e.reasonPhrase ?? 'Function failed',
+      };
     } catch (e) {
       print('Error updating view count: $e');
       return {'success': false, 'error': e.toString()};
@@ -2380,6 +2426,147 @@ class SupabaseService {
   /// that allows users to follow each other and build networks.
   /// ================================================
 
+  /// Block a user.
+  ///
+  /// Creates a row in `user_blocks` so backend RLS can hide the blocked
+  /// relationship everywhere else in the app. The database trigger is
+  /// responsible for cleaning up any existing follow rows.
+  ///
+  /// Parameters:
+  /// - [userIdToBlock]: UUID of the user to block
+  ///
+  /// Returns:
+  /// - {success: true} - Successfully blocked user
+  /// - {success: false, error} - Validation or database error
+  Future<Map<String, dynamic>> blockUser({
+    required String userIdToBlock,
+  }) async {
+    try {
+      final userId = getCurrentUserId();
+      if (userId == null) {
+        return {'success': false, 'error': 'User not authenticated'};
+      }
+
+      if (userId == userIdToBlock) {
+        return {'success': false, 'error': 'You cannot block yourself'};
+      }
+
+      await client.from('user_blocks').insert({
+        'blocker_id': userId,
+        'blocked_id': userIdToBlock,
+      });
+
+      print('✓ Successfully blocked user $userIdToBlock');
+      return {'success': true, 'message': 'User blocked successfully'};
+    } on PostgrestException catch (e) {
+      print('Error blocking user: $e');
+
+      if (e.message.toLowerCase().contains('duplicate') ||
+          e.message.toLowerCase().contains('unique')) {
+        return {'success': false, 'error': 'This user is already blocked'};
+      }
+
+      return {'success': false, 'error': e.message};
+    } catch (e) {
+      print('Error blocking user: $e');
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  /// Unblock a user.
+  ///
+  /// Removes the directional block row from `user_blocks` so backend RLS can
+  /// allow visibility again. This does not restore old follow relationships.
+  ///
+  /// Parameters:
+  /// - [userIdToUnblock]: UUID of the user to unblock
+  ///
+  /// Returns:
+  /// - {success: true} - Successfully unblocked user
+  /// - {success: false, error} - Validation or database error
+  Future<Map<String, dynamic>> unblockUser({
+    required String userIdToUnblock,
+  }) async {
+    try {
+      final userId = getCurrentUserId();
+      if (userId == null) {
+        return {'success': false, 'error': 'User not authenticated'};
+      }
+
+      if (userId == userIdToUnblock) {
+        return {'success': false, 'error': 'You cannot unblock yourself'};
+      }
+
+      await client
+          .from('user_blocks')
+          .delete()
+          .eq('blocker_id', userId)
+          .eq('blocked_id', userIdToUnblock);
+
+      print('✓ Successfully unblocked user $userIdToUnblock');
+      return {'success': true, 'message': 'User unblocked successfully'};
+    } on PostgrestException catch (e) {
+      print('Error unblocking user: $e');
+      return {'success': false, 'error': e.message};
+    } catch (e) {
+      print('Error unblocking user: $e');
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  /// Get all users that the current user has blocked.
+  ///
+  /// Retrieves a paginated list of users blocked by the current user and
+  /// returns lightweight typed profile summaries.
+  ///
+  /// Parameters:
+  /// - [limit]: Maximum number of users to return (default: 20)
+  /// - [offset]: Pagination offset (default: 0)
+  ///
+  /// Returns: List of blocked user profile summaries
+  Future<List<UserProfileSummary>> getBlockedUsers({
+    int limit = 20,
+    int offset = 0,
+  }) async {
+    try {
+      final userId = getCurrentUserId();
+      if (userId == null) {
+        return [];
+      }
+
+      final blocks = await client
+          .from('user_blocks')
+          .select('blocked_id')
+          .eq('blocker_id', userId)
+          .range(offset, offset + limit - 1);
+
+      if (blocks.isEmpty) {
+        return [];
+      }
+
+      final blockedUserIds = List<String>.from(
+        blocks.map((block) => block['blocked_id']),
+      );
+
+      final profiles = await client
+          .from('user_personal_profiles')
+          .select('id, username, profileUrl, updated_at')
+          .inFilter('id', blockedUserIds);
+
+      print('✓ Fetched ${profiles.length} blocked users for current user');
+      final normalizedProfiles = await _normalizeUserProfileMaps(
+        List<Map<String, dynamic>>.from(profiles as List<dynamic>),
+      );
+
+      return normalizedProfiles
+          .map(UserProfileSummary.fromMap)
+          .toList(growable: false);
+    } catch (e) {
+      print('Error fetching blocked users: $e');
+      return <UserProfileSummary>[];
+    }
+  }
+
   /// Follow a user
   ///
   /// Creates a follow relationship where the current user follows another user.
@@ -2476,9 +2663,8 @@ class SupabaseService {
   /// - [limit]: Maximum number of users to return (default: 20)
   /// - [offset]: Pagination offset (default: 0)
   ///
-  /// Returns: List of users with profile data
-  /// Each user contains: {id, username, profileUrl}
-  Future<List<Map<String, dynamic>>> getFollowing({
+  /// Returns: List of typed user profile summaries
+  Future<List<UserProfileSummary>> getFollowing({
     int limit = 20,
     int offset = 0,
   }) async {
@@ -2514,12 +2700,16 @@ class SupabaseService {
       print(
         '✓ Fetched ${profiles.length} users that current user is following',
       );
-      return _normalizeUserProfileMaps(
+      final normalizedProfiles = await _normalizeUserProfileMaps(
         List<Map<String, dynamic>>.from(profiles as List<dynamic>),
       );
+
+      return normalizedProfiles
+          .map(UserProfileSummary.fromMap)
+          .toList(growable: false);
     } catch (e) {
       print('Error fetching following list: $e');
-      return [];
+      return <UserProfileSummary>[];
     }
   }
 
@@ -2533,9 +2723,8 @@ class SupabaseService {
   /// - [limit]: Maximum number of users to return (default: 20)
   /// - [offset]: Pagination offset (default: 0)
   ///
-  /// Returns: List of users with profile data
-  /// Each user contains: {id, username, profileUrl}
-  Future<List<Map<String, dynamic>>> getFollowers({
+  /// Returns: List of typed user profile summaries
+  Future<List<UserProfileSummary>> getFollowers({
     int limit = 20,
     int offset = 0,
   }) async {
@@ -2570,17 +2759,21 @@ class SupabaseService {
           .inFilter('id', followerUserIds);
 
       print('✓ Fetched ${profiles.length} followers for current user');
-      return _normalizeUserProfileMaps(
+      final normalizedProfiles = await _normalizeUserProfileMaps(
         List<Map<String, dynamic>>.from(profiles as List<dynamic>),
       );
+
+      return normalizedProfiles
+          .map(UserProfileSummary.fromMap)
+          .toList(growable: false);
     } catch (e) {
       print('Error fetching followers list: $e');
-      return [];
+      return <UserProfileSummary>[];
     }
   }
 
   /// Search within the current user's following list by username.
-  Future<List<Map<String, dynamic>>> searchFollowingUsers({
+  Future<List<UserProfileSummary>> searchFollowingUsers({
     required String query,
     int limit = 20,
     int offset = 0,
@@ -2600,17 +2793,21 @@ class SupabaseService {
         },
       );
 
-      return _normalizeUserProfileMaps(
+      final normalizedProfiles = await _normalizeUserProfileMaps(
         List<Map<String, dynamic>>.from(response as List<dynamic>),
       );
+
+      return normalizedProfiles
+          .map(UserProfileSummary.fromMap)
+          .toList(growable: false);
     } catch (e) {
       print('Error searching following users: $e');
-      return [];
+      return <UserProfileSummary>[];
     }
   }
 
   /// Search within the current user's followers list by username.
-  Future<List<Map<String, dynamic>>> searchFollowersUsers({
+  Future<List<UserProfileSummary>> searchFollowersUsers({
     required String query,
     int limit = 20,
     int offset = 0,
@@ -2630,12 +2827,16 @@ class SupabaseService {
         },
       );
 
-      return _normalizeUserProfileMaps(
+      final normalizedProfiles = await _normalizeUserProfileMaps(
         List<Map<String, dynamic>>.from(response as List<dynamic>),
       );
+
+      return normalizedProfiles
+          .map(UserProfileSummary.fromMap)
+          .toList(growable: false);
     } catch (e) {
       print('Error searching followers users: $e');
-      return [];
+      return <UserProfileSummary>[];
     }
   }
 
@@ -2786,18 +2987,16 @@ class SupabaseService {
   ) async {
     final updated = Map<String, dynamic>.from(video);
 
-    // Convert thumbnail_url path to full URL
-    if (updated['thumbnail_url'] != null) {
-      final thumbnailPath = updated['thumbnail_url'] as String;
+    if (updated['thumbnail_path'] != null) {
+      final thumbnailPath = updated['thumbnail_path'] as String;
       final thumbnailUrl = await _pathToUrl('my-thumbnails', thumbnailPath);
-      updated['thumbnail_url'] = thumbnailUrl;
+      updated['thumbnailUrl'] = thumbnailUrl;
       print('🔄 Convert thumbnail: "$thumbnailPath" → "$thumbnailUrl"');
     }
 
-    // Keep video_url as a storage path and resolve it only when playback starts.
-    if (updated['video_url'] != null) {
-      final videoPath = updated['video_url'] as String;
-      updated['video_url'] = videoPath;
+    if (updated['video_path'] != null) {
+      final videoPath = updated['video_path'] as String;
+      updated['video_path'] = videoPath;
       print('🔄 Preserve video path for lazy playback: "$videoPath"');
     }
 
@@ -2889,7 +3088,7 @@ class SupabaseService {
   /// - [offset]: Pagination offset for "load more" (default: 0)
   ///
   /// Returns: List of videos with usernames (includes username field for attribution)
-  /// Each video: {id, title, description, video_url, thumbnail_url, user_id,
+  /// Each video: {id, title, description, video_path, thumbnail_path, thumbnailUrl, user_id,
   ///             view_count, average_rating, bayesian_score, total_ratings,
   ///             created_at, username}
   ///

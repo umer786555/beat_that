@@ -209,7 +209,7 @@ class ProfileConnectionsBloc
     }
   }
 
-  Future<List<Map<String, dynamic>>> _fetchConnections({
+  Future<List<UserProfileSummary>> _fetchConnections({
     required int limit,
     required int offset,
     required String query,
@@ -233,13 +233,8 @@ class ProfileConnectionsBloc
           );
   }
 
-  List<UserProfileSummary> _mapUniqueUsers(
-    List<Map<String, dynamic>> rawUsers,
-  ) {
-    return rawUsers
-        .map((user) => UserProfileSummary.fromMap(user))
-        .where((user) => !_seenUserIds.contains(user.id))
-        .toList();
+  List<UserProfileSummary> _mapUniqueUsers(List<UserProfileSummary> rawUsers) {
+    return rawUsers.where((user) => !_seenUserIds.contains(user.id)).toList();
   }
 
   void _resetPagination() {
