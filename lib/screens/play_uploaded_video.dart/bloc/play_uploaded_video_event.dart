@@ -9,12 +9,7 @@ sealed class PlayUploadedVideoEvent extends Equatable {
 
 /// Initialize the video player with the video path
 class InitializeVideoEvent extends PlayUploadedVideoEvent {
-  final String videoPath;
-
-  const InitializeVideoEvent(this.videoPath);
-
-  @override
-  List<Object?> get props => [videoPath];
+  const InitializeVideoEvent();
 }
 
 /// Play the video

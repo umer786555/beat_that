@@ -23,6 +23,11 @@ class SignupSuccess extends SignupState {
   const SignupSuccess();
 }
 
+/// State when Google signup/signin completes and the user should enter the app
+class SignupAuthenticatedSuccess extends SignupState {
+  const SignupAuthenticatedSuccess();
+}
+
 /// State when signup fails
 class SignupFailure extends SignupState {
   final String error;
@@ -33,12 +38,8 @@ class SignupFailure extends SignupState {
   List<Object?> get props => [error];
 
   /// Create a copy of this state with some fields replaced by new values
-  SignupFailure copyWith({
-    String? error,
-  }) {
-    return SignupFailure(
-      error: error ?? this.error,
-    );
+  SignupFailure copyWith({String? error}) {
+    return SignupFailure(error: error ?? this.error);
   }
 }
 
@@ -92,7 +93,8 @@ class SignupFormUpdated extends SignupState {
       password: password ?? this.password,
       confirmPassword: confirmPassword ?? this.confirmPassword,
       obscurePassword: obscurePassword ?? this.obscurePassword,
-      obscureConfirmPassword: obscureConfirmPassword ?? this.obscureConfirmPassword,
+      obscureConfirmPassword:
+          obscureConfirmPassword ?? this.obscureConfirmPassword,
       isEmailValid: isEmailValid ?? this.isEmailValid,
       isPasswordValid: isPasswordValid ?? this.isPasswordValid,
       passwordsMatch: passwordsMatch ?? this.passwordsMatch,

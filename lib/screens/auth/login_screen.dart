@@ -5,7 +5,6 @@ import 'package:go_router/go_router.dart';
 import 'package:beat_that/constants/app_strings.dart';
 import 'package:beat_that/constants/app_colors.dart';
 import 'package:beat_that/widgets/custom_snackbar.dart';
-import 'package:beat_that/widgets/form_input_decoration.dart';
 import 'package:beat_that/widgets/auth_button_styles.dart';
 import 'bloc/login_bloc.dart';
 import 'bloc/login_event.dart';
@@ -44,6 +43,15 @@ class LoginScreen extends StatelessWidget {
               backgroundColor: AppColors.black,
               foregroundColor: AppColors.white,
               centerTitle: true,
+              leading: IconButton(
+                icon: const Icon(Icons.arrow_back_ios_new, size: 24),
+                onPressed: isLoading
+                    ? null
+                    : () {
+                        HapticFeedback.lightImpact();
+                        context.goNamed('auth');
+                      },
+              ),
               title: Text(
                 AppStrings.login,
                 style: Theme.of(context).textTheme.titleLarge?.copyWith(
@@ -81,7 +89,7 @@ class LoginScreen extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 12),
-                     Text(
+                    Text(
                       AppStrings.signInToYourAccount,
                       textAlign: TextAlign.center,
                       style: TextStyle(
@@ -105,22 +113,17 @@ class LoginScreen extends StatelessWidget {
                       enabled: !isLoading,
                       keyboardType: TextInputType.emailAddress,
                       initialValue: email,
-                    //  style: getAuthTextFormFieldStyle(),
+                      //  style: getAuthTextFormFieldStyle(),
                       decoration: InputDecoration(
                         hintText: AppStrings.enterYourEmail,
                         labelText: AppStrings.email,
-                        prefixIcon: Icon(
-                          Icons.email_outlined,
-                          size: 20,
-                        ),
+                        prefixIcon: Icon(Icons.email_outlined, size: 20),
                       ),
                     ),
                     const SizedBox(height: 16),
 
                     // Password field
                     TextFormField(
-                      
-                      
                       cursorColor: AppColors.cyan,
                       onChanged: (value) {
                         HapticFeedback.lightImpact();
@@ -133,13 +136,9 @@ class LoginScreen extends StatelessWidget {
                       initialValue: password,
                       //style: getAuthTextFormFieldStyle(),
                       decoration: InputDecoration(
-                        
                         hintText: AppStrings.enterYourPassword,
                         labelText: AppStrings.password,
-                        prefixIcon: Icon(
-                          Icons.lock_outline,
-                          size: 20,
-                        ),
+                        prefixIcon: Icon(Icons.lock_outline, size: 20),
                         suffixIcon: IconButton(
                           icon: Icon(
                             obscurePassword
@@ -196,8 +195,7 @@ class LoginScreen extends StatelessWidget {
                               ),
                             ),
                     ),
-                    const SizedBox(height: 16),
-
+                    const SizedBox(height: 24),
                     // Forgot password link
                     Center(
                       child: GestureDetector(
@@ -215,7 +213,7 @@ class LoginScreen extends StatelessWidget {
                             style: TextStyle(
                               color: isLoading
                                   ? AppColors.white
-                                : AppColors.cyan,
+                                  : AppColors.cyan,
                               fontWeight: FontWeight.w600,
                               fontSize: 14,
                               letterSpacing: 0.3,
@@ -277,8 +275,6 @@ class LoginScreen extends StatelessWidget {
   /// Handle forgot password action
   void _onForgotPasswordTapped(BuildContext context) {
     // Dispatch forgot password event to the LoginBloc
-    context.read<LoginBloc>().add(
-      const ForgotPasswordTapped(),
-    );
+    context.read<LoginBloc>().add(const ForgotPasswordTapped());
   }
 }

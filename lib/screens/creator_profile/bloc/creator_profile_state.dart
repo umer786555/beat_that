@@ -25,6 +25,7 @@ final class CreatorProfileLoaded extends CreatorProfileState {
     required this.hasMoreVideos,
     this.isUpdatingFollow = false,
     this.isLoadingMore = false,
+    this.isUserBlocked = false,
   });
 
   final UserPersonalProfile profile;
@@ -35,6 +36,7 @@ final class CreatorProfileLoaded extends CreatorProfileState {
   final bool hasMoreVideos;
   final bool isUpdatingFollow;
   final bool isLoadingMore;
+  final bool isUserBlocked;
 
   CreatorProfileLoaded copyWith({
     UserPersonalProfile? profile,
@@ -45,6 +47,7 @@ final class CreatorProfileLoaded extends CreatorProfileState {
     bool? hasMoreVideos,
     bool? isUpdatingFollow,
     bool? isLoadingMore,
+    bool? isUserBlocked,
   }) {
     return CreatorProfileLoaded(
       profile: profile ?? this.profile,
@@ -55,6 +58,7 @@ final class CreatorProfileLoaded extends CreatorProfileState {
       hasMoreVideos: hasMoreVideos ?? this.hasMoreVideos,
       isUpdatingFollow: isUpdatingFollow ?? this.isUpdatingFollow,
       isLoadingMore: isLoadingMore ?? this.isLoadingMore,
+      isUserBlocked: isUserBlocked ?? this.isUserBlocked,
     );
   }
 
@@ -69,6 +73,7 @@ final class CreatorProfileLoaded extends CreatorProfileState {
     hasMoreVideos,
     isUpdatingFollow,
     isLoadingMore,
+    isUserBlocked,
   ];
 }
 

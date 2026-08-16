@@ -1,3 +1,10 @@
+import 'dart:convert';
+import 'dart:io' show Platform;
+
+import 'package:crypto/crypto.dart';
+import 'package:flutter/foundation.dart';
+import 'package:google_sign_in/google_sign_in.dart';
+import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 /// Authentication service for managing user authentication with Supabase
@@ -15,11 +22,30 @@ class AuthService {
   static const String authCallbackHost = 'login-callback';
   static const String authCallbackUrl =
       '$authCallbackScheme://$authCallbackHost';
+  static const String googleWebClientId =
+      '310151412384-84sep6me1mq6188f2lurcu2jfvqshg6b.apps.googleusercontent.com';
+  static const String googleIosClientId =
+      '310151412384-4l2comqgb132p4erqui0hbb48i88a3fo.apps.googleusercontent.com';
+  static const List<String> _googleScopes = ['email', 'profile'];
 
   final SupabaseClient _supabase;
+  final GoogleSignIn _googleSignIn = GoogleSignIn.instance;
+  bool _googleSignInInitialized = false;
 
   AuthService({SupabaseClient? supabase})
     : _supabase = supabase ?? Supabase.instance.client;
+
+  Future<void> _initializeGoogleSignIn() async {
+    if (_googleSignInInitialized) {
+      return;
+    }
+
+    await _googleSignIn.initialize(
+      serverClientId: googleWebClientId.isEmpty ? null : googleWebClientId,
+      clientId: googleIosClientId.isEmpty ? null : googleIosClientId,
+    );
+    _googleSignInInitialized = true;
+  }
 
   /// Sign up a new user with email and password
   ///
@@ -73,6 +99,134 @@ class AuthService {
     }
   }
 
+  Future<AuthResponse> signInWithGoogle() async {
+    if (googleWebClientId.isEmpty) {
+      throw const AuthException(
+        'Missing Google web client ID in AuthService.',
+        code: 'google_config_missing',
+      );
+    }
+
+    if (!(Platform.isAndroid || Platform.isIOS)) {
+      throw const AuthException(
+        'Native Google Sign-In is only configured for Android and iOS.',
+        code: 'google_platform_unsupported',
+      );
+    }
+
+    try {
+      await _initializeGoogleSignIn();
+
+      if (!_googleSignIn.supportsAuthenticate()) {
+        throw const AuthException(
+          'Google Sign-In is not supported on this device.',
+          code: 'google_auth_unsupported',
+        );
+      }
+
+      final googleUser = await _googleSignIn.authenticate(
+        scopeHint: _googleScopes,
+      );
+
+      final authorization =
+          await googleUser.authorizationClient.authorizationForScopes(
+            _googleScopes,
+          ) ??
+          await googleUser.authorizationClient.authorizeScopes(_googleScopes);
+
+      final authentication = googleUser.authentication;
+      final idToken = authentication.idToken;
+
+      if (idToken == null || idToken.isEmpty) {
+        throw const AuthException(
+          'No Google ID token was returned.',
+          code: 'google_id_token_missing',
+        );
+      }
+
+      return _supabase.auth.signInWithIdToken(
+        provider: OAuthProvider.google,
+        idToken: idToken,
+        accessToken: authorization.accessToken,
+      );
+    } on GoogleSignInException catch (error) {
+      throw AuthException(
+        error.description ?? 'Google sign-in failed.',
+        code: 'google_${error.code.name}',
+      );
+    }
+  }
+
+  Future<AuthResponse> signInWithApple() async {
+    if (!Platform.isIOS) {
+      throw const AuthException(
+        'Native Apple Sign-In is only configured for iOS.',
+        code: 'apple_platform_unsupported',
+      );
+    }
+
+    final isAvailable = await SignInWithApple.isAvailable();
+    if (!isAvailable) {
+      throw const AuthException(
+        'Apple Sign-In is not available on this device.',
+        code: 'apple_not_available',
+      );
+    }
+
+    final rawNonce = _supabase.auth.generateRawNonce();
+    final hashedNonce = sha256.convert(utf8.encode(rawNonce)).toString();
+
+    try {
+      final credential = await SignInWithApple.getAppleIDCredential(
+        scopes: [
+          AppleIDAuthorizationScopes.email,
+          AppleIDAuthorizationScopes.fullName,
+        ],
+        nonce: hashedNonce,
+      );
+
+      final idToken = credential.identityToken;
+      if (idToken == null || idToken.isEmpty) {
+        throw const AuthException(
+          'No Apple ID token was returned.',
+          code: 'apple_id_token_missing',
+        );
+      }
+
+      final response = await _supabase.auth.signInWithIdToken(
+        provider: OAuthProvider.apple,
+        idToken: idToken,
+        nonce: rawNonce,
+      );
+
+      if (credential.givenName != null || credential.familyName != null) {
+        final nameParts = <String>[
+          if (credential.givenName != null) credential.givenName!,
+          if (credential.familyName != null) credential.familyName!,
+        ];
+
+        try {
+          await _supabase.auth.updateUser(
+            UserAttributes(
+              data: {
+                'full_name': nameParts.join(' '),
+                'given_name': credential.givenName,
+                'family_name': credential.familyName,
+              },
+            ),
+          );
+        } catch (error, stackTrace) {
+          debugPrint('Apple sign-in profile update failed: $error');
+          debugPrintStack(stackTrace: stackTrace);
+        }
+      }
+
+      return response;
+    } on SignInWithAppleAuthorizationException catch (error) {
+      throw AuthException(error.message, code: 'apple_${error.code.name}');
+    }
+  }
+
   /// Sign out the current user
   ///
   /// Clears the session and removes authentication credentials
@@ -84,6 +238,9 @@ class AuthService {
   Future<void> logout() async {
     try {
       await _supabase.auth.signOut();
+      if (_googleSignInInitialized) {
+        await _googleSignIn.signOut();
+      }
     } catch (e) {
       rethrow;
     }

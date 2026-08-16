@@ -5,7 +5,6 @@ import 'package:go_router/go_router.dart';
 import 'package:beat_that/constants/app_strings.dart';
 import 'package:beat_that/constants/app_colors.dart';
 import 'package:beat_that/widgets/custom_snackbar.dart';
-import 'package:beat_that/widgets/form_input_decoration.dart';
 import 'package:beat_that/widgets/auth_button_styles.dart';
 import 'bloc/signup_bloc.dart';
 import 'bloc/signup_event.dart';
@@ -34,6 +33,10 @@ class SignupScreen extends StatelessWidget {
             if (context.mounted) {
               context.goNamed('login');
             }
+          } else if (state is SignupAuthenticatedSuccess) {
+            if (context.mounted) {
+              context.goNamed('home');
+            }
           } else if (state is SignupFailure) {
             // Show error snack bar
             showErrorSnackBar(context, message: state.error);
@@ -56,6 +59,15 @@ class SignupScreen extends StatelessWidget {
               backgroundColor: AppColors.black,
               foregroundColor: AppColors.white,
               centerTitle: true,
+              leading: IconButton(
+                icon: const Icon(Icons.arrow_back_ios_new),
+                onPressed: isLoading
+                    ? null
+                    : () {
+                        HapticFeedback.lightImpact();
+                        context.goNamed('auth');
+                      },
+              ),
               title: Text(
                 AppStrings.signUp,
                 style: Theme.of(context).textTheme.titleLarge?.copyWith(
@@ -123,10 +135,7 @@ class SignupScreen extends StatelessWidget {
                       decoration: InputDecoration(
                         hintText: AppStrings.enterYourEmail,
                         labelText: AppStrings.email,
-                        prefixIcon: Icon(
-                          Icons.email_outlined,
-                          size: 20,
-                        ),
+                        prefixIcon: Icon(Icons.email_outlined, size: 20),
                       ),
                     ),
                     const SizedBox(height: 16),
@@ -147,10 +156,7 @@ class SignupScreen extends StatelessWidget {
                       decoration: InputDecoration(
                         hintText: AppStrings.createAPassword,
                         labelText: AppStrings.password,
-                        prefixIcon: Icon(
-                          Icons.lock_outline,
-                          size: 20,
-                        ),
+                        prefixIcon: Icon(Icons.lock_outline, size: 20),
                         suffixIcon: IconButton(
                           icon: Icon(
                             obscurePassword
@@ -188,10 +194,7 @@ class SignupScreen extends StatelessWidget {
                       decoration: InputDecoration(
                         hintText: AppStrings.confirmYourPassword,
                         labelText: AppStrings.confirmPassword,
-                        prefixIcon: Icon(
-                          Icons.lock_outline,
-                          size: 20,
-                        ),
+                        prefixIcon: Icon(Icons.lock_outline, size: 20),
                         suffixIcon: IconButton(
                           icon: Icon(
                             obscureConfirmPassword
@@ -244,8 +247,7 @@ class SignupScreen extends StatelessWidget {
                               ),
                             ),
                     ),
-                    const SizedBox(height: 16),
-
+                    const SizedBox(height: 24),
                     // Login link
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,

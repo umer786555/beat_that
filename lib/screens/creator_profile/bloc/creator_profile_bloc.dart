@@ -16,18 +16,19 @@ class CreatorProfileBloc extends Bloc<CreatorProfileEvent, CreatorProfileState>
           CreatorProfileState,
           CreatorProfilePresentationEvent
         > {
+
+  final SupabaseService _supabaseService = locator<SupabaseService>();
   static const int _pageSize = 20;
 
   CreatorProfileBloc({required this.userId})
-    : _supabaseService = locator<SupabaseService>(),
-      super(const CreatorProfileInitial()) {
+    : super(const CreatorProfileInitial()) {
     on<LoadCreatorProfileEvent>(_onLoadCreatorProfile);
     on<LoadMoreCreatorProfileVideosEvent>(_onLoadMoreCreatorProfileVideos);
     on<ToggleFollowStatusEvent>(_onToggleFollowStatus);
+    on<BlockUserEvent>(_onBlockUser);
   }
 
   final String userId;
-  final SupabaseService _supabaseService;
 
   Future<void> _onLoadCreatorProfile(
     LoadCreatorProfileEvent event,
@@ -46,18 +47,31 @@ class CreatorProfileBloc extends Bloc<CreatorProfileEvent, CreatorProfileState>
         emit(
           CreatorProfileError(
             message:
-                result['error'] as String? ?? 'Failed to load creator profile.',
+                (result['error'] as String?) ?? 'Failed to load creator profile.',
           ),
         );
         return;
       }
 
+      if (result['profile'] == null) {
+        emit(const CreatorProfileError(message: 'Profile data is null'));
+        return;
+      }
       final profile = result['profile'] as UserPersonalProfile;
+
+      if (result['videos'] == null) {
+        emit(const CreatorProfileError(message: 'Videos data is null'));
+        return;
+      }
       final videos = result['videos'] as List<MyVideo>;
+
       final totalVideoCount =
-          result['totalVideoCount'] as int? ?? videos.length;
+          (result['totalVideoCount'] as int?) ?? videos.length;
+
       final hasMoreVideos = result['hasMoreVideos'] == true;
+
       final isOwnProfile = _supabaseService.getCurrentUserId() == userId;
+
       final isFollowing = isOwnProfile
           ? false
           : (await _supabaseService.checkIsFollowing(
@@ -165,6 +179,42 @@ class CreatorProfileBloc extends Bloc<CreatorProfileEvent, CreatorProfileState>
       emitPresentation(
         CreatorProfileFollowStatusErrorEvent(
           'Unable to update follow status: $e',
+        ),
+      );
+    }
+  }
+
+  Future<void> _onBlockUser(
+    BlockUserEvent event,
+    Emitter<CreatorProfileState> emit,
+  ) async {
+    final currentState = state;
+    try {
+      final result = await _supabaseService.blockUser(
+        userIdToBlock: event.userId,
+      );
+
+      if (result['success'] != true) {
+        emitPresentation(
+          CreatorProfileFollowStatusErrorEvent(
+            result['error'] as String? ?? 'Unable to block user.',
+          ),
+        );
+        return;
+      }
+
+      // Update state to show the blocking UI
+      if (currentState is CreatorProfileLoaded) {
+        emit(currentState.copyWith(isUserBlocked: true));
+      }
+
+      emitPresentation(
+        CreatorProfileFollowStatusUpdatedEvent(),
+      );
+    } catch (e) {
+      emitPresentation(
+        CreatorProfileFollowStatusErrorEvent(
+          'Unable to block user: $e',
         ),
       );
     }

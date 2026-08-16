@@ -82,7 +82,7 @@ class _PlayUploadedVideoScreenState extends State<PlayUploadedVideoScreen> {
     return BlocProvider(
       create: (context) =>
           PlayUploadedVideoBloc(videoPath: widget.videoPath)
-            ..add(InitializeVideoEvent(widget.videoPath)),
+            ..add(const InitializeVideoEvent()),
       child: BlocConsumer<PlayUploadedVideoBloc, PlayUploadedVideoState>(
         listener: (context, state) {
           // Hide controls when video starts playing
@@ -218,7 +218,7 @@ class _PlayUploadedVideoScreenState extends State<PlayUploadedVideoScreen> {
           message: 'Unable to load video',
           primaryButtonText: 'Retry',
           primaryButtonCallback: () {
-            bloc.add(InitializeVideoEvent(widget.videoPath));
+            bloc.add(const InitializeVideoEvent());
           },
           secondaryButtonText: 'Go Back',
           secondaryButtonCallback: () {

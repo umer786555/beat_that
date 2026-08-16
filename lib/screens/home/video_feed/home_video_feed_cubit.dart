@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:beat_that/screens/home/video_feed/presentation/events/home_video_feed_presentation_event.dart';
+import 'package:beat_that/screens/home/video_feed/state/home_video_feed_state.dart';
 import 'package:bloc_presentation/bloc_presentation.dart';
 import 'package:beat_that/service_locator.dart';
 import 'package:beat_that/services/home_feed_service.dart';
@@ -8,8 +10,6 @@ import 'package:beat_that/services/supabase_service.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:video_player/video_player.dart';
 
-import 'home_video_feed_presentation_event.dart';
-import 'home_video_feed_state.dart';
 
 class HomeVideoFeedCubit extends Cubit<HomeVideoFeedState>
     with
@@ -144,6 +144,38 @@ class HomeVideoFeedCubit extends Cubit<HomeVideoFeedState>
     return false;
   }
 
+  /// Submit a video report for moderation
+  Future<void> submitVideoReport(
+    String videoId,
+    String reason,
+  ) async {
+    if (videoId.isEmpty) {
+      emitPresentation(
+        HomeVideoFeedReportErrorEvent('Video not available'),
+      );
+      return;
+    }
+
+    final result = await _supabaseService.submitVideoReport(
+      videoId: videoId,
+      reason: reason,
+    );
+
+    if (result['success'] == true) {
+      emitPresentation(
+        HomeVideoFeedReportSuccessEvent(
+          result['message'] as String? ?? 'Thank you for your report.',
+        ),
+      );
+    } else {
+      emitPresentation(
+        HomeVideoFeedReportErrorEvent(
+          result['error'] as String? ?? 'Failed to submit report. Please try again.',
+        ),
+      );
+    }
+  }
+
   Future<void> _activateIndex(int index) async {
     await _ensureController(index, autoplay: true);
 
@@ -191,19 +223,25 @@ class HomeVideoFeedCubit extends Cubit<HomeVideoFeedState>
 
   Future<void> _initializeController(int index, {bool autoplay = false}) async {
     final video = state.videos[index];
-    final videoPath = video['video_path'] as String?;
-    if (videoPath == null || videoPath.isEmpty) {
+    final videoSource =
+        video['video_path'] as String? ?? video['video_url'] as String?;
+    if (videoSource == null || videoSource.isEmpty) {
       emit(state.copyWith(errorMessage: 'This video is unavailable.'));
       return;
     }
 
-    // Home feed items store a bucket-relative video path, not a ready-to-play URL.
-    final playbackUrl = await _supabaseService.resolveVideoPlaybackUrl(
-      videoPath,
-    );
-    final controller = VideoPlayerController.networkUrl(
-      Uri.parse(playbackUrl),
-    );
+    final isNetworkUrl =
+        videoSource.startsWith('http://') || videoSource.startsWith('https://');
+
+    late final VideoPlayerController controller;
+    if (isNetworkUrl) {
+      controller = VideoPlayerController.networkUrl(Uri.parse(videoSource));
+    } else {
+      final playbackUrl = await _supabaseService.resolveVideoPlaybackUrl(
+        videoSource,
+      );
+      controller = VideoPlayerController.networkUrl(Uri.parse(playbackUrl));
+    }
 
     try {
       await controller.initialize();
@@ -248,7 +286,19 @@ class HomeVideoFeedCubit extends Cubit<HomeVideoFeedState>
     }
 
     final video = state.videos[index];
-    return video['user_video_id'] as String? ?? video['video_id'] as String?;
+    // For rating, we need the my_videos.id (stored in user_video_id for sport_videos)
+    // First try user_video_id (for feed videos from sport_videos table)
+    // Then fall back to id (for direct my_videos)
+    // Then try video_id (legacy fallback)
+    final videoId = video['user_video_id'] as String? ?? 
+                    video['id'] as String? ?? 
+                    video['video_id'] as String?;
+    
+    if (videoId == null || videoId.isEmpty) {
+      print('[HOME_FEED_RATING] ❌ videoId is null or empty!');
+    }
+    
+    return videoId;
   }
 
   Future<void> _loadMoreIfNeeded(int index) async {

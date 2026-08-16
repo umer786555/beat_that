@@ -5,7 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:beat_that/service_locator.dart';
 import 'package:beat_that/screens/home/bloc/home_bloc.dart';
-import 'package:beat_that/screens/home/video_feed/home_video_feed_route_extra.dart';
+import 'package:beat_that/screens/home/video_feed/models/home_video_feed_route_extra.dart';
 import 'package:beat_that/services/home_video_feed_session_store.dart';
 import 'package:beat_that/widgets/video_feed_card.dart';
 import 'package:beat_that/widgets/shimmer_loading.dart';

@@ -1,4 +1,3 @@
-import 'package:beat_that/models/user_personal_profile.dart';
 import 'package:beat_that/service_locator.dart';
 import 'package:beat_that/services/preferences_service.dart';
 import 'package:beat_that/services/supabase_service.dart';
@@ -31,8 +30,9 @@ class UsernameSetupBloc extends Bloc<UsernameSetupEvent, UsernameSetupState>
       emit(UsernameSetupLoading());
 
       // Step 1: Save username to Supabase
+      // Service handles auth validation internally
       final supabaseResult = await supabaseService.saveUserPersonalProfile(
-        UserPersonalProfile(username: event.username),
+        event.username,
       );
 
       // Check if Supabase save was successful
@@ -46,9 +46,8 @@ class UsernameSetupBloc extends Bloc<UsernameSetupEvent, UsernameSetupState>
       }
 
       // Step 2: Only if Supabase save was successful, save to preferences
-      await preferencesService.saveUserProfile(
-        UserPersonalProfile(username: event.username),
-      );
+      await preferencesService.updateUserProfileUsername(event.username);
+
 
       print('✓ Username saved successfully: ${event.username}');
       print('✓ Emitting UsernameSetupSuccess state');

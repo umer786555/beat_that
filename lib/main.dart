@@ -20,10 +20,12 @@ void main() async {
 
     anonKey: 'sb_publishable_0fYQfoXXyTq7Oexc54H_-A_lPipG7MW',
   );
-  // } else {
+  } 
+  // else  async {
   //   await Supabase.initialize(
-  //     url: 'https://ahrpqdjrnriugjdxqkfy.supabase.co',
-  //     anonKey: 'sb_publishable_uSCOer4EsaTo9eDc-TedqQ_bIGWkULu',
+  
+  //     url: 'https://eluksmhzledvstyykjyj.supabase.co',
+  //     anonKey: 'sb_publishable_q6O-_lmj2hiXyo6K9ZqWvg_bGG5yXmd',
   //   );
   // }
 
@@ -79,26 +81,31 @@ class _MyAppState extends State<MyApp> {
     // Listen to authentication state changes from Supabase
     // When auth state changes (login, logout, session expired, etc.),
     // we need to call router.refresh() so GoRouter re-evaluates the redirect logic
-    authService.onAuthStateChanged().listen((event) {
-      // Debounce refresh calls to prevent rapid consecutive refreshes
-      // that could cause redirect loops or excessive rebuild cycles
-      final now = DateTime.now();
-      if (_lastRefreshTime == null ||
-          now.difference(_lastRefreshTime!).inMilliseconds > 500) {
-        _lastRefreshTime = now;
+    authService.onAuthStateChanged().listen(
+      (event) {
+        // Debounce refresh calls to prevent rapid consecutive refreshes
+        // that could cause redirect loops or excessive rebuild cycles
+        final now = DateTime.now();
+        if (_lastRefreshTime == null ||
+            now.difference(_lastRefreshTime!).inMilliseconds > 500) {
+          _lastRefreshTime = now;
 
-        if (authService.isLoggedIn()) {
-          _followCountsCubit.refresh();
-        } else {
-          _followCountsCubit.reset();
+          if (authService.isLoggedIn()) {
+            _followCountsCubit.refresh();
+          } else {
+            _followCountsCubit.reset();
+          }
+
+          // Trigger GoRouter's redirect logic
+          // The top-level redirect in AppRouter will evaluate the new auth state
+          // and navigate to the appropriate route (login, home, etc.)
+          _appRouter.router.refresh();
         }
-
-        // Trigger GoRouter's redirect logic
-        // The top-level redirect in AppRouter will evaluate the new auth state
-        // and navigate to the appropriate route (login, home, etc.)
-        _appRouter.router.refresh();
-      }
-    });
+      },
+      onError: (error, stackTrace) {
+        debugPrint('Auth state stream error: $error');
+      },
+    );
   }
 
   @override

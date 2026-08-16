@@ -46,6 +46,14 @@ class SignupSubmitted extends SignupEvent {
   List<Object?> get props => [];
 }
 
+/// Event triggered when Google sign-in is submitted from the signup screen
+class GoogleSignupSubmitted extends SignupEvent {
+  const GoogleSignupSubmitted();
+
+  @override
+  List<Object?> get props => [];
+}
+
 /// Event triggered when user wants to toggle password visibility
 class PasswordVisibilityToggled extends SignupEvent {
   const PasswordVisibilityToggled();

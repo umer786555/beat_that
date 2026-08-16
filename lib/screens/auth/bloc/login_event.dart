@@ -33,13 +33,26 @@ class LoginSubmitted extends LoginEvent {
   final String email;
   final String password;
 
-  const LoginSubmitted({
-    required this.email,
-    required this.password,
-  });
+  const LoginSubmitted({required this.email, required this.password});
 
   @override
   List<Object?> get props => [email, password];
+}
+
+/// Event triggered when Google sign-in is submitted
+class GoogleLoginSubmitted extends LoginEvent {
+  const GoogleLoginSubmitted();
+
+  @override
+  List<Object?> get props => [];
+}
+
+/// Event triggered when Apple sign-in is submitted
+class AppleLoginSubmitted extends LoginEvent {
+  const AppleLoginSubmitted();
+
+  @override
+  List<Object?> get props => [];
 }
 
 /// Event triggered when user wants to toggle password visibility

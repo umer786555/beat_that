@@ -37,20 +37,20 @@ class PlayUploadedVideoBloc
       await _videoController?.dispose();
 
       final isUrl =
-          event.videoPath.startsWith('http://') ||
-          event.videoPath.startsWith('https://');
-      final localFile = File(event.videoPath);
+          videoPath.startsWith('http://') ||
+          videoPath.startsWith('https://');
+      final localFile = File(videoPath);
       final isLocalFile = !isUrl && await localFile.exists();
 
       if (isUrl) {
         _videoController = VideoPlayerController.networkUrl(
-          Uri.parse(event.videoPath),
+          Uri.parse(videoPath),
         );
       } else if (isLocalFile) {
         _videoController = VideoPlayerController.file(localFile);
       } else {
         final resolvedVideoUrl = await _supabaseService.resolveVideoPlaybackUrl(
-          event.videoPath,
+          videoPath,
         );
         _videoController = VideoPlayerController.networkUrl(
           Uri.parse(resolvedVideoUrl),

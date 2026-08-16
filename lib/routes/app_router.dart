@@ -8,8 +8,8 @@ import 'package:beat_that/screens/explore/video_feed/explore_video_feed_screen.d
 import 'package:beat_that/screens/explore/bloc/explore_bloc.dart';
 import 'package:beat_that/screens/play_uploaded_video.dart/play_uploaded_video_screen.dart';
 import 'package:beat_that/screens/edit_thumbnail/edit_thumbnail_screen.dart';
-import 'package:beat_that/screens/home/video_feed/home_video_feed_route_extra.dart';
-import 'package:beat_that/screens/home/video_feed/home_video_feed_screen.dart';
+import 'package:beat_that/screens/home/video_feed/models/home_video_feed_route_extra.dart';
+import 'package:beat_that/screens/home/video_feed/presentation/home_video_feed_screen.dart';
 import 'package:beat_that/screens/sports_hub/sport_details_screen.dart';
 import 'package:beat_that/screens/username_setup/username_setup_screen.dart';
 import 'package:flutter/material.dart';
@@ -26,8 +26,10 @@ import 'package:beat_that/screens/profile/profile_screen.dart';
 import 'package:beat_that/screens/profile/bloc/profile_bloc.dart';
 import 'package:beat_that/screens/profile/connections/profile_connections_screen.dart';
 import 'package:beat_that/screens/settings/bloc/settings_bloc.dart';
+import 'package:beat_that/screens/settings/blocked_users_screen.dart';
 import 'package:beat_that/screens/settings/settings_screen.dart';
 import 'package:beat_that/screens/creator_profile/creator_profile_screen.dart';
+import 'package:beat_that/screens/auth/auth_choice_screen.dart';
 import 'package:beat_that/screens/auth/login_screen.dart';
 import 'package:beat_that/screens/auth/signup_screen.dart';
 
@@ -250,6 +252,7 @@ class _RouteExtraDecoder extends Converter<Object?, Object?> {
 /// Route paths for the application
 class AppRoutes {
   // Auth routes
+  static const String auth = '/auth';
   static const String login = '/login';
   static const String signup = '/signup';
 
@@ -260,6 +263,7 @@ class AppRoutes {
   static const String profileConnections = '/profile/connections';
   static const String creatorProfile = '/creator-profile';
   static const String playVideo = '/play-video';
+  static const String blockedUsers = '/profile/blocked-users';
 
   // Profile routes
   static const String editUploadedVideo = '/profile/edit-uploaded-video';
@@ -279,7 +283,11 @@ class AppRouter {
   AppRouter();
 
   /// List of public (authentication) routes that don't require login
-  static const List<String> _publicRoutes = [AppRoutes.login, AppRoutes.signup];
+  static const List<String> _publicRoutes = [
+    AppRoutes.auth,
+    AppRoutes.login,
+    AppRoutes.signup,
+  ];
 
   GoRouter? _routerInstance;
 
@@ -319,7 +327,7 @@ class AppRouter {
 
         // Rule 1: If not logged in and trying to access a protected route, redirect to login
         if (!isLoggedIn && !isPublicRoute) {
-          return AppRoutes.login;
+          return AppRoutes.auth;
         }
 
         // Rule 2: If logged in and on an auth route, redirect to home
@@ -339,6 +347,17 @@ class AppRouter {
       /// Using named routes for type-safe navigation with goNamed()
       routes: [
         /// Public authentication routes (require NOT logged in)
+        GoRoute(
+          path: AppRoutes.auth,
+          name: 'auth',
+          pageBuilder: (context, state) {
+            return NoTransitionPage(
+              key: state.pageKey,
+              child: const AuthChoiceScreen(),
+            );
+          },
+        ),
+
         /// Login uses Fade pattern: enter with fade + scale (80% → 100%)
         GoRoute(
           path: AppRoutes.login,
@@ -564,6 +583,30 @@ class AppRouter {
                             create: (context) => SettingsBloc(),
                             child: const SettingsScreen(),
                           ),
+                          transitionsBuilder:
+                              (context, animation, secondaryAnimation, child) {
+                                const begin = Offset(1.0, 0.0);
+                                const end = Offset.zero;
+                                final tween = Tween(begin: begin, end: end);
+                                final curvedAnimation = CurvedAnimation(
+                                  parent: animation,
+                                  curve: Curves.easeInOut,
+                                );
+                                return SlideTransition(
+                                  position: tween.animate(curvedAnimation),
+                                  child: child,
+                                );
+                              },
+                        );
+                      },
+                    ),
+                    GoRoute(
+                      path: 'blocked-users',
+                      name: 'blocked-users',
+                      pageBuilder: (context, state) {
+                        return CustomTransitionPage(
+                          key: state.pageKey,
+                          child: const BlockedUsersScreen(),
                           transitionsBuilder:
                               (context, animation, secondaryAnimation, child) {
                                 const begin = Offset(1.0, 0.0);

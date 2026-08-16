@@ -8,6 +8,7 @@ import 'package:beat_that/widgets/delete_account_confirmation_dialog.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:go_router/go_router.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -57,6 +58,22 @@ class SettingsScreen extends StatelessWidget {
                 onChanged: (_) {
                   HapticFeedback.mediumImpact();
                   context.read<ThemeBloc>().add(ToggleThemeEvent());
+                },
+              ),
+            ),
+            const SizedBox(height: 16),
+            Card(
+              child: ListTile(
+                leading: Icon(
+                  Icons.block_outlined,
+                  color: isDark ? AppColors.cyan : AppColors.electricMagenta,
+                ),
+                title: const Text(AppStrings.blockedUsers),
+                subtitle: const Text(AppStrings.blockedUsersDescription),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () {
+                  HapticFeedback.mediumImpact();
+                  context.pushNamed('blocked-users');
                 },
               ),
             ),

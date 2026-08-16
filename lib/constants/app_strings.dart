@@ -8,6 +8,15 @@ class AppStrings {
   static const String login = 'Login';
   static const String signInToYourAccount = 'Sign in to your account';
   static const String signIn = 'Sign In';
+  static const String recommendedForIPhone = 'Recommended for iPhone';
+  static const String continueWithApple = 'Continue with Apple';
+  static const String continueWithGoogle = 'Continue with Google';
+  static const String continueWithEmail = 'Continue with Email';
+  static const String authChoiceSubtitle =
+      'Share your game, rate the competition, and get back to the action fast.';
+  static const String authChoiceHint =
+      'Google is the fastest way in. You can always use email instead.';
+  static const String orContinueWith = 'or continue with';
   static const String dontHaveAccount = "Don't have an account? ";
   static const String signUp = 'Sign Up';
   static const String forgotPassword = 'Forgot password?';
@@ -37,27 +46,52 @@ class AppStrings {
   static const String passwordsDoNotMatch = 'Passwords do not match';
 
   // Login Errors
-  static const String invalidEmailOrPassword = 'Invalid email or password';
+  static const String invalidEmailOrPassword =
+      'That email or password doesn\'t look right. Try again.';
   static const String pleaseConfirmYourEmailBeforeLoggingIn =
-      'Please confirm your email before logging in';
+      'Check your inbox and confirm your email before signing in.';
   static const String userNotFoundPleaseSignUpFirst =
-      'User not found. Please sign up first';
+      'We couldn\'t find an account with that email. Create one to get started.';
   static const String loginFailedPleaseTryAgain =
-      'Login failed. Please try again';
+      'We couldn\'t sign you in right now. Please try again.';
 
   // Signup Errors
   static const String thisEmailIsAlreadyRegisteredPleaseSignInInstead =
-      'This email is already registered. Please sign in instead.';
+      'An account already exists for that email. Try signing in instead.';
   static const String pleaseEnterAValidEmailAddress =
-      'Please enter a valid email address';
+      'Enter a valid email address to continue.';
   static const String confirmationEmailCouldNotBeSent =
-      'We could not send the confirmation email right now. Please try again later.';
+      'We couldn\'t send the confirmation email right now. Please try again in a bit.';
   static const String signupFailedPleaseTryAgain =
-      'Signup failed. Please try again';
+      'We couldn\'t create your account right now. Please try again.';
 
   // Network Errors
   static const String networkErrorPleaseCheckYourConnection =
-      'Network error. Please check your connection';
+      'Check your connection and try again.';
+  static const String appleSignInCanceled = 'Apple sign-in was canceled.';
+  static const String appleSignInNotConfigured =
+      'Apple sign-in isn\'t fully configured yet.';
+  static const String appleSignInNotSupported =
+      'Apple sign-in isn\'t supported on this device.';
+  static const String appleSignInConfigurationIssue =
+      'Apple sign-in isn\'t available right now. Please try again later.';
+  static const String appleSignInFailedPleaseTryAgain =
+      'We couldn\'t sign you in with Apple. Please try again.';
+  static const String googleSignInCanceled = 'Google sign-in was canceled.';
+  static const String googleSignInInterrupted =
+      'Google sign-in was interrupted. Try again.';
+  static const String googleSignInNotConfigured =
+      'Google sign-in isn\'t available right now.';
+  static const String googleSignInNotSupported =
+      'Google sign-in isn\'t supported on this device.';
+  static const String googleSignInConfigurationIssue =
+      'Google sign-in isn\'t available right now. Please try again later.';
+  static const String googleSignInUiUnavailable =
+      'We couldn\'t open Google sign-in. Try again.';
+  static const String googleSignInUserMismatch =
+      'Your Google session changed. Try signing in again.';
+  static const String googleSignInFailedPleaseTryAgain =
+      'We couldn\'t sign you in with Google. Please try again.';
 
   // Success Messages
   static const String accountCreatedSuccessfullyPleaseCheckYourEmailToConfirm =
@@ -72,6 +106,9 @@ class AppStrings {
   static const String darkTheme = 'Dark theme';
   static const String darkThemeDescription =
       'Switch between the light and dark app themes.';
+  static const String blockedUsers = 'Blocked users';
+  static const String blockedUsersDescription =
+      'Review the people you have blocked.';
   static const String deleteAccount = 'Delete account';
   static const String deleteAccountDescription =
       'Permanently remove your account and everything tied to it.';

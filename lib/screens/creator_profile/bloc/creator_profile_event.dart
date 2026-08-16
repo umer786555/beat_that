@@ -18,3 +18,12 @@ final class ToggleFollowStatusEvent extends CreatorProfileEvent {
 final class LoadMoreCreatorProfileVideosEvent extends CreatorProfileEvent {
   const LoadMoreCreatorProfileVideosEvent();
 }
+
+final class BlockUserEvent extends CreatorProfileEvent {
+  const BlockUserEvent({required this.userId});
+
+  final String userId;
+
+  @override
+  List<Object> get props => [userId];
+}

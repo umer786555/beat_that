@@ -28,6 +28,7 @@ class PreferencesService {
   /// Save a user's personal profile
   Future<void> saveUserProfile(UserPersonalProfile profile) async {
     final profileJson = jsonEncode({
+      'id': profile.id,
       'username': profile.username,
       'profileUrl': profile.profileUrl,
     });
@@ -41,9 +42,23 @@ class PreferencesService {
 
     final decodedJson = jsonDecode(profileJson) as Map<String, dynamic>;
     return UserPersonalProfile(
+      id: decodedJson['id'] as String?,
       username: decodedJson['username'] as String,
       profileUrl: decodedJson['profileUrl'] as String?,
     );
+  }
+
+  /// Update only the username in the user's personal profile
+  /// Preserves all other fields (id, profileUrl) from the existing profile
+  /// This is more efficient than fetching, reconstructing, and saving the entire profile
+  Future<void> updateUserProfileUsername(String newUsername) async {
+    final profileJson = _prefs.getString('user_personal_profile');
+    if (profileJson == null) return;
+
+    final decodedJson = jsonDecode(profileJson) as Map<String, dynamic>;
+    decodedJson['username'] = newUsername;
+    
+    await _prefs.setString('user_personal_profile', jsonEncode(decodedJson));
   }
 
   /// Clear the user's personal profile from local storage

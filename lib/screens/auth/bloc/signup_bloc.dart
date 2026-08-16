@@ -1,4 +1,5 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:beat_that/service_locator.dart';
 import 'package:beat_that/services/auth_service.dart';
 import 'package:beat_that/constants/app_strings.dart';
@@ -34,6 +35,7 @@ class SignupBloc extends Bloc<SignupEvent, SignupState> {
     on<PasswordVisibilityToggled>(_onPasswordVisibilityToggled);
     on<ConfirmPasswordVisibilityToggled>(_onConfirmPasswordVisibilityToggled);
     on<SignupSubmitted>(_onSignupSubmitted);
+    on<GoogleSignupSubmitted>(_onGoogleSignupSubmitted);
   }
 
   /// Validate email format
@@ -53,21 +55,52 @@ class SignupBloc extends Bloc<SignupEvent, SignupState> {
   }
 
   /// Parse error message to be user-friendly
-  String _parseErrorMessage(String error) {
+  String _parseErrorMessage(Object error) {
+    if (error is AuthException) {
+      switch (error.code) {
+        case 'google_canceled':
+          return AppStrings.googleSignInCanceled;
+        case 'google_interrupted':
+          return AppStrings.googleSignInInterrupted;
+        case 'google_clientConfigurationError':
+        case 'google_providerConfigurationError':
+        case 'google_id_token_missing':
+          return AppStrings.googleSignInConfigurationIssue;
+        case 'google_uiUnavailable':
+          return AppStrings.googleSignInUiUnavailable;
+        case 'google_userMismatch':
+          return AppStrings.googleSignInUserMismatch;
+        case 'google_config_missing':
+          return AppStrings.googleSignInNotConfigured;
+        case 'google_auth_unsupported':
+        case 'google_platform_unsupported':
+          return AppStrings.googleSignInNotSupported;
+      }
+    }
+
+    final errorText = error.toString();
     // Check if it's a Supabase AuthException with error code
-    if (error.contains('email_exists') ||
-        error.contains('user_already_exists')) {
+    if (errorText.contains('email_exists') ||
+        errorText.contains('user_already_exists')) {
       return AppStrings.thisEmailIsAlreadyRegisteredPleaseSignInInstead;
-    } else if (error.contains('User already registered')) {
+    } else if (errorText.contains('User already registered')) {
       return AppStrings.thisEmailIsAlreadyRegisteredPleaseSignInInstead;
-    } else if (error.contains('Error sending confirmation email')) {
+    } else if (errorText.contains('Error sending confirmation email')) {
       return AppStrings.confirmationEmailCouldNotBeSent;
-    } else if (error.contains('Password')) {
+    } else if (errorText.contains('Password')) {
       return AppStrings.passwordMustBeAtLeast6Characters;
-    } else if (error.contains('Email')) {
+    } else if (errorText.contains('Email')) {
       return AppStrings.pleaseEnterAValidEmailAddress;
-    } else if (error.contains('Network')) {
+    } else if (errorText.contains('Network')) {
       return AppStrings.networkErrorPleaseCheckYourConnection;
+    } else if (errorText.contains('google_config_missing') ||
+        errorText.contains('GOOGLE_WEB_CLIENT_ID')) {
+      return AppStrings.googleSignInNotConfigured;
+    } else if (errorText.contains('google_auth_unsupported') ||
+        errorText.contains('google_platform_unsupported')) {
+      return AppStrings.googleSignInNotSupported;
+    } else if (errorText.toLowerCase().contains('canceled')) {
+      return AppStrings.googleSignInCanceled;
     }
     return AppStrings.signupFailedPleaseTryAgain;
   }
@@ -162,7 +195,21 @@ class SignupBloc extends Bloc<SignupEvent, SignupState> {
       emit(const SignupSuccess());
     } catch (e) {
       // Emit failure state with error message
-      final errorMessage = _parseErrorMessage(e.toString());
+      final errorMessage = _parseErrorMessage(e);
+      emit(SignupFailure(error: errorMessage));
+    }
+  }
+
+  Future<void> _onGoogleSignupSubmitted(
+    GoogleSignupSubmitted event,
+    Emitter<SignupState> emit,
+  ) async {
+    try {
+      emit(const SignupLoading());
+      await authService.signInWithGoogle();
+      emit(const SignupAuthenticatedSuccess());
+    } catch (e) {
+      final errorMessage = _parseErrorMessage(e);
       emit(SignupFailure(error: errorMessage));
     }
   }

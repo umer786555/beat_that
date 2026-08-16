@@ -1,4 +1,6 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter/foundation.dart';
 import 'package:beat_that/service_locator.dart';
 import 'package:beat_that/services/auth_service.dart';
 import 'package:beat_that/constants/app_strings.dart';
@@ -29,6 +31,8 @@ class LoginBloc extends Bloc<LoginEvent, LoginState> {
     on<PasswordChanged>(_onPasswordChanged);
     on<PasswordVisibilityToggled>(_onPasswordVisibilityToggled);
     on<LoginSubmitted>(_onLoginSubmitted);
+    on<GoogleLoginSubmitted>(_onGoogleLoginSubmitted);
+    on<AppleLoginSubmitted>(_onAppleLoginSubmitted);
   }
 
   /// Validate email format
@@ -42,15 +46,78 @@ class LoginBloc extends Bloc<LoginEvent, LoginState> {
   }
 
   /// Parse error message to be user-friendly
-  String _parseErrorMessage(String error) {
-    if (error.contains('Invalid login credentials')) {
+  String _parseErrorMessage(Object error) {
+    if (error is AuthException) {
+      final normalizedDetails = '${error.code ?? ''} ${error.message}'
+          .toLowerCase();
+
+      switch (error.code) {
+        case 'apple_canceled':
+          return AppStrings.appleSignInCanceled;
+        case 'apple_failed':
+          if (normalizedDetails.contains('provider') &&
+              normalizedDetails.contains('enable')) {
+            return AppStrings.appleSignInNotConfigured;
+          }
+          if (normalizedDetails.contains('audience') ||
+              normalizedDetails.contains('client id') ||
+              normalizedDetails.contains('client_id') ||
+              normalizedDetails.contains('bundle id')) {
+            return AppStrings.appleSignInConfigurationIssue;
+          }
+          if (normalizedDetails.contains('nonce')) {
+            return AppStrings.appleSignInConfigurationIssue;
+          }
+          return AppStrings.appleSignInFailedPleaseTryAgain;
+        case 'apple_not_available':
+        case 'apple_platform_unsupported':
+          return AppStrings.appleSignInNotSupported;
+        case 'apple_id_token_missing':
+        case 'apple_invalidResponse':
+        case 'apple_notHandled':
+        case 'apple_notInteractive':
+        case 'apple_unknown':
+          return AppStrings.appleSignInFailedPleaseTryAgain;
+        case 'google_canceled':
+          return AppStrings.googleSignInCanceled;
+        case 'google_interrupted':
+          return AppStrings.googleSignInInterrupted;
+        case 'google_clientConfigurationError':
+        case 'google_providerConfigurationError':
+        case 'google_id_token_missing':
+          return AppStrings.googleSignInConfigurationIssue;
+        case 'google_uiUnavailable':
+          return AppStrings.googleSignInUiUnavailable;
+        case 'google_userMismatch':
+          return AppStrings.googleSignInUserMismatch;
+        case 'google_config_missing':
+          return AppStrings.googleSignInNotConfigured;
+        case 'google_auth_unsupported':
+        case 'google_platform_unsupported':
+          return AppStrings.googleSignInNotSupported;
+      }
+    }
+
+    final errorText = error.toString();
+    if (errorText.contains('Invalid login credentials')) {
       return AppStrings.invalidEmailOrPassword;
-    } else if (error.contains('Email not confirmed')) {
+    } else if (errorText.contains('Email not confirmed')) {
       return AppStrings.pleaseConfirmYourEmailBeforeLoggingIn;
-    } else if (error.contains('User not found')) {
+    } else if (errorText.contains('User not found')) {
       return AppStrings.userNotFoundPleaseSignUpFirst;
-    } else if (error.contains('Network')) {
+    } else if (errorText.contains('Network')) {
       return AppStrings.networkErrorPleaseCheckYourConnection;
+    } else if (errorText.contains('google_config_missing') ||
+        errorText.contains('GOOGLE_WEB_CLIENT_ID')) {
+      return AppStrings.googleSignInNotConfigured;
+    } else if (errorText.contains('google_auth_unsupported') ||
+        errorText.contains('google_platform_unsupported')) {
+      return AppStrings.googleSignInNotSupported;
+    } else if (errorText.contains('apple_not_available') ||
+        errorText.contains('apple_platform_unsupported')) {
+      return AppStrings.appleSignInNotSupported;
+    } else if (errorText.toLowerCase().contains('canceled')) {
+      return AppStrings.googleSignInCanceled;
     }
     return AppStrings.loginFailedPleaseTryAgain;
   }
@@ -106,7 +173,36 @@ class LoginBloc extends Bloc<LoginEvent, LoginState> {
       emit(const LoginSuccess());
     } catch (e) {
       // Emit failure state with error message
-      final errorMessage = _parseErrorMessage(e.toString());
+      final errorMessage = _parseErrorMessage(e);
+      emit(LoginFailure(error: errorMessage));
+    }
+  }
+
+  Future<void> _onGoogleLoginSubmitted(
+    GoogleLoginSubmitted event,
+    Emitter<LoginState> emit,
+  ) async {
+    try {
+      emit(const LoginLoading());
+      await authService.signInWithGoogle();
+      emit(const LoginSuccess());
+    } catch (e) {
+      final errorMessage = _parseErrorMessage(e);
+      emit(LoginFailure(error: errorMessage));
+    }
+  }
+
+  Future<void> _onAppleLoginSubmitted(
+    AppleLoginSubmitted event,
+    Emitter<LoginState> emit,
+  ) async {
+    try {
+      emit(const LoginLoading());
+      await authService.signInWithApple();
+      emit(const LoginSuccess());
+    } catch (e) {
+      debugPrint('Apple login failed: $e');
+      final errorMessage = _parseErrorMessage(e);
       emit(LoginFailure(error: errorMessage));
     }
   }

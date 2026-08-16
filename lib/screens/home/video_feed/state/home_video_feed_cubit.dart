@@ -1,60 +1,63 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:bloc_presentation/bloc_presentation.dart';
-import 'package:beat_that/screens/explore/bloc/explore_bloc.dart';
 import 'package:beat_that/service_locator.dart';
+import 'package:beat_that/services/home_feed_service.dart';
+import 'package:beat_that/services/home_video_feed_session_store.dart';
 import 'package:beat_that/services/supabase_service.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:video_player/video_player.dart';
 
-import 'explore_video_feed_presentation_event.dart';
-import 'explore_video_feed_state.dart';
+import '../presentation/events/home_video_feed_presentation_event.dart';
+import 'home_video_feed_state.dart';
 
-class ExploreVideoFeedCubit extends Cubit<ExploreVideoFeedState>
+class HomeVideoFeedCubit extends Cubit<HomeVideoFeedState>
     with
         BlocPresentationMixin<
-          ExploreVideoFeedState,
-          ExploreVideoFeedPresentationEvent
+          HomeVideoFeedState,
+          HomeVideoFeedPresentationEvent
         > {
   static const Duration _viewCountThreshold = Duration(seconds: 8);
   static const Duration _replayResetThreshold = Duration(milliseconds: 600);
+
+  HomeVideoFeedCubit({required this.sessionId, required int initialIndex})
+    : _homeFeedService = locator<HomeFeedService>(),
+      _supabaseService = locator<SupabaseService>(),
+      _sessionStore = locator<HomeVideoFeedSessionStore>(),
+      _seenVideoIds = _requireSession(sessionId).seenVideoIds,
+      super(
+        HomeVideoFeedState(
+          videos: List<Map<String, dynamic>>.from(
+            _requireSession(sessionId).videos,
+          ),
+          currentIndex: initialIndex,
+          nextOffset: _requireSession(sessionId).nextOffset,
+          hasMoreContent: _requireSession(sessionId).hasMoreContent,
+        ),
+      );
+
+  static HomeVideoFeedSession _requireSession(String sessionId) {
+    final session = locator<HomeVideoFeedSessionStore>().getSession(sessionId);
+    if (session == null) {
+      throw StateError('Missing home video feed session: $sessionId');
+    }
+    return session;
+  }
+
   static const int _loadMoreThreshold = 3;
   static const int _continuationPageSize = 20;
 
-  ExploreVideoFeedCubit({
-    required List<Map<String, dynamic>> initialVideos,
-    required int initialIndex,
-    required this.query,
-    required this.searchMode,
-    required this.nextOffset,
-    required this.hasMoreContent,
-    this.selectedSportId,
-  }) : _supabaseService = locator<SupabaseService>(),
-       super(
-         ExploreVideoFeedState(
-           videos: List<Map<String, dynamic>>.from(initialVideos),
-           currentIndex: initialIndex,
-           nextOffset: nextOffset,
-           hasMoreContent: hasMoreContent,
-         ),
-       );
-
+  final String sessionId;
+  final HomeFeedService _homeFeedService;
   final SupabaseService _supabaseService;
-  final String query;
-  final ExploreSearchMode searchMode;
-  final String? selectedSportId;
-  final int nextOffset;
-  final bool hasMoreContent;
+  final HomeVideoFeedSessionStore _sessionStore;
+  final Set<String> _seenVideoIds;
   final Map<int, VideoPlayerController> _controllers = {};
   final Map<int, Future<void>> _controllerInitializers = {};
   final Map<int, void Function()> _controllerListeners = {};
   final Set<int> _viewThresholdReachedIndexes = {};
-  bool _isShuttingDown = false;
 
   VideoPlayerController? controllerFor(int index) => _controllers[index];
-
-  bool get _isInactive => _isShuttingDown || isClosed;
 
   Future<void> initialize() async {
     await _activateIndex(state.currentIndex);
@@ -108,9 +111,7 @@ class ExploreVideoFeedCubit extends Cubit<ExploreVideoFeedState>
     final videoId = _videoIdForIndex(state.currentIndex);
     if (videoId == null || videoId.isEmpty) {
       emitPresentation(
-        ExploreVideoFeedRatingErrorEvent(
-          'This video cannot be rated right now.',
-        ),
+        HomeVideoFeedRatingErrorEvent('This video cannot be rated right now.'),
       );
       return false;
     }
@@ -127,7 +128,7 @@ class ExploreVideoFeedCubit extends Cubit<ExploreVideoFeedState>
         state.copyWith(currentUserRating: rating, isSubmittingRating: false),
       );
       emitPresentation(
-        ExploreVideoFeedRatingSuccessEvent(
+        HomeVideoFeedRatingSuccessEvent(
           'Your $rating/10 rating has been added.',
         ),
       );
@@ -136,32 +137,62 @@ class ExploreVideoFeedCubit extends Cubit<ExploreVideoFeedState>
 
     emit(state.copyWith(isSubmittingRating: false));
     emitPresentation(
-      ExploreVideoFeedRatingErrorEvent(
+      HomeVideoFeedRatingErrorEvent(
         result['error'] as String? ?? 'Could not submit your rating.',
       ),
     );
     return false;
   }
 
+  /// Submit a video report for moderation
+  Future<void> submitVideoReport(
+    String videoId,
+    String reason,
+  ) async {
+    if (videoId.isEmpty) {
+      emitPresentation(
+        HomeVideoFeedReportErrorEvent('Video not available'),
+      );
+      return;
+    }
+
+    final result = await _supabaseService.submitVideoReport(
+      videoId: videoId,
+      reason: reason,
+    );
+
+    if (result['success'] == true) {
+      emitPresentation(
+        HomeVideoFeedReportSuccessEvent(
+          result['message'] as String? ?? 'Thank you for your report.',
+        ),
+      );
+    } else {
+      emitPresentation(
+        HomeVideoFeedReportErrorEvent(
+          result['error'] as String? ?? 'Failed to submit report. Please try again.',
+        ),
+      );
+    }
+  }
+
   Future<void> _activateIndex(int index) async {
     await _ensureController(index, autoplay: true);
+
     await _disposeStaleControllers(index);
+
     await _pauseAllExcept(index);
     _bumpControllerGeneration();
   }
 
   Future<void> _ensureController(int index, {bool autoplay = false}) async {
-    if (_isInactive) {
-      return;
-    }
-
     if (index < 0 || index >= state.videos.length) {
       return;
     }
 
     final existingController = _controllers[index];
     if (existingController != null) {
-      if (autoplay && !_isInactive) {
+      if (autoplay) {
         await existingController.play();
         _trackViewProgress(index);
       }
@@ -172,7 +203,7 @@ class ExploreVideoFeedCubit extends Cubit<ExploreVideoFeedState>
     if (existingInitializer != null) {
       await existingInitializer;
       final initializedController = _controllers[index];
-      if (autoplay && initializedController != null && !_isInactive) {
+      if (autoplay && initializedController != null) {
         await initializedController.play();
         _trackViewProgress(index);
         _bumpControllerGeneration();
@@ -191,44 +222,30 @@ class ExploreVideoFeedCubit extends Cubit<ExploreVideoFeedState>
   }
 
   Future<void> _initializeController(int index, {bool autoplay = false}) async {
-    if (_isInactive) {
-      return;
-    }
-
     final video = state.videos[index];
-    final videoPath = video['video_path'] as String?;
-    if (videoPath == null || videoPath.isEmpty) {
+    final videoSource =
+        video['video_path'] as String? ?? video['video_url'] as String?;
+    if (videoSource == null || videoSource.isEmpty) {
       emit(state.copyWith(errorMessage: 'This video is unavailable.'));
       return;
     }
 
     final isNetworkUrl =
-      videoPath.startsWith('http://') || videoPath.startsWith('https://');
-    final localFile = File(videoPath);
-    final isLocalFile = !isNetworkUrl && await localFile.exists();
+        videoSource.startsWith('http://') || videoSource.startsWith('https://');
 
-    final controller = isNetworkUrl
-      ? VideoPlayerController.networkUrl(Uri.parse(videoPath))
-        : isLocalFile
-        ? VideoPlayerController.file(localFile)
-        : VideoPlayerController.networkUrl(
-        Uri.parse(await _supabaseService.resolveVideoPlaybackUrl(videoPath)),
-          );
+    late final VideoPlayerController controller;
+    if (isNetworkUrl) {
+      controller = VideoPlayerController.networkUrl(Uri.parse(videoSource));
+    } else {
+      final playbackUrl = await _supabaseService.resolveVideoPlaybackUrl(
+        videoSource,
+      );
+      controller = VideoPlayerController.networkUrl(Uri.parse(playbackUrl));
+    }
 
     try {
       await controller.initialize();
-
-      if (_isInactive || index != state.currentIndex && autoplay) {
-        await controller.dispose();
-        return;
-      }
-
       await controller.setLooping(true);
-
-      if (_isInactive) {
-        await controller.dispose();
-        return;
-      }
 
       _controllers[index] = controller;
       _attachViewTrackingListener(index, controller);
@@ -273,9 +290,15 @@ class ExploreVideoFeedCubit extends Cubit<ExploreVideoFeedState>
     // First try user_video_id (for feed videos from sport_videos table)
     // Then fall back to id (for direct my_videos)
     // Then try video_id (legacy fallback)
-    return video['user_video_id'] as String? ?? 
-           video['id'] as String? ?? 
-           video['video_id'] as String?;
+    final videoId = video['user_video_id'] as String? ?? 
+                    video['id'] as String? ?? 
+                    video['video_id'] as String?;
+    
+    if (videoId == null || videoId.isEmpty) {
+      print('[HOME_FEED_RATING] ❌ videoId is null or empty!');
+    }
+    
+    return videoId;
   }
 
   Future<void> _loadMoreIfNeeded(int index) async {
@@ -291,35 +314,40 @@ class ExploreVideoFeedCubit extends Cubit<ExploreVideoFeedState>
     emit(state.copyWith(isLoadingMore: true, clearErrorMessage: true));
 
     try {
-      final result = await _supabaseService.searchVideosByTitle(
-        query,
-        limit: _continuationPageSize,
+      final result = await _homeFeedService.getHomeFeedContinuation(
+        seenVideoIds: _seenVideoIds,
         offset: state.nextOffset,
-        exactMatch: searchMode == ExploreSearchMode.exact,
-        startsWithOnly: searchMode == ExploreSearchMode.startsWith,
-        sportId: selectedSportId,
+        limit: _continuationPageSize,
       );
 
       final newVideos = List<Map<String, dynamic>>.from(
-        result['videos'] as List<dynamic>? ?? const [],
+        result['videos'] as List<dynamic>,
       );
-      final existingIds = state.videos
-          .map((video) => video['id'] as String?)
-          .whereType<String>()
-          .toSet();
-      final dedupedVideos = newVideos.where((video) {
+      final nextOffset = result['nextOffset'] as int;
+      final hasMoreContent = result['hasMoreContent'] as bool;
+
+      for (final video in newVideos) {
         final videoId = video['id'] as String?;
-        return videoId == null || !existingIds.contains(videoId);
-      }).toList();
+        if (videoId != null) {
+          _seenVideoIds.add(videoId);
+        }
+      }
 
       emit(
         state.copyWith(
-          videos: [...state.videos, ...dedupedVideos],
-          nextOffset: result['nextOffset'] as int? ?? state.nextOffset,
-          hasMoreContent: result['hasMore'] == true,
+          videos: [...state.videos, ...newVideos],
+          nextOffset: nextOffset,
+          hasMoreContent: hasMoreContent,
           isLoadingMore: false,
           clearErrorMessage: true,
         ),
+      );
+
+      _sessionStore.appendVideos(
+        sessionId: sessionId,
+        videos: newVideos,
+        nextOffset: nextOffset,
+        hasMoreContent: hasMoreContent,
       );
     } catch (_) {
       emit(
@@ -426,12 +454,32 @@ class ExploreVideoFeedCubit extends Cubit<ExploreVideoFeedState>
   Future<void> _incrementViewCount(int index) async {
     final linkedVideoId = _linkedVideoIdForIndex(index);
     if (linkedVideoId == null || linkedVideoId.isEmpty) {
+      print(
+        '⚠️ HomeVideoFeedCubit: Skipping view count update because linked video id is missing for index $index',
+      );
       return;
     }
 
-    await _supabaseService.updateCategoryVideoViewCount(
-      linkedVideoId: linkedVideoId,
-    );
+    try {
+      final result = await _supabaseService.updateCategoryVideoViewCount(
+        linkedVideoId: linkedVideoId,
+      );
+
+      if (result['success'] == true) {
+        print(
+          '✅ HomeVideoFeedCubit: View count updated for linkedVideoId=$linkedVideoId',
+        );
+        return;
+      }
+
+      print(
+        '⚠️ HomeVideoFeedCubit: View count update failed for linkedVideoId=$linkedVideoId. Error: ${result['error']}',
+      );
+    } catch (e) {
+      print(
+        '⚠️ HomeVideoFeedCubit: View count update threw unexpectedly for linkedVideoId=$linkedVideoId. Error: $e',
+      );
+    }
   }
 
   String? _linkedVideoIdForIndex(int index) {
@@ -448,8 +496,6 @@ class ExploreVideoFeedCubit extends Cubit<ExploreVideoFeedState>
 
   @override
   Future<void> close() async {
-    _isShuttingDown = true;
-
     for (final entry in _controllerListeners.entries) {
       final controller = _controllers[entry.key];
       if (controller != null) {
@@ -463,6 +509,7 @@ class ExploreVideoFeedCubit extends Cubit<ExploreVideoFeedState>
     }
     _controllers.clear();
     _controllerInitializers.clear();
+    _sessionStore.removeSession(sessionId);
     return super.close();
   }
 }

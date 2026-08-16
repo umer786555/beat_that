@@ -4,14 +4,14 @@ import 'package:supabase_flutter/supabase_flutter.dart' as supabase;
 import 'package:mime/mime.dart';
 
 /// DioUploadService handles file uploads to Supabase Storage with progress tracking
-/// 
+///
 /// Features:
 /// - JWT token authentication from Supabase session
 /// - Upload progress callbacks for UI updates
 /// - Automatic MIME type detection
 /// - Error handling and validation
 /// - Support for multiple file types
-/// 
+///
 /// Usage:
 /// ```dart
 /// final uploadService = DioUploadService();
@@ -31,13 +31,13 @@ class DioUploadService {
   /// Initialize DioUploadService with the active Supabase project's storage URL
   DioUploadService() {
     _baseUrl = '${supabase.Supabase.instance.client.storage.url}/object';
-    
+
     _dio = Dio(_getBaseOptions());
     _addInterceptors();
   }
 
   /// Get base options for Dio configuration
-  /// 
+  ///
   /// Configures:
   /// - Timeout settings
   /// - Default headers
@@ -96,7 +96,7 @@ class DioUploadService {
   /// - [onProgress]: Callback for upload progress (sent bytes, total bytes)
   ///
   /// Returns: The full upload URL
-  /// 
+  ///
   /// Throws: [DioException] if upload fails
   Future<String> uploadFile({
     required File file,
@@ -139,7 +139,6 @@ class DioUploadService {
         ),
         onSendProgress: onProgress,
       );
-
 
       // Validate response
       if (response.statusCode == null || response.statusCode! > 299) {
