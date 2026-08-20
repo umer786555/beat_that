@@ -30,7 +30,9 @@ import 'package:beat_that/screens/settings/blocked_users_screen.dart';
 import 'package:beat_that/screens/settings/settings_screen.dart';
 import 'package:beat_that/screens/creator_profile/creator_profile_screen.dart';
 import 'package:beat_that/screens/auth/auth_choice_screen.dart';
+import 'package:beat_that/screens/auth/forgot_password_screen.dart';
 import 'package:beat_that/screens/auth/login_screen.dart';
+import 'package:beat_that/screens/auth/reset_password_screen.dart';
 import 'package:beat_that/screens/auth/signup_screen.dart';
 
 /// Extra data for PlayUploadedVideo route
@@ -255,6 +257,8 @@ class AppRoutes {
   static const String auth = '/auth';
   static const String login = '/login';
   static const String signup = '/signup';
+  static const String forgotPassword = '/forgot-password';
+  static const String resetPassword = '/reset-password';
 
   // App routes
   static const String home = '/home';
@@ -287,6 +291,7 @@ class AppRouter {
     AppRoutes.auth,
     AppRoutes.login,
     AppRoutes.signup,
+    AppRoutes.forgotPassword,
   ];
 
   GoRouter? _routerInstance;
@@ -405,6 +410,54 @@ class AppRouter {
                   ),
                 );
               },
+            );
+          },
+        ),
+        GoRoute(
+          path: AppRoutes.forgotPassword,
+          name: 'forgot-password',
+          pageBuilder: (context, state) {
+            final initialEmail = state.uri.queryParameters['email'] ?? '';
+            return CustomTransitionPage(
+              key: state.pageKey,
+              child: ForgotPasswordScreen(initialEmail: initialEmail),
+              transitionsBuilder:
+                  (context, animation, secondaryAnimation, child) {
+                    final scaleTween = Tween(begin: 0.92, end: 1.0);
+                    final fadeTween = Tween(begin: 0.0, end: 1.0);
+
+                    return FadeTransition(
+                      opacity: fadeTween.animate(animation),
+                      child: ScaleTransition(
+                        scale: animation.drive(scaleTween),
+                        child: child,
+                      ),
+                    );
+                  },
+            );
+          },
+        ),
+        GoRoute(
+          path: AppRoutes.resetPassword,
+          name: 'reset-password',
+          pageBuilder: (context, state) {
+            return CustomTransitionPage(
+              key: state.pageKey,
+              child: const ResetPasswordScreen(),
+              transitionsBuilder:
+                  (context, animation, secondaryAnimation, child) {
+                    const begin = Offset(0.0, 1.0);
+                    const end = Offset.zero;
+                    final tween = Tween(begin: begin, end: end);
+                    final curvedAnimation = CurvedAnimation(
+                      parent: animation,
+                      curve: Curves.easeInOut,
+                    );
+                    return SlideTransition(
+                      position: tween.animate(curvedAnimation),
+                      child: child,
+                    );
+                  },
             );
           },
         ),

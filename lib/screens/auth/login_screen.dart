@@ -175,16 +175,7 @@ class LoginScreen extends StatelessWidget {
                             },
                       style: getAuthElevatedButtonStyle(),
                       child: isLoading
-                          ? const SizedBox(
-                              height: 20,
-                              width: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2.5,
-                                valueColor: AlwaysStoppedAnimation<Color>(
-                                  AppColors.white,
-                                ),
-                              ),
-                            )
+                          ? getAuthLoadingSpinner()
                           : const Text(
                               AppStrings.signIn,
                               style: TextStyle(
@@ -203,7 +194,15 @@ class LoginScreen extends StatelessWidget {
                             ? null
                             : () {
                                 HapticFeedback.lightImpact();
-                                _onForgotPasswordTapped(context);
+                                final trimmedEmail = email.trim();
+                                if (trimmedEmail.isEmpty) {
+                                  context.pushNamed('forgot-password');
+                                } else {
+                                  context.pushNamed(
+                                    'forgot-password',
+                                    queryParameters: {'email': trimmedEmail},
+                                  );
+                                }
                               },
                         behavior: HitTestBehavior.opaque,
                         child: Padding(
@@ -270,11 +269,5 @@ class LoginScreen extends StatelessWidget {
         },
       ),
     );
-  }
-
-  /// Handle forgot password action
-  void _onForgotPasswordTapped(BuildContext context) {
-    // Dispatch forgot password event to the LoginBloc
-    context.read<LoginBloc>().add(const ForgotPasswordTapped());
   }
 }

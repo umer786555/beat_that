@@ -227,16 +227,7 @@ class SignupScreen extends StatelessWidget {
                             },
                       style: getAuthElevatedButtonStyle(),
                       child: isLoading
-                          ? const SizedBox(
-                              height: 20,
-                              width: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2.5,
-                                valueColor: AlwaysStoppedAnimation<Color>(
-                                  AppColors.white,
-                                ),
-                              ),
-                            )
+                          ? getAuthLoadingSpinner()
                           : const Text(
                               AppStrings.createAccount,
                               style: TextStyle(

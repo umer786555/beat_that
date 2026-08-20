@@ -62,11 +62,3 @@ class PasswordVisibilityToggled extends LoginEvent {
   @override
   List<Object?> get props => [];
 }
-
-/// Event triggered when user taps forgot password link
-class ForgotPasswordTapped extends LoginEvent {
-  const ForgotPasswordTapped();
-
-  @override
-  List<Object?> get props => [];
-}

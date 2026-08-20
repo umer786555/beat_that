@@ -222,11 +222,7 @@ class SupabaseService {
 
       // ==================== STEP 4: Generate Public URLs (for return value only) ====================
       final videoPublicUrl = _generatePublicUrl('my_videos', videoPath);
-      final thumbnailPublicUrl = 
-      (
-        'my-thumbnails',
-        thumbnailPath,
-      );
+      final thumbnailPublicUrl = ('my-thumbnails', thumbnailPath);
 
       print('✓ All steps completed successfully!');
       print('Video URL: $videoPublicUrl');
@@ -714,10 +710,7 @@ class SupabaseService {
       }
 
       // Check if username already exists (excluding current user's ID)
-      final usernameTaken = await usernameExists(
-        username,
-        excludeId: userId,
-      );
+      final usernameTaken = await usernameExists(username, excludeId: userId);
       if (usernameTaken) {
         return {
           'success': false,
@@ -2266,7 +2259,7 @@ class SupabaseService {
       );
 
       final data = response.data as Map<String, dynamic>?;
-      
+
       if (data != null && data['error'] != null) {
         print(
           '❌ View count increment failed for $linkedVideoId: ${data['error']}',
@@ -2361,7 +2354,7 @@ class SupabaseService {
   }) async {
     try {
       final userId = getCurrentUserId();
-      
+
       if (userId == null) {
         return {'success': false, 'error': 'User not authenticated'};
       }
@@ -2370,7 +2363,7 @@ class SupabaseService {
       if (rating < 1 || rating > 10) {
         return {'success': false, 'error': 'Rating must be between 1 and 10'};
       }
-      
+
       // Upsert: inserts new rating if user hasn't rated, updates if they have.
       // The live schema stores ratings against my_videos.id via video_id.
       await client.from('video_ratings').upsert({
@@ -3109,7 +3102,8 @@ class SupabaseService {
 
       // Extract username from nested profile object
       if (updated['user_personal_profiles'] != null) {
-        final profile = updated['user_personal_profiles'] as Map<String, dynamic>?;
+        final profile =
+            updated['user_personal_profiles'] as Map<String, dynamic>?;
         if (profile != null && profile['username'] != null) {
           updated['username'] = profile['username'] as String;
           print(
@@ -3311,7 +3305,9 @@ class SupabaseService {
       // Use column projection to reduce network payload (~40% smaller)
       final videos = await client
           .from('sport_videos')
-          .select('id, user_id, user_video_id, title, thumbnail_path, video_path, bayesian_score, view_count, sport_id, user_personal_profiles(username)')
+          .select(
+            'id, user_id, user_video_id, title, thumbnail_path, video_path, bayesian_score, view_count, sport_id, user_personal_profiles(username)',
+          )
           .inFilter('subcategory_id', subcategoryIds)
           .order('bayesian_score', ascending: false)
           .range(offset, offset + limit - 1);
@@ -3326,9 +3322,7 @@ class SupabaseService {
 
       // Convert paths to URLs (service layer transformation)
       final videosWithUsernames = await Future.wait(
-        flattenedVideos.map(
-          (v) => _convertVideoPathsToUrls(v),
-        ),
+        flattenedVideos.map((v) => _convertVideoPathsToUrls(v)),
       );
 
       print(
@@ -3387,7 +3381,9 @@ class SupabaseService {
       // Use column projection to reduce network payload (~40% smaller)
       final videos = await client
           .from('sport_videos')
-          .select('id, user_id, user_video_id, title, thumbnail_path, video_path, bayesian_score, view_count, sport_id, user_personal_profiles(username)')
+          .select(
+            'id, user_id, user_video_id, title, thumbnail_path, video_path, bayesian_score, view_count, sport_id, user_personal_profiles(username)',
+          )
           .gt('created_at', sevenDaysAgo) // created_at > 7 days ago
           .order('bayesian_score', ascending: false) // Best-rated first
           .range(offset, offset + limit - 1); // Pagination
@@ -3402,9 +3398,7 @@ class SupabaseService {
 
       // Convert paths to URLs (service layer transformation)
       final videosWithUsernames = await Future.wait(
-        flattenedVideos.map(
-          (v) => _convertVideoPathsToUrls(v),
-        ),
+        flattenedVideos.map((v) => _convertVideoPathsToUrls(v)),
       );
 
       print(
@@ -3467,7 +3461,9 @@ class SupabaseService {
         // Use column projection to reduce network payload (~40% smaller)
         final allVideos = await client
             .from('sport_videos')
-            .select('id, user_id, user_video_id, title, thumbnail_path, video_path, bayesian_score, view_count, sport_id, user_personal_profiles(username)')
+            .select(
+              'id, user_id, user_video_id, title, thumbnail_path, video_path, bayesian_score, view_count, sport_id, user_personal_profiles(username)',
+            )
             .limit(limit * 2); // Fetch 2x limit for better randomness
 
         if (allVideos.isEmpty) {
@@ -3508,7 +3504,9 @@ class SupabaseService {
       // Use column projection to reduce network payload (~40% smaller)
       final allDiscoveryVideos = await client
           .from('sport_videos')
-          .select('id, user_id, user_video_id, title, thumbnail_path, video_path, bayesian_score, view_count, sport_id, user_personal_profiles(username)')
+          .select(
+            'id, user_id, user_video_id, title, thumbnail_path, video_path, bayesian_score, view_count, sport_id, user_personal_profiles(username)',
+          )
           .not('subcategory_id', 'in', unwatchedSubcategoryIds) // NOT IN top 5
           .limit(limit * 2); // Fetch 2x limit for better randomness
 

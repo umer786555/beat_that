@@ -20,6 +20,20 @@ class AppStrings {
   static const String dontHaveAccount = "Don't have an account? ";
   static const String signUp = 'Sign Up';
   static const String forgotPassword = 'Forgot password?';
+  static const String forgotPasswordTitle = 'Reset Password';
+  static const String forgotPasswordSubtitle =
+      'Enter your email and we\'ll send you a link to reset your password.';
+  static const String sendResetLink = 'Send Reset Link';
+  static const String resetPasswordEmailSent =
+      'If an account exists for that email, we sent a reset link.';
+  static const String chooseNewPassword = 'Choose a new password';
+  static const String resetPasswordSubtitle =
+      'Enter a new password for your account.';
+  static const String updatePassword = 'Update Password';
+  static const String passwordUpdatedSuccessfully =
+      'Your password has been updated.';
+  static const String resetPasswordFailedPleaseTryAgain =
+      'We couldn\'t update your password right now. Please try again.';
 
   // Signup Screen
   static const String createAccount = 'Create Account';
@@ -104,21 +118,15 @@ class AppStrings {
   static const String profile = 'Profile';
   static const String settings = 'Settings';
   static const String darkTheme = 'Dark theme';
-  static const String darkThemeDescription =
-      'Switch between the light and dark app themes.';
   static const String blockedUsers = 'Blocked users';
-  static const String blockedUsersDescription =
-      'Review the people you have blocked.';
+  static const String termsAndConditions = 'Terms and conditions';
+  static const String privacyPolicy = 'Privacy policy';
   static const String deleteAccount = 'Delete account';
-  static const String deleteAccountDescription =
-      'Permanently remove your account and everything tied to it.';
   static const String deleteAccountDialogTitle = 'Delete account?';
   static const String deleteAccountDialogMessage =
       'This permanently deletes your ratings, followers, following, uploaded videos, and profile data. This can\'t be undone.';
   static const String deleteAccountFailed = 'Delete account failed';
   static const String logOut = 'Log out';
-  static const String logOutDescription =
-      'Sign out of your account on this device.';
   static const String cancel = 'Cancel';
   static const String delete = 'Delete';
   static const String recordVideo = 'Record Video';

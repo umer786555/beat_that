@@ -20,10 +20,8 @@ void main() async {
 
     anonKey: 'sb_publishable_0fYQfoXXyTq7Oexc54H_-A_lPipG7MW',
   );
-  } 
-  // else  async {
+  // } else {
   //   await Supabase.initialize(
-  
   //     url: 'https://eluksmhzledvstyykjyj.supabase.co',
   //     anonKey: 'sb_publishable_q6O-_lmj2hiXyo6K9ZqWvg_bGG5yXmd',
   //   );
@@ -83,6 +81,11 @@ class _MyAppState extends State<MyApp> {
     // we need to call router.refresh() so GoRouter re-evaluates the redirect logic
     authService.onAuthStateChanged().listen(
       (event) {
+        if (event.event == AuthChangeEvent.passwordRecovery) {
+          _appRouter.router.goNamed('reset-password');
+          return;
+        }
+
         // Debounce refresh calls to prevent rapid consecutive refreshes
         // that could cause redirect loops or excessive rebuild cycles
         final now = DateTime.now();
