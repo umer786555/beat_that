@@ -48,10 +48,7 @@ class ProfileVideosGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SliverPadding(
-      padding: const EdgeInsets.symmetric(
-        horizontal: 8,
-        vertical: 16,
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 16),
       sliver: SliverGrid(
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: 2,
@@ -59,31 +56,35 @@ class ProfileVideosGrid extends StatelessWidget {
           crossAxisSpacing: 12,
           childAspectRatio: 0.8,
         ),
-        delegate: SliverChildBuilderDelegate(
-          (context, index) {
-            final video = videos[index];
-            return ProfileVideoGridItem(
-              thumbnail: video,
-              isDark: isDark,
-              onOpen: () {
-                HapticFeedback.mediumImpact();
-                GoRouter.of(context).pushNamed(
-                  'edit-uploaded-video',
-                  extra: PlayUploadedVideoExtra(
-                    videoPath: video.videoPath,
-                    shouldShowEditButtons: false,
-                  ),
-                );
-              },
-              onDeleteConfirmed: (videoId) {
-                context.read<ProfileBloc>().add(
-                  DeleteVideoEvent(videoId: videoId),
-                );
-              },
-            );
-          },
-          childCount: videos.length,
-        ),
+        delegate: SliverChildBuilderDelegate((context, index) {
+          final video = videos[index];
+          return ProfileVideoGridItem(
+            thumbnail: video,
+            isDark: isDark,
+            onOpen: () {
+              HapticFeedback.mediumImpact();
+              GoRouter.of(context).pushNamed(
+                'edit-uploaded-video',
+                extra: PlayUploadedVideoExtra(
+                  videoPath: video.videoPath,
+                  shouldShowEditButtons: false,
+                ),
+              );
+            },
+            onReviewIssuesTap: () {
+              HapticFeedback.mediumImpact();
+              GoRouter.of(context).pushNamed(
+                'rejected-video-guidance',
+                extra: RejectedVideoGuidanceExtra(videoTitle: video.title),
+              );
+            },
+            onDeleteConfirmed: (videoId) {
+              context.read<ProfileBloc>().add(
+                DeleteVideoEvent(videoId: videoId),
+              );
+            },
+          );
+        }, childCount: videos.length),
       ),
     );
   }

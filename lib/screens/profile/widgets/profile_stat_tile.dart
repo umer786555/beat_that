@@ -39,7 +39,7 @@ class ProfileStatTile extends StatelessWidget {
         child: SizedBox(
           width: double.infinity,
           child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
+            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.center,
@@ -48,18 +48,18 @@ class ProfileStatTile extends StatelessWidget {
                   value,
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                    fontSize: 21,
+                    fontSize: 18,
                     fontWeight: FontWeight.w700,
                     color: foregroundColor,
                     height: 1,
                   ),
                 ),
-                const SizedBox(height: 6),
+                const SizedBox(height: 4),
                 Text(
                   label,
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                    fontSize: 13,
+                    fontSize: 11,
                     fontWeight: FontWeight.w500,
                     color: secondaryColor,
                     height: 1,

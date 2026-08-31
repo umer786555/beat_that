@@ -1,5 +1,3 @@
-import 'dart:ui';
-
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:beat_that/models/sport.dart';
 import 'package:beat_that/models/sport_subcategory.dart';
@@ -41,7 +39,7 @@ class SportsHubBloc extends Bloc<SportsHubEvent, SportsHubState> {
 
       // Step 2: Get the correct ordering based on user's locale
       // Different regions have different sports popularity (e.g., cricket in India, football in US)
-      final orderedSportIds = _getOrderedSportIds(event.locale);
+      final orderedSportIds = getOrderedSportIdsForLocale(event.locale);
 
       // Step 3: Build Sport objects in the correct regional order
       // - Filter to only sports that exist in our database
@@ -59,29 +57,6 @@ class SportsHubBloc extends Bloc<SportsHubEvent, SportsHubState> {
       // Handle any errors during fetch
       emit(SportsHubError(message: 'Failed to fetch sports: $e'));
     }
-  }
-
-  /// Get ordered sport IDs based on locale with fallback chain
-  ///
-  /// Priority order:
-  /// 1. Full locale match (language_COUNTRY) - e.g., 'en_IN' for India
-  /// 2. Language-only match - e.g., 'en' for any English region
-  /// 3. Default English ordering - fallback for unknown locales
-  ///
-  /// Example:
-  /// - User in India (Locale('en', 'IN')) → tries 'en_IN' → if found, return cricket-first order
-  /// - User in France (Locale('fr', 'FR')) → tries 'fr_FR' → if not found, tries 'fr' → if found, return soccer-first order
-  /// - Unknown locale → return English default ordering
-  List<String> _getOrderedSportIds(Locale? locale) {
-    if (locale == null) return sportOrderByLocale['en']!;
-
-    // Construct full locale string (e.g., 'en_IN', 'de_DE')
-    final fullLocale = '${locale.languageCode}_${locale.countryCode}';
-
-    // Try full match first, then language-only, then default
-    return sportOrderByLocale[fullLocale] ??
-        sportOrderByLocale[locale.languageCode] ??
-        sportOrderByLocale['en']!;
   }
 
   /// Build a Sport object from a sport ID and its subcategories

@@ -2,7 +2,7 @@ part of 'blocked_users_cubit.dart';
 
 class BlockedUsersState extends Equatable {
   const BlockedUsersState({
-    this.users = const <UserProfileSummary>[],
+    this.users = const <UserBlock>[],
     this.unblockingUserIds = const <String>[],
     this.isLoading = true,
     this.screenErrorMessage,
@@ -10,7 +10,7 @@ class BlockedUsersState extends Equatable {
     this.isFeedbackError = false,
   });
 
-  final List<UserProfileSummary> users;
+  final List<UserBlock> users;
   final List<String> unblockingUserIds;
   final bool isLoading;
   final String? screenErrorMessage;
@@ -18,7 +18,7 @@ class BlockedUsersState extends Equatable {
   final bool isFeedbackError;
 
   BlockedUsersState copyWith({
-    List<UserProfileSummary>? users,
+    List<UserBlock>? users,
     List<String>? unblockingUserIds,
     bool? isLoading,
     String? screenErrorMessage,

@@ -16,16 +16,20 @@ part 'edit_thumbnail_state.dart';
 part 'edit_thumbnail_presentation_event.dart';
 
 class EditThumbnailBloc extends Bloc<EditThumbnailEvent, EditThumbnailState>
-    with BlocPresentationMixin<EditThumbnailState, EditThumbnailPresentationEvent> {
+    with
+        BlocPresentationMixin<
+          EditThumbnailState,
+          EditThumbnailPresentationEvent
+        > {
   final videoPickerService = locator<VideoPickerService>();
   final supabaseService = locator<SupabaseService>();
   final PreferencesService preferencesService = locator<PreferencesService>();
 
-
-  static const int _numberOfThumbnails = 6;
-  static const int _thumbnailWidth = 512;
-  static const int _thumbnailHeight = 512;
-  static const int _imageQuality = 100;
+  static const int _numberOfThumbnails = 5;
+  static const int _thumbnailWidth = 192;
+  static const int _thumbnailHeight = 192;
+  static const int _imageQuality = 80;
+  static const int _thumbnailBatchSize = 2;
   static const Duration _minimumUploadDuration = Duration(seconds: 10);
 
   final String videoPath;
@@ -51,7 +55,6 @@ class EditThumbnailBloc extends Bloc<EditThumbnailEvent, EditThumbnailState>
     Emitter<EditThumbnailState> emit,
   ) async {
     try {
-
       // Emit loading state with placeholder thumbnails to show shimmer
       emit(
         ThumbnailsGeneratedState(
@@ -68,12 +71,20 @@ class EditThumbnailBloc extends Bloc<EditThumbnailEvent, EditThumbnailState>
         (_) => random.nextInt(durationMilliseconds),
       )..sort(); // Sort for better UX (chronological order)
 
-      // Wait for all thumbnails to be generated in parallel
-      final thumbnails = await Future.wait(
-        timeIntervals.map(
-          (timeMilliseconds) => _generateThumbnail(timeMilliseconds),
-        ),
-      );
+      final thumbnails = <Uint8List?>[];
+      for (
+        var startIndex = 0;
+        startIndex < timeIntervals.length;
+        startIndex += _thumbnailBatchSize
+      ) {
+        final endIndex = min(
+          startIndex + _thumbnailBatchSize,
+          timeIntervals.length,
+        );
+        final batch = timeIntervals.sublist(startIndex, endIndex);
+        final batchThumbnails = await Future.wait(batch.map(_generateThumbnail));
+        thumbnails.addAll(batchThumbnails);
+      }
 
       // Filter out any null values
       final nonNullThumbnails = thumbnails.whereType<Uint8List>().toList();
@@ -143,7 +154,8 @@ class EditThumbnailBloc extends Bloc<EditThumbnailEvent, EditThumbnailState>
           emit(
             currentState.copyWith(
               thumbnails: updatedThumbnails,
-              selectedIndex: updatedThumbnails.length - 1, // Select the new thumbnail
+              selectedIndex:
+                  updatedThumbnails.length - 1, // Select the new thumbnail
             ),
           );
         }
@@ -159,8 +171,6 @@ class EditThumbnailBloc extends Bloc<EditThumbnailEvent, EditThumbnailState>
     SaveEvent event,
     Emitter<EditThumbnailState> emit,
   ) async {
-
-    
     print('SaveEvent triggered with title: ${event.title}');
     print('Selected subcategory: $selectedSubcategory');
     print('sport: ${sport.displayName} (ID: ${sport.id})');
@@ -175,9 +185,7 @@ class EditThumbnailBloc extends Bloc<EditThumbnailEvent, EditThumbnailState>
       }
 
       if (selectedThumbnail == null) {
-        emitPresentation(
-          ThumbnailErrorEvent(message: 'No thumbnail selected'),
-        );
+        emitPresentation(ThumbnailErrorEvent(message: 'No thumbnail selected'));
         return;
       }
 
@@ -187,9 +195,7 @@ class EditThumbnailBloc extends Bloc<EditThumbnailEvent, EditThumbnailState>
       // Convert video path (String) to File
       final videoFile = File(videoPath);
       if (!await videoFile.exists()) {
-        emitPresentation(
-          ThumbnailErrorEvent(message: 'Video file not found'),
-        );
+        emitPresentation(ThumbnailErrorEvent(message: 'Video file not found'));
         return;
       }
 
@@ -205,26 +211,33 @@ class EditThumbnailBloc extends Bloc<EditThumbnailEvent, EditThumbnailState>
         title: event.title,
         description: '', // Optional: add description if available
         sportId: sport.id,
-        subcategoryId: selectedSubcategory != null && selectedSubcategory!.isNotEmpty
+        subcategoryId:
+            selectedSubcategory != null && selectedSubcategory!.isNotEmpty
             ? sport.subcategories
-                .firstWhere(
-                  (sub) => sub.name == selectedSubcategory,
-                  orElse: () => throw Exception('Subcategory not found: $selectedSubcategory'),
-                )
-                .id
+                  .firstWhere(
+                    (sub) => sub.name == selectedSubcategory,
+                    orElse: () => throw Exception(
+                      'Subcategory not found: $selectedSubcategory',
+                    ),
+                  )
+                  .id
             : null,
         subcategoryName: selectedSubcategory,
         // Progress callback for video upload
         onVideoProgress: (sent, total) {
           final progressPercent = (sent / total * 100).toStringAsFixed(0);
-          print('📹 Video upload progress: $progressPercent% ($sent/$total bytes)');
-          
+          print(
+            '📹 Video upload progress: $progressPercent% ($sent/$total bytes)',
+          );
+
           // Emit progress state for UI
-          emit(VideoUploadProgressState(
-            sentBytes: sent,
-            totalBytes: total,
-            progressPercent: int.parse(progressPercent),
-          ));
+          emit(
+            VideoUploadProgressState(
+              sentBytes: sent,
+              totalBytes: total,
+              progressPercent: int.parse(progressPercent),
+            ),
+          );
         },
       );
 
@@ -232,62 +245,25 @@ class EditThumbnailBloc extends Bloc<EditThumbnailEvent, EditThumbnailState>
       await thumbnailFile.delete();
 
       if (result['success'] as bool) {
-        // Get video ID from upload result
-        final videoId = result['videoId'];
-
-        // If a subcategory was selected, link the video to it
-       // if (selectedSubcategory != null && selectedSubcategory!.isNotEmpty) {
-          // Find the subcategory ID from the selected subcategory name
-          // final subcategory = sport.subcategories.firstWhere(
-          //   (sub) => sub.name == selectedSubcategory,
-          //   orElse: () => throw Exception('Subcategory not found: $selectedSubcategory'),
-        //  );
-
-        //   final linkResult = await supabaseService.linkVideoToSubcategory(
-        //     videoId: videoId,
-        //     sportId: sport.id,
-        //     subcategoryId: subcategory.id.toString(), // Convert subcategory ID to string
-        //   );
-
-        //   if (!linkResult['success']) {
-        //     emitPresentation(
-        //       ThumbnailErrorEvent(
-        //         message: 'Upload succeeded but linking failed: ${linkResult['error']}',
-        //       ),
-        //     );
-        //     return;
-        //   }
-        // }
-
         // Reset to initial state to hide overlay
-        emit(
-          ThumbnailsGeneratedState(
-            thumbnails: const [],
-            isLoading: false,
-          ),
-        );
-        
+        emit(ThumbnailsGeneratedState(thumbnails: const [], isLoading: false));
+
         // Emit success presentation event - UI will show snack bar and pop
         // String message = 'Video uploaded successfully!\nTitle: ${event.title}';
         // if (selectedSubcategory != null && selectedSubcategory!.isNotEmpty) {
         //   message += '\nSaved for: $selectedSubcategory';
         // }
-        
+
         emitPresentation(
           SaveSuccessEvent(message: 'Video uploaded successfully!'),
         );
       } else {
         emitPresentation(
-          ThumbnailErrorEvent(
-            message: 'Upload failed: ${result['message']}',
-          ),
+          ThumbnailErrorEvent(message: 'Upload failed: ${result['message']}'),
         );
       }
     } catch (e) {
-      emitPresentation(
-        ThumbnailErrorEvent(message: 'Failed to save: $e'),
-      );
+      emitPresentation(ThumbnailErrorEvent(message: 'Failed to save: $e'));
     }
   }
-
 }

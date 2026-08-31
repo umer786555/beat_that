@@ -63,8 +63,8 @@ class ProfileHeader extends StatelessWidget {
         onProfilePictureTap();
       },
       child: Container(
-        width: 96,
-        height: 96,
+        width: 72,
+        height: 72,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
           
@@ -74,8 +74,8 @@ class ProfileHeader extends StatelessWidget {
           children: [
             // Solid outer ring
             Container(
-              width: 96,
-              height: 96,
+              width: 72,
+              height: 72,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: Colors.black,
@@ -83,8 +83,8 @@ class ProfileHeader extends StatelessWidget {
             ),
             // Inner content container
             Container(
-              width: 92,
-              height: 92,
+              width: 68,
+              height: 68,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: isDark ? Colors.black : Colors.white,
@@ -97,7 +97,7 @@ class ProfileHeader extends StatelessWidget {
                         errorBuilder: (context, error, stackTrace) {
                           return Icon(
                             Icons.error_outline,
-                            size: 44,
+                            size: 36,
                             color: isDark
                                 ? AppColors.cyan
                                 : AppColors.electricMagenta,
@@ -126,39 +126,13 @@ class ProfileHeader extends StatelessWidget {
                       ),
                       child: Icon(
                         Icons.person,
-                        size: 44,
+                        size: 36,
                         color: isDark
                             ? AppColors.cyan.withValues(alpha: 0.7)
                             : AppColors.electricMagenta.withValues(
                                 alpha: 0.6),
                       ),
                     ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  /// Builds the username section
-  Widget _buildUsernameSection() {
-    return Expanded(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Username with improved typography
-            Text(
-              username ?? 'Beat That User',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w700,
-                color: isDark ? Colors.white : Colors.black,
-                letterSpacing: 0.3,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
             ),
           ],
         ),
@@ -184,57 +158,70 @@ class ProfileHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return SliverToBoxAdapter(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(12),
         child: Column(
           children: [
-            // Profile Picture and Username Row with enhanced spacing
+            // Instagram-style profile layout: Image on left, Username and Stats stacked on right
             Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Profile Picture
                 _buildProfilePicture(),
-                _buildUsernameSection(),
+                const SizedBox(width: 16),
+                // Username and Stats section (right side)
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Username
+                      Text(
+                        username ?? '',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w500,
+                          color: isDark ? Colors.white : Colors.black,
+                          letterSpacing: 0.3,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 8),
+                      // Stats row (Following and Followers)
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: BlocBuilder<FollowCountsCubit,
+                                FollowCountsState>(
+                              builder: (context, followCountsState) {
+                                return _buildStatTile(
+                                  label: 'Following',
+                                  count: followCountsState.following,
+                                  onTap: onFollowingTap,
+                                );
+                              },
+                            ),
+                          ),
+                          Expanded(
+                            child: BlocBuilder<FollowCountsCubit,
+                                FollowCountsState>(
+                              builder: (context, followCountsState) {
+                                return _buildStatTile(
+                                  label: 'Followers',
+                                  count: followCountsState.followers,
+                                  onTap: onFollowersTap,
+                                );
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
               ],
             ),
-            const SizedBox(height: 28),
-            // Stats row with larger tappable surfaces
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  Expanded(
-                    child: BlocBuilder<FollowCountsCubit, FollowCountsState>(
-                      builder: (context, followCountsState) {
-                        return _buildStatTile(
-                          label: 'Following',
-                          count: followCountsState.following,
-                          onTap: onFollowingTap,
-                        );
-                      },
-                    ),
-                  ),
-                  Container(
-                    width: 1,
-                    height: 42,
-                    color: isDark
-                        ? Colors.white.withValues(alpha: 0.1)
-                        : Colors.black.withValues(alpha: 0.08),
-                  ),
-                  Expanded(
-                    child: BlocBuilder<FollowCountsCubit, FollowCountsState>(
-                      builder: (context, followCountsState) {
-                        return _buildStatTile(
-                          label: 'Followers',
-                          count: followCountsState.followers,
-                          onTap: onFollowersTap,
-                        );
-                      },
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 12),
             // Enhanced divider with gradient-like effect
             Container(
               height: 1,

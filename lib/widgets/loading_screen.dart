@@ -123,7 +123,7 @@ class _PulsingIndicator extends StatelessWidget {
           width: 12,
           height: 12,
           decoration: BoxDecoration(
-            color: color.withOpacity(opacityValue),
+            color: color.withValues(alpha: opacityValue),
             borderRadius: BorderRadius.circular(6),
           ),
         );

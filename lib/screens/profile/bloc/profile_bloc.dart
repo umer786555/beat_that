@@ -61,8 +61,8 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState>
       final galleryPermissionEnabled = await permissionService
           .checkPhotosPermissionOnLoad();
 
-      // Step 2: Fetch all thumbnail URLs for the current user's videos from Supabase 
-      final myVideos = await supabaseService.getMyVideo();
+      // Step 2: Fetch all thumbnail URLs for the current user's videos from Supabase
+        final myVideos = await supabaseService.getMyVideo();
 
       // Step 3: Fetch the username from preferences and cache at block level
       userProfile = await preferencesService.fetchUserProfile();
@@ -83,10 +83,14 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState>
       final hasNullApproval = myVideos.any((video) => video.approved == null);
 
       if (hasNullApproval) {
-        print('[PROFILE] Videos with null approval detected - subscribing to realtime updates');
+        print(
+          '[PROFILE] Videos with null approval detected - subscribing to realtime updates',
+        );
         _subscribeToApprovalChanges();
       } else {
-        print('[PROFILE] All videos have approval status - realtime listener not needed');
+        print(
+          '[PROFILE] All videos have approval status - realtime listener not needed',
+        );
       }
     } catch (e) {
       emit(ProfileError(message: '${AppStrings.failedToLoadProfile}: $e'));
@@ -102,10 +106,12 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState>
       _approvalChannel = supabaseService.subscribeToVideoApprovalChanges(
         onApprovalChanged: (videoId, approvalStatus) {
           // Emit event to handle the approval status change
-          add(VideoApprovalUpdatedEvent(
-            videoId: videoId,
-            approvalStatus: approvalStatus,
-          ));
+          add(
+            VideoApprovalUpdatedEvent(
+              videoId: videoId,
+              approvalStatus: approvalStatus,
+            ),
+          );
         },
       );
       print('[PROFILE] Successfully subscribed to approval changes');
@@ -292,13 +298,16 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState>
 
       // Only process if we're in ProfileLoaded state
       if (currentState is! ProfileLoaded) {
-        print('[PROFILE] Ignoring approval update - not in ProfileLoaded state');
+        print(
+          '[PROFILE] Ignoring approval update - not in ProfileLoaded state',
+        );
         return;
       }
 
       // Find the video that was updated
-      final videoIndex = currentState.myVideo
-          .indexWhere((video) => video.id == event.videoId);
+      final videoIndex = currentState.myVideo.indexWhere(
+        (video) => video.id == event.videoId,
+      );
 
       if (videoIndex == -1) {
         print(

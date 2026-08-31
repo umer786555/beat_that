@@ -1,4 +1,4 @@
-import 'package:beat_that/models/user_profile_summary.dart';
+import 'package:beat_that/models/user_block.dart';
 import 'package:beat_that/service_locator.dart';
 import 'package:beat_that/services/supabase_service.dart';
 import 'package:equatable/equatable.dart';
@@ -44,7 +44,7 @@ class BlockedUsersCubit extends Cubit<BlockedUsersState> {
     }
   }
 
-  Future<void> unblockUser(UserProfileSummary user) async {
+  Future<void> unblockUser(UserBlock user) async {
     if (state.unblockingUserIds.contains(user.id)) {
       return;
     }
@@ -56,36 +56,35 @@ class BlockedUsersCubit extends Cubit<BlockedUsersState> {
       ),
     );
 
-    final result = await _supabaseService.unblockUser(
-      userIdToUnblock: user.id,
-    );
-
     final updatedUnblockingIds = state.unblockingUserIds
         .where((id) => id != user.id)
         .toList(growable: false);
 
-    if (result['success'] == true) {
+    try {
+      await _supabaseService.unblockUser(userBlock: user);
+
       emit(
         state.copyWith(
           users: state.users
               .where((blockedUser) => blockedUser.id != user.id)
               .toList(growable: false),
           unblockingUserIds: updatedUnblockingIds,
-          feedbackMessage: '${user.username} unblocked',
+          feedbackMessage: '${user.blockedUsername} unblocked',
           isFeedbackError: false,
         ),
       );
       return;
-    }
+    } catch (e) {
+      final message = e.toString().replaceFirst('Exception: ', '');
 
-    emit(
-      state.copyWith(
-        unblockingUserIds: updatedUnblockingIds,
-        feedbackMessage:
-            result['error']?.toString() ?? 'Failed to unblock user',
-        isFeedbackError: true,
-      ),
-    );
+      emit(
+        state.copyWith(
+          unblockingUserIds: updatedUnblockingIds,
+          feedbackMessage: message.isEmpty ? 'Failed to unblock user' : message,
+          isFeedbackError: true,
+        ),
+      );
+    }
   }
 
   void clearFeedback() {

@@ -14,22 +14,19 @@ final class ExploreInitial extends ExploreState {
 final class ExploreLoading extends ExploreState {
   const ExploreLoading({
     required this.query,
-    required this.searchMode,
     this.selectedSportId,
   });
 
   final String query;
-  final ExploreSearchMode searchMode;
   final String? selectedSportId;
 
   @override
-  List<Object> get props => [query, searchMode, selectedSportId ?? ''];
+  List<Object> get props => [query, selectedSportId ?? ''];
 }
 
 final class ExploreLoaded extends ExploreState {
   const ExploreLoaded({
     required this.query,
-    required this.searchMode,
     required this.videos,
     required this.totalCount,
     required this.hasMore,
@@ -39,9 +36,8 @@ final class ExploreLoaded extends ExploreState {
   });
 
   final String query;
-  final ExploreSearchMode searchMode;
   final String? selectedSportId;
-  final List<Map<String, dynamic>> videos;
+  final List<SportVideo> videos;
   final int totalCount;
   final bool hasMore;
   final int nextOffset;
@@ -49,9 +45,8 @@ final class ExploreLoaded extends ExploreState {
 
   ExploreLoaded copyWith({
     String? query,
-    ExploreSearchMode? searchMode,
     String? selectedSportId,
-    List<Map<String, dynamic>>? videos,
+    List<SportVideo>? videos,
     int? totalCount,
     bool? hasMore,
     int? nextOffset,
@@ -59,7 +54,6 @@ final class ExploreLoaded extends ExploreState {
   }) {
     return ExploreLoaded(
       query: query ?? this.query,
-      searchMode: searchMode ?? this.searchMode,
       selectedSportId: selectedSportId ?? this.selectedSportId,
       videos: videos ?? this.videos,
       totalCount: totalCount ?? this.totalCount,
@@ -72,7 +66,6 @@ final class ExploreLoaded extends ExploreState {
   @override
   List<Object> get props => [
     query,
-    searchMode,
     selectedSportId ?? '',
     videos,
     totalCount,
@@ -86,15 +79,13 @@ final class ExploreError extends ExploreState {
   const ExploreError({
     required this.message,
     required this.query,
-    required this.searchMode,
     this.selectedSportId,
   });
 
   final String message;
   final String query;
-  final ExploreSearchMode searchMode;
   final String? selectedSportId;
 
   @override
-  List<Object> get props => [message, query, searchMode, selectedSportId ?? ''];
+  List<Object> get props => [message, query, selectedSportId ?? ''];
 }

@@ -1,4 +1,6 @@
+import 'package:beat_that/models/home_feed_cursor.dart';
 import 'package:beat_that/models/user_personal_profile.dart';
+import 'package:beat_that/models/sport_video.dart';
 import 'package:beat_that/service_locator.dart';
 import 'package:beat_that/services/auth_service.dart';
 import 'package:beat_that/services/preferences_service.dart';
@@ -19,9 +21,9 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
   final authService = locator<AuthService>();
 
   // Track pagination state
-  int _currentOffset = 0;
-  List<Map<String, dynamic>> _allFeedVideos = [];
+  List<SportVideo> _allFeedVideos = [];
   final Set<String> _seenFeedVideoIds = <String>{};
+  HomeFeedCursor _feedCursor = const HomeFeedCursor.initial();
   bool _hasMoreFeedContent = true;
   bool _isPaginationRequestInFlight = false;
 
@@ -53,7 +55,6 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
           const FetchFeedEvent(
             limit: _homeFeedPageSize,
             offset: 0,
-            forceRefresh: false,
           ),
         );
       } else {
@@ -78,7 +79,7 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
     Emitter<HomeState> emit,
   ) async {
     print(
-      '📺 HomeBloc FetchFeedEvent: limit=${event.limit}, offset=${event.offset}, forceRefresh=${event.forceRefresh}',
+      '📺 HomeBloc FetchFeedEvent: limit=${event.limit}, offset=${event.offset}',
     );
 
     try {
@@ -86,33 +87,40 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
       final isFirstLoad = event.offset == 0;
       emit(FeedLoading(offset: event.offset, isFirstLoad: isFirstLoad));
 
-      // Fetch blended feed from HomeFeedService
-      final videos = await homeFeedService.getHomeFeed(
+      // Keep advancing through blended feed offsets until we either fill this
+      // page with unseen videos or the feed is actually exhausted.
+      final feedResult = await homeFeedService.getHomeFeedContinuation(
+        seenVideoIds: event.offset == 0
+            ? <String>{}
+            : Set<String>.from(_seenFeedVideoIds),
+        cursor: event.offset == 0
+            ? const HomeFeedCursor.initial()
+            : _feedCursor,
         limit: event.limit,
-
-        offset: event.offset,
-        forceRefresh: event.forceRefresh,
       );
+      final videos = List<SportVideo>.from(
+        feedResult['videos'] as List<dynamic>,
+      );
+      final nextCursor = feedResult['nextCursor'] as HomeFeedCursor;
+      final hasMoreContent = feedResult['hasMoreContent'] as bool;
+      _feedCursor = nextCursor;
 
       if (videos.isEmpty) {
         print('⚠️ No videos available');
-        _hasMoreFeedContent = false;
+        _hasMoreFeedContent = hasMoreContent;
         emit(
           FeedLoaded(
-            videos: List<Map<String, dynamic>>.from(_allFeedVideos),
+            videos: List<SportVideo>.from(_allFeedVideos),
             offset: event.offset,
-            hasMoreContent: false,
+            hasMoreContent: hasMoreContent,
+            nextCursor: nextCursor,
           ),
         );
         return;
       }
 
       final uniqueVideos = videos.where((video) {
-        final videoId = video['id'] as String?;
-        if (videoId == null) {
-          return true;
-        }
-
+        final videoId = video.id;
         return !_seenFeedVideoIds.contains(videoId);
       }).toList();
 
@@ -121,39 +129,26 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
         _allFeedVideos = uniqueVideos;
         _seenFeedVideoIds
           ..clear()
-          ..addAll(
-            uniqueVideos
-                .map((video) => video['id'] as String?)
-                .whereType<String>(),
-          );
-        _currentOffset = 0;
+          ..addAll(uniqueVideos.map((video) => video.id));
       } else {
         _allFeedVideos = [..._allFeedVideos, ...uniqueVideos];
-        _seenFeedVideoIds.addAll(
-          uniqueVideos
-              .map((video) => video['id'] as String?)
-              .whereType<String>(),
-        );
+        _seenFeedVideoIds.addAll(uniqueVideos.map((video) => video.id));
       }
 
       print(
         '✓ Fetched ${videos.length} videos, ${uniqueVideos.length} unique, total feed size: ${_allFeedVideos.length}',
       );
 
-      // Stop pagination once the backend returns a short page or no unseen videos.
-      final hasMoreContent =
-          videos.length >= event.limit && uniqueVideos.isNotEmpty;
       _hasMoreFeedContent = hasMoreContent;
 
       emit(
         FeedLoaded(
-          videos: List<Map<String, dynamic>>.from(_allFeedVideos),
+          videos: List<SportVideo>.from(_allFeedVideos),
           offset: event.offset,
           hasMoreContent: hasMoreContent,
+          nextCursor: nextCursor,
         ),
       );
-
-      _currentOffset = event.offset + videos.length;
     } catch (e) {
       print('✗ FetchFeedEvent Error: $e');
       emit(FeedError(message: 'Failed to load feed: $e', offset: event.offset));
@@ -175,10 +170,9 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
 
     try {
       // Clear cache and reset pagination
-      homeFeedService.clearCache();
-      _currentOffset = 0;
       _allFeedVideos = [];
       _seenFeedVideoIds.clear();
+      _feedCursor = const HomeFeedCursor.initial();
       _hasMoreFeedContent = true;
       _isPaginationRequestInFlight = false;
 
@@ -187,7 +181,6 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
         const FetchFeedEvent(
           limit: _homeFeedPageSize,
           offset: 0,
-          forceRefresh: true,
         ),
       );
     } catch (e) {
@@ -204,7 +197,7 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
     Emitter<HomeState> emit,
   ) async {
     print(
-      '⬇️ HomeBloc LoadMoreFeedEvent triggered, currentOffset=$_currentOffset',
+      '⬇️ HomeBloc LoadMoreFeedEvent triggered, loadedVideos=${_allFeedVideos.length}',
     );
 
     try {
@@ -226,8 +219,7 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
       add(
         FetchFeedEvent(
           limit: _homeFeedPageSize,
-          offset: _currentOffset,
-          forceRefresh: false,
+          offset: _allFeedVideos.length,
         ),
       );
     } catch (e) {
@@ -236,7 +228,7 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
       emit(
         FeedError(
           message: 'Failed to load more videos: $e',
-          offset: _currentOffset,
+          offset: _allFeedVideos.length,
         ),
       );
     }

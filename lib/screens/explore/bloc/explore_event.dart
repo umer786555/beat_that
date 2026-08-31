@@ -10,16 +10,14 @@ sealed class ExploreEvent extends Equatable {
 final class SearchExploreVideosEvent extends ExploreEvent {
   const SearchExploreVideosEvent({
     required this.query,
-    required this.searchMode,
     this.selectedSportId,
   });
 
   final String query;
-  final ExploreSearchMode searchMode;
   final String? selectedSportId;
 
   @override
-  List<Object> get props => [query, searchMode, selectedSportId ?? ''];
+  List<Object> get props => [query, selectedSportId ?? ''];
 }
 
 final class LoadMoreExploreVideosEvent extends ExploreEvent {

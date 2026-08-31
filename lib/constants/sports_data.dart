@@ -8,6 +8,8 @@ const List<String> _usOrder = [
   'baseball',
   'ice_hockey',
   'soccer',
+  'mma',
+  'boxing',
   'tennis',
   'cricket',
   'weightlifting',
@@ -22,6 +24,8 @@ const List<String> _canadaOrder = [
   'basketball',
   'soccer',
   'baseball',
+  'mma',
+  'boxing',
   'tennis',
   'cricket',
   'weightlifting',
@@ -33,13 +37,15 @@ const List<String> _canadaOrder = [
 const List<String> _ukOrder = [
   'soccer',
   'cricket',
+  'boxing',
   'tennis',
   'snooker',
-  'ice_hockey',
+  'mma',
   'basketball',
-  'weightlifting',
   'pool',
   'badminton',
+  'weightlifting',
+  'ice_hockey',
   'american_football',
   'baseball',
 ];
@@ -49,23 +55,28 @@ const List<String> _australiaOrder = [
   'soccer',
   'tennis',
   'basketball',
+  'boxing',
+  'mma',
   'american_football',
   'weightlifting',
   'badminton',
   'pool',
   'ice_hockey',
   'snooker',
+  'baseball',
 ];
 
 const List<String> _indiaOrder = [
   'cricket',
+  'soccer',
   'badminton',
   'tennis',
-  'soccer',
+  'boxing',
+  'mma',
   'weightlifting',
   'basketball',
-  'pool',
   'snooker',
+  'pool',
   'ice_hockey',
   'american_football',
   'baseball',
@@ -73,13 +84,15 @@ const List<String> _indiaOrder = [
 
 const List<String> _pakistanOrder = [
   'cricket',
-  'badminton',
   'soccer',
+  'badminton',
+  'boxing',
+  'snooker',
+  'mma',
   'tennis',
   'weightlifting',
   'basketball',
   'pool',
-  'snooker',
   'ice_hockey',
   'american_football',
   'baseball',
@@ -88,28 +101,32 @@ const List<String> _pakistanOrder = [
 const List<String> _euOrder = [
   'soccer',
   'tennis',
-  'ice_hockey',
   'basketball',
+  'ice_hockey',
+  'boxing',
+  'mma',
   'weightlifting',
   'badminton',
+  'pool',
+  'snooker',
   'cricket',
   'american_football',
   'baseball',
-  'pool',
-  'snooker',
 ];
 
 const List<String> _spainOrder = [
   'soccer',
-  'tennis',
   'basketball',
-  'ice_hockey',
+  'tennis',
+  'boxing',
+  'mma',
   'weightlifting',
   'badminton',
-  'cricket',
+  'pool',
   'american_football',
   'baseball',
-  'pool',
+  'ice_hockey',
+  'cricket',
   'snooker',
 ];
 
@@ -118,66 +135,108 @@ const List<String> _germanyOrder = [
   'ice_hockey',
   'tennis',
   'basketball',
+  'boxing',
+  'mma',
   'weightlifting',
   'badminton',
-  'cricket',
-  'american_football',
-  'baseball',
   'pool',
   'snooker',
+  'american_football',
+  'baseball',
+  'cricket',
 ];
 
-const List<String> _italyFranceCountryOrder = [
+const List<String> _italyCountryOrder = [
+  'soccer',
+  'basketball',
+  'tennis',
+  'boxing',
+  'mma',
+  'weightlifting',
+  'ice_hockey',
+  'pool',
+  'badminton',
+  'snooker',
+  'american_football',
+  'baseball',
+  'cricket',
+];
+
+const List<String> _franceCountryOrder = [
   'soccer',
   'tennis',
   'basketball',
-  'ice_hockey',
+  'boxing',
+  'mma',
   'weightlifting',
   'badminton',
-  'cricket',
-  'american_football',
-  'baseball',
+  'ice_hockey',
   'pool',
   'snooker',
+  'american_football',
+  'baseball',
+  'cricket',
 ];
 
-const List<String> _italyFranceLangOrder = [
+const List<String> _italyLangOrder = [
+  'soccer',
+  'basketball',
+  'tennis',
+  'boxing',
+  'mma',
+  'weightlifting',
+  'ice_hockey',
+  'pool',
+  'badminton',
+  'snooker',
+  'american_football',
+  'baseball',
+  'cricket',
+];
+
+const List<String> _franceLangOrder = [
   'soccer',
   'tennis',
   'basketball',
+  'boxing',
+  'mma',
+  'weightlifting',
   'badminton',
   'ice_hockey',
-  'weightlifting',
-  'cricket',
-  'american_football',
-  'baseball',
   'pool',
   'snooker',
+  'american_football',
+  'baseball',
+  'cricket',
 ];
 
 const List<String> _spanishOrder = [
   'soccer',
-  'tennis',
   'basketball',
+  'tennis',
+  'boxing',
+  'mma',
   'badminton',
-  'ice_hockey',
   'weightlifting',
-  'cricket',
+  'pool',
   'american_football',
   'baseball',
-  'pool',
+  'ice_hockey',
+  'cricket',
   'snooker',
 ];
 
 const List<String> _hindiOrder = [
   'cricket',
+  'soccer',
   'badminton',
   'tennis',
-  'soccer',
+  'boxing',
+  'mma',
   'weightlifting',
   'basketball',
-  'pool',
   'snooker',
+  'pool',
   'ice_hockey',
   'american_football',
   'baseball',
@@ -185,13 +244,15 @@ const List<String> _hindiOrder = [
 
 const List<String> _urduOrder = [
   'cricket',
-  'badminton',
   'soccer',
+  'badminton',
+  'boxing',
+  'snooker',
+  'mma',
   'tennis',
   'weightlifting',
   'basketball',
   'pool',
-  'snooker',
   'ice_hockey',
   'american_football',
   'baseball',
@@ -213,22 +274,49 @@ const Map<String, List<String>> sportOrderByLocale = {
   // European regions (country-specific)
   'es_ES': _spainOrder,
   'de_DE': _germanyOrder,
-  'it_IT': _italyFranceCountryOrder,
-  'fr_FR': _italyFranceCountryOrder,
+  'it_IT': _italyCountryOrder,
+  'fr_FR': _franceCountryOrder,
 
   // Language fallbacks
   'en': _usOrder,
   'es': _spanishOrder,
   'de': _germanyOrder,
-  'it': _italyFranceLangOrder,
-  'fr': _italyFranceLangOrder,
+  'it': _italyLangOrder,
+  'fr': _franceLangOrder,
   'hi': _hindiOrder,
   'ur': _urduOrder,
 };
 
+/// Resolve sport IDs in the preferred order for a locale.
+///
+/// Fallback chain:
+/// 1. Full locale, e.g. `en_IN`
+/// 2. Language only, e.g. `en`upload
+/// 3. English default ordering
+List<String> getOrderedSportIdsForLocale(Locale? locale) {
+  if (locale == null) {
+    return sportOrderByLocale['en']!;
+  }
+
+  final fullLocale = '${locale.languageCode}_${locale.countryCode}';
+
+  return sportOrderByLocale[fullLocale] ??
+      sportOrderByLocale[locale.languageCode] ??
+      sportOrderByLocale['en']!;
+}
+
 /// Get the display name for a sport based on its ID
 /// Converts snake_case IDs to readable titles (e.g., 'american_football' → 'American Football')
 String getDisplayNameForSport(String sportId) {
+  switch (sportId) {
+    case 'mma':
+      return 'MMA';
+    case 'mixed_martial_arts':
+      return 'Mixed Martial Arts';
+    default:
+      break;
+  }
+
   return sportId
       .split('_')
       .map((word) => word[0].toUpperCase() + word.substring(1))
@@ -283,6 +371,9 @@ String? getImageAssetPathForSport(String sportId) {
       return 'assets/cricket_male.jpg';
     case 'ice_hockey':
       return 'assets/ice_hockey_male.jpg';
+    case 'mma':
+    case 'mixed_martial_arts':
+      return 'assets/mma_male.png';
     case 'pool':
       return 'assets/pool_male.jpg';
     case 'soccer':

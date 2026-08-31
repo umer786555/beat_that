@@ -1,6 +1,8 @@
 import 'dart:async';
 
+import 'package:beat_that/models/home_feed_cursor.dart';
 import 'package:bloc_presentation/bloc_presentation.dart';
+import 'package:beat_that/models/sport_video.dart';
 import 'package:beat_that/service_locator.dart';
 import 'package:beat_that/services/home_feed_service.dart';
 import 'package:beat_that/services/home_video_feed_session_store.dart';
@@ -27,11 +29,11 @@ class HomeVideoFeedCubit extends Cubit<HomeVideoFeedState>
       _seenVideoIds = _requireSession(sessionId).seenVideoIds,
       super(
         HomeVideoFeedState(
-          videos: List<Map<String, dynamic>>.from(
+          videos: List<SportVideo>.from(
             _requireSession(sessionId).videos,
           ),
           currentIndex: initialIndex,
-          nextOffset: _requireSession(sessionId).nextOffset,
+          nextCursor: _requireSession(sessionId).nextCursor,
           hasMoreContent: _requireSession(sessionId).hasMoreContent,
         ),
       );
@@ -107,6 +109,8 @@ class HomeVideoFeedCubit extends Cubit<HomeVideoFeedState>
     await _activateIndex(currentIndex);
   }
 
+  String? reportVideoIdForIndex(int index) => _videoIdForIndex(index);
+
   Future<bool> submitRating(int rating) async {
     final videoId = _videoIdForIndex(state.currentIndex);
     if (videoId == null || videoId.isEmpty) {
@@ -142,38 +146,6 @@ class HomeVideoFeedCubit extends Cubit<HomeVideoFeedState>
       ),
     );
     return false;
-  }
-
-  /// Submit a video report for moderation
-  Future<void> submitVideoReport(
-    String videoId,
-    String reason,
-  ) async {
-    if (videoId.isEmpty) {
-      emitPresentation(
-        HomeVideoFeedReportErrorEvent('Video not available'),
-      );
-      return;
-    }
-
-    final result = await _supabaseService.submitVideoReport(
-      videoId: videoId,
-      reason: reason,
-    );
-
-    if (result['success'] == true) {
-      emitPresentation(
-        HomeVideoFeedReportSuccessEvent(
-          result['message'] as String? ?? 'Thank you for your report.',
-        ),
-      );
-    } else {
-      emitPresentation(
-        HomeVideoFeedReportErrorEvent(
-          result['error'] as String? ?? 'Failed to submit report. Please try again.',
-        ),
-      );
-    }
   }
 
   Future<void> _activateIndex(int index) async {
@@ -223,9 +195,8 @@ class HomeVideoFeedCubit extends Cubit<HomeVideoFeedState>
 
   Future<void> _initializeController(int index, {bool autoplay = false}) async {
     final video = state.videos[index];
-    final videoSource =
-        video['video_path'] as String? ?? video['video_url'] as String?;
-    if (videoSource == null || videoSource.isEmpty) {
+    final videoSource = video.videoPath;
+    if (videoSource.isEmpty) {
       emit(state.copyWith(errorMessage: 'This video is unavailable.'));
       return;
     }
@@ -272,10 +243,8 @@ class HomeVideoFeedCubit extends Cubit<HomeVideoFeedState>
       return;
     }
 
-    final result = await _supabaseService.getUserRating(videoId: videoId);
-    final currentUserRating = result['success'] == true
-        ? result['rating'] as int?
-        : null;
+    final userRating = await _supabaseService.getUserRating(videoId: videoId);
+    final currentUserRating = userRating?.rating;
 
     emit(state.copyWith(currentUserRating: currentUserRating));
   }
@@ -285,19 +254,12 @@ class HomeVideoFeedCubit extends Cubit<HomeVideoFeedState>
       return null;
     }
 
-    final video = state.videos[index];
-    // For rating, we need the my_videos.id (stored in user_video_id for sport_videos)
-    // First try user_video_id (for feed videos from sport_videos table)
-    // Then fall back to id (for direct my_videos)
-    // Then try video_id (legacy fallback)
-    final videoId = video['user_video_id'] as String? ?? 
-                    video['id'] as String? ?? 
-                    video['video_id'] as String?;
-    
+    final videoId = state.videos[index].ratingTargetId;
+
     if (videoId == null || videoId.isEmpty) {
       print('[HOME_FEED_RATING] ❌ videoId is null or empty!');
     }
-    
+
     return videoId;
   }
 
@@ -316,27 +278,24 @@ class HomeVideoFeedCubit extends Cubit<HomeVideoFeedState>
     try {
       final result = await _homeFeedService.getHomeFeedContinuation(
         seenVideoIds: _seenVideoIds,
-        offset: state.nextOffset,
+        cursor: state.nextCursor,
         limit: _continuationPageSize,
       );
 
-      final newVideos = List<Map<String, dynamic>>.from(
+      final newVideos = List<SportVideo>.from(
         result['videos'] as List<dynamic>,
       );
-      final nextOffset = result['nextOffset'] as int;
+      final nextCursor = result['nextCursor'] as HomeFeedCursor;
       final hasMoreContent = result['hasMoreContent'] as bool;
 
       for (final video in newVideos) {
-        final videoId = video['id'] as String?;
-        if (videoId != null) {
-          _seenVideoIds.add(videoId);
-        }
+        _seenVideoIds.add(video.id);
       }
 
       emit(
         state.copyWith(
           videos: [...state.videos, ...newVideos],
-          nextOffset: nextOffset,
+          nextCursor: nextCursor,
           hasMoreContent: hasMoreContent,
           isLoadingMore: false,
           clearErrorMessage: true,
@@ -346,7 +305,7 @@ class HomeVideoFeedCubit extends Cubit<HomeVideoFeedState>
       _sessionStore.appendVideos(
         sessionId: sessionId,
         videos: newVideos,
-        nextOffset: nextOffset,
+        nextCursor: nextCursor,
         hasMoreContent: hasMoreContent,
       );
     } catch (_) {
@@ -487,7 +446,7 @@ class HomeVideoFeedCubit extends Cubit<HomeVideoFeedState>
       return null;
     }
 
-    return state.videos[index]['id'] as String?;
+    return state.videos[index].id;
   }
 
   void _bumpControllerGeneration() {

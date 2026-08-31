@@ -13,17 +13,3 @@ final class HomeVideoFeedRatingErrorEvent
 
   final String message;
 }
-
-final class HomeVideoFeedReportSuccessEvent
-    extends HomeVideoFeedPresentationEvent {
-  HomeVideoFeedReportSuccessEvent(this.message);
-
-  final String message;
-}
-
-final class HomeVideoFeedReportErrorEvent
-    extends HomeVideoFeedPresentationEvent {
-  HomeVideoFeedReportErrorEvent(this.message);
-
-  final String message;
-}

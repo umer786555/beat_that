@@ -1,3 +1,5 @@
+import 'package:beat_that/models/home_feed_cursor.dart';
+import 'package:beat_that/models/sport_video.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -22,7 +24,8 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   late ScrollController _scrollController;
   static const double _scrollTriggerDistance = 500;
-  List<dynamic> _lastLoadedVideos = const [];
+  List<SportVideo> _lastLoadedVideos = const [];
+  HomeFeedCursor _lastCursor = const HomeFeedCursor.initial();
   bool _lastHasMoreContent = true;
 
   @override
@@ -93,7 +96,8 @@ class _HomeScreenState extends State<HomeScreen> {
           }
 
           if (state is FeedLoaded) {
-            _lastLoadedVideos = List<dynamic>.from(state.videos);
+            _lastLoadedVideos = List<SportVideo>.from(state.videos);
+            _lastCursor = state.nextCursor;
             _lastHasMoreContent = state.hasMoreContent;
           }
         },
@@ -140,6 +144,7 @@ class _HomeScreenState extends State<HomeScreen> {
               return _buildFeedGrid(
                 _lastLoadedVideos,
                 hasMoreContent: _lastHasMoreContent,
+                nextCursor: _lastCursor,
                 isLoading: true,
               );
             }
@@ -161,6 +166,7 @@ class _HomeScreenState extends State<HomeScreen> {
             return _buildFeedGrid(
               state.videos,
               hasMoreContent: state.hasMoreContent,
+              nextCursor: state.nextCursor,
               isLoading: false,
             );
           }
@@ -174,8 +180,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
   /// Build the main feed grid with videos and pull-to-refresh
   Widget _buildFeedGrid(
-    List<dynamic> videos, {
+    List<SportVideo> videos, {
     bool hasMoreContent = true,
+    HomeFeedCursor nextCursor = const HomeFeedCursor.initial(),
     bool isLoading = false,
   }) {
     return RefreshIndicator(
@@ -188,10 +195,10 @@ class _HomeScreenState extends State<HomeScreen> {
             padding: const EdgeInsets.all(6),
             physics: const AlwaysScrollableScrollPhysics(),
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 3,
+              crossAxisCount: 2,
               crossAxisSpacing: 6,
               mainAxisSpacing: 6,
-              childAspectRatio: 9 / 16,
+              childAspectRatio: 0.64,
             ),
             itemCount: videos.length + (isLoading ? 2 : 0),
             itemBuilder: (context, index) {
@@ -212,25 +219,18 @@ class _HomeScreenState extends State<HomeScreen> {
 
               final video = videos[index];
               return VideoFeedCard(
-                videoId: video['id'] ?? '',
-                thumbnailUrl: video['thumbnailUrl'] ?? '',
-                title: video['title'] as String?,
-                username: video['username'] ?? '',
-                sportId: video['sport_id'] as String?,
-                viewCount: (video['view_count'] as num?)?.toInt() ?? 0,
-                rating: (video['average_rating'] as num?)?.toDouble() ?? 0.0,
+                videoId: video.id,
+                thumbnailUrl: video.thumbnailUrl ?? '',
+                title: video.title,
+                username: video.username ?? '',
+                sportId: video.sportId,
+                viewCount: video.viewCount,
+                rating: video.averageRating,
                 onTap: () {
-                  final initialVideos = videos
-                      .map(
-                        (item) => Map<String, dynamic>.from(
-                          item as Map<String, dynamic>,
-                        ),
-                      )
-                      .toList();
                   final sessionStore = locator<HomeVideoFeedSessionStore>();
                   final sessionId = sessionStore.createSession(
-                    videos: initialVideos,
-                    nextOffset: initialVideos.length,
+                    videos: List.of(videos),
+                    nextCursor: nextCursor,
                     hasMoreContent: hasMoreContent,
                   );
 
@@ -244,7 +244,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 },
                 onLongPress: () {
                   // TODO: Show context menu (share, report, etc.)
-                  print('Long pressed video: ${video['id']}');
+                  print('Long pressed video: ${video.id}');
                 },
               );
             },

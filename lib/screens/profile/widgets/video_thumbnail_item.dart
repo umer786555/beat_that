@@ -132,10 +132,10 @@ class VideoThumbnailItem extends StatelessWidget {
                       child: Container(
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          color: Colors.white.withOpacity(0.85),
+                          color: Colors.white.withValues(alpha: 0.85),
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black.withOpacity(0.25),
+                              color: Colors.black.withValues(alpha: 0.25),
                               blurRadius: 12,
                               offset: const Offset(0, 3),
                             ),
@@ -163,7 +163,7 @@ class VideoThumbnailItem extends StatelessWidget {
                             end: Alignment.bottomCenter,
                             colors: [
                               Colors.transparent,
-                              Colors.black.withOpacity(0.8),
+                              Colors.black.withValues(alpha: 0.8),
                             ],
                           ),
                         ),
@@ -192,7 +192,7 @@ class VideoThumbnailItem extends StatelessWidget {
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
-                                  color: Colors.white.withOpacity(0.82),
+                                  color: Colors.white.withValues(alpha: 0.82),
                                   fontSize: 10,
                                   fontWeight: FontWeight.w700,
                                   letterSpacing: -0.1,
@@ -206,7 +206,7 @@ class VideoThumbnailItem extends StatelessWidget {
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
-                                  color: Colors.white.withOpacity(0.74),
+                                  color: Colors.white.withValues(alpha: 0.74),
                                   fontSize: 10,
                                   fontWeight: FontWeight.w500,
                                   letterSpacing: -0.1,
@@ -249,7 +249,7 @@ class VideoThumbnailItem extends StatelessWidget {
                                     child: Text(
                                       'No ratings',
                                       style: TextStyle(
-                                        color: Colors.white.withOpacity(0.7),
+                                        color: Colors.white.withValues(alpha: 0.7),
                                         fontSize: 11,
                                         fontWeight: FontWeight.w500,
                                         letterSpacing: -0.2,
@@ -261,7 +261,7 @@ class VideoThumbnailItem extends StatelessWidget {
                                 Container(
                                   width: 1,
                                   height: 12,
-                                  color: Colors.white.withOpacity(0.3),
+                                  color: Colors.white.withValues(alpha: 0.3),
                                 ),
                                 const SizedBox(width: 12),
                                 // View count
@@ -272,7 +272,7 @@ class VideoThumbnailItem extends StatelessWidget {
                                       Icon(
                                         Icons.visibility_rounded,
                                         size: 13,
-                                        color: Colors.white.withOpacity(0.9),
+                                        color: Colors.white.withValues(alpha: 0.9),
                                       ),
                                       const SizedBox(width: 3),
                                       Text(
@@ -280,7 +280,7 @@ class VideoThumbnailItem extends StatelessWidget {
                                             ? '${_formatViewCount(thumbnail.viewCount)} views'
                                             : 'No views',
                                         style: TextStyle(
-                                          color: Colors.white.withOpacity(0.9),
+                                          color: Colors.white.withValues(alpha: 0.9),
                                           fontSize: 11,
                                           fontWeight: FontWeight.w600,
                                           letterSpacing: -0.2,

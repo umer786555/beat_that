@@ -1,9 +1,12 @@
 import 'dart:io';
 import 'package:beat_that/service_locator.dart';
+import 'package:beat_that/models/user_block.dart';
 import 'package:beat_that/models/user_personal_profile.dart';
 import 'package:beat_that/models/user_profile_summary.dart';
 import 'package:beat_that/models/sport_subcategory.dart';
+import 'package:beat_that/models/sport_video.dart';
 import 'package:beat_that/models/my_video.dart';
+import 'package:beat_that/models/video_rating.dart';
 import 'package:beat_that/services/dio_upload_service.dart';
 import 'package:beat_that/services/preferences_service.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
@@ -19,9 +22,9 @@ class SupabaseService {
   static const int _profileImageMaxDimension = 1080;
   static const int _profileImageQuality = 78;
   static const int _thumbnailMaxDimension = 720;
-  static const int _thumbnailQuality = 68;
+  static const int _thumbnailQuality = 80;
   static const VideoQuality _videoCompressionQuality =
-      VideoQuality.MediumQuality;
+      VideoQuality.HighestQuality;
 
   /// Get the Supabase client instance
   /// This accesses the globally initialized Supabase instance
@@ -193,19 +196,21 @@ class SupabaseService {
       // Store paths only (not full URLs) - URLs generated on-demand by service layer
       // This follows industry best practice (Instagram, YouTube, etc.)
       print('Step 3: Creating video record in database');
-      final insertResponse = await client.from('my_videos').insert({
-        'user_id': userId,
-        'title': title,
-        'description': description ?? '',
-        'video_path': videoPath,
-        'thumbnail_path': thumbnailPath,
-        'sport_id': sportId,
-        'subcategory_id': subcategoryId,
-        'subcategory_name': subcategoryName,
-        'view_count': 0,
-        'created_at': DateTime.now().toIso8601String(),
-        'data_type': 'user_profile_video',
-      }).select();
+      final insertResponse = await client
+          .from('my_videos')
+          .insert(
+            MyVideo.createInsertJson(
+              userId: userId,
+              title: title,
+              description: description,
+              videoPath: videoPath,
+              thumbnailPath: thumbnailPath,
+              sportId: sportId,
+              subcategoryId: subcategoryId,
+              subcategoryName: subcategoryName,
+            ),
+          )
+          .select();
 
       // Validate database insert response
       if (insertResponse.isEmpty) {
@@ -973,13 +978,9 @@ class SupabaseService {
   ///
   /// Titles are stored initially in `my_videos` during upload, then copied into
   /// `sport_videos` when a user links a video into a public category. Search is
-  /// performed against `sport_videos` so results match the public discovery/feed
-  /// surfaces users can actually browse.
-  ///
-  /// Matching modes:
-  /// - `exactMatch=true`: case-insensitive exact title match only
-  /// - `startsWithOnly=true`: case-insensitive prefix match only
-  /// - default: exact matches first, then prefix matches, then contains matches
+  /// performed by the `search_explore_videos` RPC so results match the public
+  /// discovery/feed surfaces users can actually browse and can include creator
+  /// username matches.
   ///
   /// Returns:
   /// - `videos`: current page of results
@@ -990,8 +991,6 @@ class SupabaseService {
     String query, {
     int limit = 20,
     int offset = 0,
-    bool exactMatch = false,
-    bool startsWithOnly = false,
     String? sportId,
   }) async {
     final normalizedQuery = query.trim();
@@ -1003,7 +1002,7 @@ class SupabaseService {
 
     if (normalizedQuery.isEmpty && !hasSportFilter) {
       return {
-        'videos': <Map<String, dynamic>>[],
+        'videos': <SportVideo>[],
         'totalCount': 0,
         'hasMore': false,
         'nextOffset': normalizedOffset,
@@ -1011,170 +1010,21 @@ class SupabaseService {
     }
 
     try {
-      if (normalizedQuery.isEmpty) {
-        final totalCount = await _countVideoTitleSearchMatches(
-          sportId: normalizedSportId,
-        );
-
-        if (normalizedOffset >= totalCount) {
-          return {
-            'videos': <Map<String, dynamic>>[],
-            'totalCount': totalCount,
-            'hasMore': false,
-            'nextOffset': normalizedOffset,
-          };
-        }
-
-        final videos = await _fetchVideoTitleSearchMatches(
-          limit: normalizedLimit,
-          offset: normalizedOffset,
-          sportId: normalizedSportId,
-          sortByTitle: false,
-        );
-
-        return {
-          'videos': videos,
-          'totalCount': totalCount,
-          'hasMore': normalizedOffset + videos.length < totalCount,
-          'nextOffset': normalizedOffset + videos.length,
-        };
-      }
-
-      if (exactMatch) {
-        final totalCount = await _countVideoTitleSearchMatches(
-          ilikePattern: normalizedQuery,
-          sportId: normalizedSportId,
-        );
-
-        if (normalizedOffset >= totalCount) {
-          return {
-            'videos': <Map<String, dynamic>>[],
-            'totalCount': totalCount,
-            'hasMore': false,
-            'nextOffset': normalizedOffset,
-          };
-        }
-
-        final videos = await _fetchVideoTitleSearchMatches(
-          ilikePattern: normalizedQuery,
-          limit: normalizedLimit,
-          offset: normalizedOffset,
-          sportId: normalizedSportId,
-        );
-
-        return {
-          'videos': videos,
-          'totalCount': totalCount,
-          'hasMore': normalizedOffset + videos.length < totalCount,
-          'nextOffset': normalizedOffset + videos.length,
-        };
-      }
-
-      final prefixPattern = '$normalizedQuery%';
-
-      if (startsWithOnly) {
-        final totalCount = await _countVideoTitleSearchMatches(
-          ilikePattern: prefixPattern,
-          sportId: normalizedSportId,
-        );
-
-        if (normalizedOffset >= totalCount) {
-          return {
-            'videos': <Map<String, dynamic>>[],
-            'totalCount': totalCount,
-            'hasMore': false,
-            'nextOffset': normalizedOffset,
-          };
-        }
-
-        final videos = await _fetchVideoTitleSearchMatches(
-          ilikePattern: prefixPattern,
-          limit: normalizedLimit,
-          offset: normalizedOffset,
-          sportId: normalizedSportId,
-        );
-
-        return {
-          'videos': videos,
-          'totalCount': totalCount,
-          'hasMore': normalizedOffset + videos.length < totalCount,
-          'nextOffset': normalizedOffset + videos.length,
-        };
-      }
-
-      final containsPattern = '%$normalizedQuery%';
-      final exactCount = await _countVideoTitleSearchMatches(
-        ilikePattern: normalizedQuery,
-        sportId: normalizedSportId,
+      final response = await client.rpc(
+        'search_explore_videos',
+        params: {
+          'p_query': normalizedQuery,
+          'p_sport_id': hasSportFilter ? normalizedSportId : null,
+          'p_limit': normalizedLimit,
+          'p_offset': normalizedOffset,
+        },
       );
-      final prefixCount = await _countVideoTitleSearchMatches(
-        ilikePattern: prefixPattern,
-        excludedPattern: normalizedQuery,
-        sportId: normalizedSportId,
-      );
-      final containsCount = await _countVideoTitleSearchMatches(
-        ilikePattern: containsPattern,
-        excludedPattern: prefixPattern,
-        sportId: normalizedSportId,
-      );
-      final totalCount = exactCount + prefixCount + containsCount;
 
-      if (normalizedOffset >= totalCount) {
-        return {
-          'videos': <Map<String, dynamic>>[],
-          'totalCount': totalCount,
-          'hasMore': false,
-          'nextOffset': normalizedOffset,
-        };
-      }
-
-      final videos = <Map<String, dynamic>>[];
-      var remainingSlots = normalizedLimit;
-      var remainingOffset = normalizedOffset;
-
-      if (remainingSlots > 0 && remainingOffset < exactCount) {
-        final exactVideos = await _fetchVideoTitleSearchMatches(
-          ilikePattern: normalizedQuery,
-          limit: remainingSlots,
-          offset: remainingOffset,
-          sportId: normalizedSportId,
-        );
-        videos.addAll(exactVideos);
-        remainingSlots -= exactVideos.length;
-        remainingOffset = 0;
-      } else {
-        remainingOffset = remainingOffset > exactCount
-            ? remainingOffset - exactCount
-            : 0;
-      }
-
-      if (remainingSlots > 0 && remainingOffset < prefixCount) {
-        final prefixVideos = await _fetchVideoTitleSearchMatches(
-          ilikePattern: prefixPattern,
-          limit: remainingSlots,
-          offset: remainingOffset,
-          excludedPattern: normalizedQuery,
-          sportId: normalizedSportId,
-        );
-        videos.addAll(prefixVideos);
-        remainingSlots -= prefixVideos.length;
-        remainingOffset = 0;
-      } else if (remainingSlots > 0) {
-        remainingOffset = remainingOffset > prefixCount
-            ? remainingOffset - prefixCount
-            : 0;
-      }
-
-      if (remainingSlots > 0) {
-        final containsVideos = await _fetchVideoTitleSearchMatches(
-          ilikePattern: containsPattern,
-          limit: remainingSlots,
-          offset: remainingOffset,
-          excludedPattern: prefixPattern,
-          sportId: normalizedSportId,
-        );
-        videos.addAll(containsVideos);
-      }
+      final rows = List<Map<String, dynamic>>.from(response as List<dynamic>);
+      final totalCount = rows.isEmpty
+          ? 0
+          : (rows.first['total_count'] as num?)?.toInt() ?? 0;
+      final videos = await _buildSportVideosFromRows(rows);
 
       return {
         'videos': videos,
@@ -1185,77 +1035,12 @@ class SupabaseService {
     } catch (e) {
       print('Error searching videos by title: $e');
       return {
-        'videos': <Map<String, dynamic>>[],
+        'videos': <SportVideo>[],
         'totalCount': 0,
         'hasMore': false,
         'nextOffset': normalizedOffset,
       };
     }
-  }
-
-  Future<int> _countVideoTitleSearchMatches({
-    String? ilikePattern,
-    String? excludedPattern,
-    String? sportId,
-  }) async {
-    dynamic query = client.from('sport_videos').count(CountOption.exact);
-
-    if (ilikePattern != null && ilikePattern.isNotEmpty) {
-      query = query.ilike('title', ilikePattern);
-    }
-
-    if (sportId != null && sportId.isNotEmpty) {
-      query = query.eq('sport_id', sportId);
-    }
-
-    if (excludedPattern != null) {
-      query = query.not('title', 'ilike', excludedPattern);
-    }
-
-    return await query as int;
-  }
-
-  Future<List<Map<String, dynamic>>> _fetchVideoTitleSearchMatches({
-    required int limit,
-    required int offset,
-    String? ilikePattern,
-    String? excludedPattern,
-    String? sportId,
-    bool sortByTitle = true,
-  }) async {
-    dynamic query = client
-        .from('sport_videos')
-        .select(
-          'id, user_video_id, title, description, video_path, thumbnail_path, view_count, user_id, created_at, bayesian_score, total_ratings, average_rating',
-        );
-
-    if (ilikePattern != null && ilikePattern.isNotEmpty) {
-      query = query.ilike('title', ilikePattern);
-    }
-
-    if (sportId != null && sportId.isNotEmpty) {
-      query = query.eq('sport_id', sportId);
-    }
-
-    if (excludedPattern != null) {
-      query = query.not('title', 'ilike', excludedPattern);
-    }
-
-    query = sortByTitle
-        ? query.order('title').order('created_at', ascending: false)
-        : query
-              .order('bayesian_score', ascending: false)
-              .order('total_ratings', ascending: false)
-              .order('created_at', ascending: false);
-
-    query = query.range(offset, offset + limit - 1);
-
-    final response = await query;
-    final videos = List<Map<String, dynamic>>.from(response as List<dynamic>);
-    final videosWithUrls = await Future.wait(
-      videos.map(_convertVideoPathsToUrls),
-    );
-    return _addUsernamesToVideos(videosWithUrls);
   }
 
   // /// Upload user profile image to Supabase storage and update database
@@ -1971,6 +1756,17 @@ class SupabaseService {
     return '$bytes B';
   }
 
+  String _toPostgrestInList(Iterable<Object> values) {
+    return '(${values.map((value) {
+      if (value is num || value is bool) {
+        return value.toString();
+      }
+
+      final escapedValue = value.toString().replaceAll('"', r'\"');
+      return '"$escapedValue"';
+    }).join(',')})';
+  }
+
   // ==================== SPORT VIDEO OPERATIONS ====================
 
   /// Fetch all subcategories for a specific sport
@@ -2063,7 +1859,9 @@ class SupabaseService {
       // STEP 1: Verify the video belongs to the current user and get video details
       final videoData = await client
           .from('my_videos')
-          .select('id, title, description, video_path, thumbnail_path')
+          .select(
+            'id, created_at, user_id, title, description, video_path, thumbnail_path',
+          )
           .eq('id', videoId)
           .eq('user_id', userId)
           .maybeSingle();
@@ -2074,6 +1872,8 @@ class SupabaseService {
           'error': 'Video not found or does not belong to you',
         };
       }
+
+      final sourceVideo = MyVideo.fromJson(videoData);
 
       // STEP 2: Check if video is already linked to a subcategory
       final existingLink = await client
@@ -2098,10 +1898,10 @@ class SupabaseService {
         'user_video_id': videoId,
         'sport_id': sportId,
         'subcategory_id': subcategoryId,
-        'title': videoData['title'] as String,
-        'description': videoData['description'] as String? ?? '',
-        'video_path': videoData['video_path'] as String,
-        'thumbnail_path': videoData['thumbnail_path'] as String,
+        'title': sourceVideo.title,
+        'description': sourceVideo.description ?? '',
+        'video_path': sourceVideo.videoPath,
+        'thumbnail_path': sourceVideo.thumbnailPath,
         'view_count': 0,
         'created_at': DateTime.now().toIso8601String(),
         'updated_at': DateTime.now().toIso8601String(),
@@ -2138,19 +1938,17 @@ class SupabaseService {
   ///
   /// Returns: List of videos with username included
   /// Each video contains: {id, title, description, video_path, thumbnail_path, thumbnailUrl, view_count, username, created_at}
-  Future<List<Map<String, dynamic>>> getSportCategoryVideos({
+  Future<List<SportVideo>> getSportCategoryVideos({
     required String sportId,
     required String subcategoryId,
     int limit = 20,
     int offset = 0,
   }) async {
     try {
-      // Query sport_videos table with pagination
-      // Ordered by bayesian_score (Bayesian weighted rating) with total_ratings as tiebreaker
       final videos = await client
           .from('sport_videos')
           .select(
-            'id, user_video_id, title, description, video_path, thumbnail_path, view_count, user_id, created_at, bayesian_score, total_ratings, average_rating',
+            'id, user_id, user_video_id, sport_id, title, description, video_path, thumbnail_path, view_count, created_at, bayesian_score, total_ratings, average_rating, user_personal_profiles(username)',
           )
           .eq('sport_id', sportId)
           .eq('subcategory_id', subcategoryId)
@@ -2158,39 +1956,19 @@ class SupabaseService {
           .order('total_ratings', ascending: false)
           .range(offset, offset + limit - 1);
 
-      // Fetch usernames for each video
-      final videosWithUsernames = <Map<String, dynamic>>[];
-      for (final video in videos as List<dynamic>) {
-        final videoMap = video as Map<String, dynamic>;
-        final userId = videoMap['user_id'] as String?;
-
-        if (userId != null) {
-          final profiles = await client
-              .from('user_personal_profiles')
-              .select('username')
-              .eq('id', userId)
-              .maybeSingle();
-
-          final username = profiles != null
-              ? profiles['username'] as String
-              : 'Unknown User';
-
-          videosWithUsernames.add({...videoMap, 'username': username});
-        }
-      }
-
-      // Convert paths to URLs (service layer transformation)
-      final videosWithUrls = await Future.wait(
-        videosWithUsernames.map(_convertVideoPathsToUrls),
+      // This query already includes the nested username, so the shared row
+      // builder can produce fully populated SportVideo models directly.
+      final sportVideos = await _buildSportVideosFromRows(
+        videos,
       );
 
       print(
-        '✓ Fetched ${videosWithUrls.length} videos for $sportId/$subcategoryId',
+        '✓ Fetched ${sportVideos.length} videos for $sportId/$subcategoryId',
       );
-      return videosWithUrls;
+      return sportVideos;
     } catch (e) {
       print('Error fetching category videos: $e');
-      return [];
+      return <SportVideo>[];
     }
   }
 
@@ -2203,32 +1981,33 @@ class SupabaseService {
   /// - [limit]: Maximum number of videos to return (default: 50)
   /// - [offset]: Pagination offset (default: 0)
   ///
-  /// Returns: List of linked videos with category information
-  /// Each video contains: {id, title, description, sport_id, subcategory_id, view_count, created_at}
-  Future<List<Map<String, dynamic>>> getUserLinkedVideos({
+  /// Returns: List of linked public videos as [SportVideo] models
+  Future<List<SportVideo>> getUserLinkedVideos({
     int limit = 50,
     int offset = 0,
   }) async {
     try {
       final userId = getCurrentUserId();
       if (userId == null) {
-        return [];
+        return <SportVideo>[];
       }
 
       final videos = await client
           .from('sport_videos')
           .select(
-            'id, title, description, sport_id, subcategory_id, view_count, created_at',
+            'id, user_id, user_video_id, sport_id, title, description, video_path, thumbnail_path, view_count, created_at, total_ratings, average_rating, bayesian_score',
           )
           .eq('user_id', userId)
           .order('created_at', ascending: false)
           .range(offset, offset + limit - 1);
 
       print('✓ Fetched ${videos.length} linked videos for user $userId');
-      return List<Map<String, dynamic>>.from(videos as List<dynamic>);
+      // Linked-video rows do not include username because this surface does not
+      // currently render creator attribution.
+      return _buildSportVideosFromRows(videos as List<dynamic>);
     } catch (e) {
       print('Error fetching user linked videos: $e');
-      return [];
+      return <SportVideo>[];
     }
   }
 
@@ -2398,35 +2177,32 @@ class SupabaseService {
   /// - [videoId]: UUID of the my_videos table record
   ///
   /// Returns:
-  /// - {success: true, rating: 8} - User's rating (1-10)
-  /// - {success: true, rating: null} - User hasn't rated this video yet
-  /// - {success: false, error} - Error occurred
-  Future<Map<String, dynamic>> getUserRating({required String videoId}) async {
+  /// - VideoRating - The user's saved rating row
+  /// - null - User is unauthenticated, has not rated the video, or lookup failed
+  Future<VideoRating?> getUserRating({required String videoId}) async {
     try {
       final userId = getCurrentUserId();
       if (userId == null) {
-        return {'success': false, 'rating': null};
+        return null;
       }
 
       // Query video_ratings for this user's vote on the original my_videos row.
       // maybeSingle() returns null if no rating exists (graceful, no error)
       final result = await client
           .from('video_ratings')
-          .select()
+          .select('video_id, user_id, rating, created_at, updated_at')
           .eq('video_id', videoId)
           .eq('user_id', userId)
           .maybeSingle();
 
       if (result == null) {
-        // User hasn't rated this video yet
-        return {'success': true, 'rating': null};
+        return null;
       }
 
-      // Return the rating value (1-10)
-      return {'success': true, 'rating': result['rating'] as int};
+      return VideoRating.fromJson(result);
     } catch (e) {
       print('Error getting user rating: $e');
-      return {'success': false, 'error': e.toString()};
+      return null;
     }
   }
 
@@ -2479,40 +2255,46 @@ class SupabaseService {
   /// - [userIdToBlock]: UUID of the user to block
   ///
   /// Returns:
-  /// - {success: true} - Successfully blocked user
-  /// - {success: false, error} - Validation or database error
-  Future<Map<String, dynamic>> blockUser({
+  /// - [UserBlock] - Successfully blocked user
+  ///
+  /// Throws:
+  /// - [Exception] when validation fails or the database request fails
+  Future<UserBlock> blockUser({
     required String userIdToBlock,
   }) async {
+    final userId = getCurrentUserId();
+    if (userId == null) {
+      throw Exception('User not authenticated');
+    }
+
+    if (userId == userIdToBlock) {
+      throw Exception('You cannot block yourself');
+    }
+
     try {
-      final userId = getCurrentUserId();
-      if (userId == null) {
-        return {'success': false, 'error': 'User not authenticated'};
-      }
-
-      if (userId == userIdToBlock) {
-        return {'success': false, 'error': 'You cannot block yourself'};
-      }
-
-      await client.from('user_blocks').insert({
-        'blocker_id': userId,
-        'blocked_id': userIdToBlock,
-      });
+      final response = await client
+          .from('user_blocks')
+          .insert({
+            'blocker_id': userId,
+            'blocked_id': userIdToBlock,
+          })
+          .select('id, blocker_id, blocked_id, created_at')
+          .single();
 
       print('✓ Successfully blocked user $userIdToBlock');
-      return {'success': true, 'message': 'User blocked successfully'};
+      return UserBlock.fromJson(response);
     } on PostgrestException catch (e) {
       print('Error blocking user: $e');
 
       if (e.message.toLowerCase().contains('duplicate') ||
           e.message.toLowerCase().contains('unique')) {
-        return {'success': false, 'error': 'This user is already blocked'};
+        throw Exception('This user is already blocked');
       }
 
-      return {'success': false, 'error': e.message};
+      throw Exception(e.message);
     } catch (e) {
       print('Error blocking user: $e');
-      return {'success': false, 'error': e.toString()};
+      rethrow;
     }
   }
 
@@ -2524,36 +2306,34 @@ class SupabaseService {
   /// Parameters:
   /// - [userIdToUnblock]: UUID of the user to unblock
   ///
-  /// Returns:
-  /// - {success: true} - Successfully unblocked user
-  /// - {success: false, error} - Validation or database error
-  Future<Map<String, dynamic>> unblockUser({
-    required String userIdToUnblock,
+  /// Throws:
+  /// - [Exception] when validation fails or the database request fails
+  Future<void> unblockUser({
+    required UserBlock userBlock,
   }) async {
+    final userId = getCurrentUserId();
+    if (userId == null) {
+      throw Exception('User not authenticated');
+    }
+
+    if (userId == userBlock.blockedId) {
+      throw Exception('You cannot unblock yourself');
+    }
+
     try {
-      final userId = getCurrentUserId();
-      if (userId == null) {
-        return {'success': false, 'error': 'User not authenticated'};
-      }
-
-      if (userId == userIdToUnblock) {
-        return {'success': false, 'error': 'You cannot unblock yourself'};
-      }
-
       await client
           .from('user_blocks')
           .delete()
           .eq('blocker_id', userId)
-          .eq('blocked_id', userIdToUnblock);
+          .eq('blocked_id', userBlock.blockedId);
 
-      print('✓ Successfully unblocked user $userIdToUnblock');
-      return {'success': true, 'message': 'User unblocked successfully'};
+      print('✓ Successfully unblocked user ${userBlock.blockedId}');
     } on PostgrestException catch (e) {
       print('Error unblocking user: $e');
-      return {'success': false, 'error': e.message};
+      throw Exception(e.message);
     } catch (e) {
       print('Error unblocking user: $e');
-      return {'success': false, 'error': e.toString()};
+      rethrow;
     }
   }
 
@@ -2566,8 +2346,8 @@ class SupabaseService {
   /// - [limit]: Maximum number of users to return (default: 20)
   /// - [offset]: Pagination offset (default: 0)
   ///
-  /// Returns: List of blocked user profile summaries
-  Future<List<UserProfileSummary>> getBlockedUsers({
+  /// Returns: List of blocked user rows with flattened blocked-user display data
+  Future<List<UserBlock>> getBlockedUsers({
     int limit = 20,
     int offset = 0,
   }) async {
@@ -2579,7 +2359,7 @@ class SupabaseService {
 
       final blocks = await client
           .from('user_blocks')
-          .select('blocked_id, created_at')
+          .select('id, blocker_id, blocked_id, created_at')
           .eq('blocker_id', userId)
           .order('created_at', ascending: false)
           .range(offset, offset + limit - 1);
@@ -2588,10 +2368,13 @@ class SupabaseService {
         return [];
       }
 
+      final typedBlocks = (blocks as List<dynamic>)
+          .whereType<Map<String, dynamic>>()
+          .map(UserBlock.fromJson)
+          .toList(growable: false);
+
       final blockedUserIds = List<String>.from(
-        (blocks as List<dynamic>).map(
-          (block) => (block as Map<String, dynamic>)['blocked_id'] as String,
-        ),
+        typedBlocks.map((block) => block.blockedId),
       );
 
       final profiles = await client
@@ -2607,12 +2390,21 @@ class SupabaseService {
           profile['id'] as String: UserProfileSummary.fromMap(profile),
       };
 
-      final blockedUsers = blockedUserIds
-          .map((blockedUserId) => profilesById[blockedUserId])
-          .whereType<UserProfileSummary>()
+      final blockedUsers = typedBlocks
+          .map((block) {
+            final profile = profilesById[block.blockedId];
+            if (profile == null) {
+              return block;
+            }
+
+            return block.copyWith(
+              blockedUsername: profile.username,
+              blockedProfileUrl: profile.profileUrl,
+            );
+          })
           .toList(growable: false);
 
-      if (blockedUsers.length != blockedUserIds.length) {
+      if (profilesById.length != blockedUserIds.length) {
         final missingProfileIds = blockedUserIds
             .where((blockedUserId) => !profilesById.containsKey(blockedUserId))
             .toList(growable: false);
@@ -2628,7 +2420,7 @@ class SupabaseService {
       return blockedUsers;
     } catch (e) {
       print('Error fetching blocked users: $e');
-      return <UserProfileSummary>[];
+      return <UserBlock>[];
     }
   }
 
@@ -3069,120 +2861,16 @@ class SupabaseService {
     return updated;
   }
 
-  /// Helper: Flatten nested username from FK relationship
-  ///
-  /// When using nested select like:
-  /// `.select('id, title, user_personal_profiles(username)')`
-  ///
-  /// Supabase returns nested structure:
-  /// ```
-  /// {
-  ///   id: '...',
-  ///   title: '...',
-  ///   user_personal_profiles: { username: 'john_doe' }
-  /// }
-  /// ```
-  ///
-  /// This helper flattens it to:
-  /// ```
-  /// {
-  ///   id: '...',
-  ///   title: '...',
-  ///   username: 'john_doe'
-  /// }
-  /// ```
-  ///
-  /// Parameters:
-  /// - [videos]: List of videos with nested user_personal_profiles data
-  ///
-  /// Returns: List of videos with flattened username at top level
-  List<Map<String, dynamic>> _flattenUsernamePath(List<dynamic> videos) {
-    return videos.map((dynamic video) {
-      final updated = Map<String, dynamic>.from(video as Map<String, dynamic>);
-
-      // Extract username from nested profile object
-      if (updated['user_personal_profiles'] != null) {
-        final profile =
-            updated['user_personal_profiles'] as Map<String, dynamic>?;
-        if (profile != null && profile['username'] != null) {
-          updated['username'] = profile['username'] as String;
-          print(
-            '✓ Flattened username: ${profile['username']} from nested profile',
-          );
-        } else {
-          updated['username'] = 'Unknown User';
-        }
-      } else {
-        updated['username'] = 'Unknown User';
-      }
-
-      return updated;
-    }).toList();
-  }
-
-  /// Helper: Add usernames to videos by looking up user_id in user_personal_profiles
-  ///
-  /// Takes a list of videos (with user_id field) and adds the username field
-  /// by querying user_personal_profiles table.
-  ///
-  /// Parameters:
-  /// - [videos]: List of video maps from database (must have 'user_id' field)
-  ///
-  /// Returns: List of videos with 'username' field added
-  Future<List<Map<String, dynamic>>> _addUsernamesToVideos(
-    List<Map<String, dynamic>> videos,
+  Future<List<SportVideo>> _buildSportVideosFromRows(
+    List<dynamic> rows,
   ) async {
-    if (videos.isEmpty) return videos;
-
-    // Extract unique user IDs from all videos
-    final userIds = <String>{};
-    for (final video in videos) {
-      final userId = video['user_id'] as String?;
-      if (userId != null) {
-        userIds.add(userId);
-      }
-    }
-
-    print(
-      '👥 _addUsernamesToVideos: Found ${userIds.length} unique user IDs from ${videos.length} videos',
+    // Centralize the row -> URL-enriched map -> SportVideo conversion so every
+    // public sport_videos method stays consistent.
+    final videos = List<Map<String, dynamic>>.from(rows);
+    final videosWithUrls = await Future.wait(
+      videos.map(_convertVideoPathsToUrls),
     );
-
-    // If no user IDs, just return videos with 'Unknown User'
-    if (userIds.isEmpty) {
-      print('👥 No user IDs found, returning all videos as "Unknown User"');
-      return videos.map((v) => {...v, 'username': 'Unknown User'}).toList();
-    }
-
-    // Fetch all usernames in ONE query instead of N queries
-    final profiles = await client
-        .from('user_personal_profiles')
-        .select('id, username')
-        .inFilter('id', userIds.toList());
-
-    print('👥 Fetched ${profiles.length} profiles from database');
-
-    // Create a map of user_id -> username for fast lookups
-    final usernameMap = <String, String>{};
-    for (final profile in profiles) {
-      final userId = profile['id'] as String;
-      final username = profile['username'] as String;
-      usernameMap[userId] = username;
-      print('   ✓ Mapped $userId → $username');
-    }
-
-    // Add usernames to videos using the map
-    final videosWithUsernames = <Map<String, dynamic>>[];
-    for (final video in videos) {
-      final userId = video['user_id'] as String?;
-      final videoId = video['id'] as String?;
-      final username = userId != null
-          ? (usernameMap[userId] ?? 'Unknown User')
-          : 'Unknown User';
-      videosWithUsernames.add({...video, 'username': username});
-      print('👥 Video $videoId (user: $userId) → username: $username');
-    }
-
-    return videosWithUsernames;
+    return videosWithUrls.map(SportVideo.fromMap).toList();
   }
 
   /// Get videos from users that the current user follows (Following Feed)
@@ -3214,7 +2902,7 @@ class SupabaseService {
   /// - RLS on user_follows restricts to only the caller's follows
   /// - RLS on sport_videos allows authenticated users to view all videos
   /// - RLS on user_personal_profiles allows authenticated users to view all usernames
-  Future<List<Map<String, dynamic>>> getFollowingVideos({
+  Future<List<SportVideo>> getFollowingVideos({
     int limit = 50,
     int offset = 0,
   }) async {
@@ -3247,10 +2935,10 @@ class SupabaseService {
       print(
         '✓ Fetched ${videosWithUrls.length} videos from followed users (RPC optimized)',
       );
-      return videosWithUrls;
+      return videosWithUrls.map(SportVideo.fromMap).toList();
     } catch (e) {
       print('Error fetching following videos: $e');
-      return [];
+      return <SportVideo>[];
     }
   }
 
@@ -3274,7 +2962,7 @@ class SupabaseService {
   /// - User hasn't watched any videos yet (no engagement data)
   /// - No videos exist in the user's engaged subcategories
   /// - An error occurs during fetch
-  Future<List<Map<String, dynamic>>> getPersonalizedVideos({
+  Future<List<SportVideo>> getPersonalizedVideos({
     int limit = 50,
     int offset = 0,
   }) async {
@@ -3306,7 +2994,7 @@ class SupabaseService {
       final videos = await client
           .from('sport_videos')
           .select(
-            'id, user_id, user_video_id, title, thumbnail_path, video_path, bayesian_score, view_count, sport_id, user_personal_profiles(username)',
+            'id, user_id, user_video_id, title, thumbnail_path, video_path, average_rating, total_ratings, bayesian_score, view_count, sport_id, user_personal_profiles(username)',
           )
           .inFilter('subcategory_id', subcategoryIds)
           .order('bayesian_score', ascending: false)
@@ -3317,21 +3005,17 @@ class SupabaseService {
         return [];
       }
 
-      // Flatten nested username from FK relationship
-      final flattenedVideos = _flattenUsernamePath(videos as List<dynamic>);
-
-      // Convert paths to URLs (service layer transformation)
-      final videosWithUsernames = await Future.wait(
-        flattenedVideos.map((v) => _convertVideoPathsToUrls(v)),
+      final sportVideos = await _buildSportVideosFromRows(
+        videos,
       );
 
       print(
-        '✓ Fetched ${videosWithUsernames.length} personalized videos from top 5 engaged categories (bayesian_score sorted)',
+        '✓ Fetched ${sportVideos.length} personalized videos from top 5 engaged categories (bayesian_score sorted)',
       );
-      return videosWithUsernames;
+      return sportVideos;
     } catch (e) {
       print('Error fetching personalized videos: $e');
-      return [];
+      return <SportVideo>[];
     }
   }
 
@@ -3358,7 +3042,7 @@ class SupabaseService {
   /// Performance:
   /// - Optimized by idx_sport_videos_created_bayesian index
   /// - Filters by created_at range first, then sorts by bayesian_score
-  Future<List<Map<String, dynamic>>> getTrendingVideos({
+  Future<List<SportVideo>> getTrendingVideos({
     int limit = 50,
     int offset = 0,
   }) async {
@@ -3382,7 +3066,7 @@ class SupabaseService {
       final videos = await client
           .from('sport_videos')
           .select(
-            'id, user_id, user_video_id, title, thumbnail_path, video_path, bayesian_score, view_count, sport_id, user_personal_profiles(username)',
+            'id, user_id, user_video_id, title, thumbnail_path, video_path, average_rating, total_ratings, bayesian_score, view_count, sport_id, user_personal_profiles(username)',
           )
           .gt('created_at', sevenDaysAgo) // created_at > 7 days ago
           .order('bayesian_score', ascending: false) // Best-rated first
@@ -3393,21 +3077,15 @@ class SupabaseService {
         return [];
       }
 
-      // Flatten nested username from FK relationship
-      final flattenedVideos = _flattenUsernamePath(videos as List<dynamic>);
-
-      // Convert paths to URLs (service layer transformation)
-      final videosWithUsernames = await Future.wait(
-        flattenedVideos.map((v) => _convertVideoPathsToUrls(v)),
-      );
+      final sportVideos = await _buildSportVideosFromRows(videos);
 
       print(
-        '✓ Fetched ${videosWithUsernames.length} trending videos from last 7 days (bayesian_score sorted)',
+        '✓ Fetched ${sportVideos.length} trending videos from last 7 days (bayesian_score sorted)',
       );
-      return videosWithUsernames;
+      return sportVideos;
     } catch (e) {
       print('Error fetching trending videos: $e');
-      return [];
+      return <SportVideo>[];
     }
   }
 
@@ -3440,7 +3118,56 @@ class SupabaseService {
   ///
   /// Note: Uses client-side shuffle (Dart List.shuffle()) instead of database
   /// ORDER BY RANDOM() for compatibility with Supabase Dart v2.12.4
-  Future<List<Map<String, dynamic>>> getRandomDiscoveryVideos({
+  Future<List<SportVideo>> getDiscoveryVideos({
+    int limit = 50,
+    Set<String> excludedVideoIds = const <String>{},
+  }) async {
+    try {
+      final preferencesService = locator<PreferencesService>();
+      final topSubcategories = await preferencesService.getTopSubcategories(
+        limit: 5,
+      );
+
+      final excludedSubcategoryIds = topSubcategories
+          .map((entry) => int.tryParse(entry.key))
+          .whereType<int>()
+          .toList(growable: false);
+
+      if (topSubcategories.isNotEmpty && excludedSubcategoryIds.isEmpty) {
+        print(
+          '⚠️ Discovery RPC: top subcategory keys were not numeric, sending no subcategory exclusions: ${topSubcategories.map((entry) => entry.key).toList()}',
+        );
+      }
+
+      final response = await client.rpc(
+        'get_discovery_videos',
+        params: {
+          'p_limit': limit,
+          'p_seen_video_ids': excludedVideoIds.toList(growable: false),
+          'p_excluded_subcategory_ids': excludedSubcategoryIds,
+        },
+      );
+
+      final videos = List<dynamic>.from(response as List<dynamic>);
+
+      if (videos.isEmpty) {
+        print('✓ No deterministic discovery videos available');
+        return [];
+      }
+
+      final sportVideos = await _buildSportVideosFromRows(videos);
+
+      print(
+        '✓ Fetched ${sportVideos.length} deterministic discovery videos (excluded=${excludedVideoIds.length})',
+      );
+      return sportVideos;
+    } catch (e) {
+      print('Error fetching deterministic discovery videos: $e');
+      return <SportVideo>[];
+    }
+  }
+
+  Future<List<SportVideo>> getRandomDiscoveryVideos({
     int limit = 50,
   }) async {
     try {
@@ -3462,7 +3189,7 @@ class SupabaseService {
         final allVideos = await client
             .from('sport_videos')
             .select(
-              'id, user_id, user_video_id, title, thumbnail_path, video_path, bayesian_score, view_count, sport_id, user_personal_profiles(username)',
+              'id, user_id, user_video_id, title, thumbnail_path, video_path, average_rating, total_ratings, bayesian_score, view_count, sport_id, user_personal_profiles(username)',
             )
             .limit(limit * 2); // Fetch 2x limit for better randomness
 
@@ -3475,18 +3202,12 @@ class SupabaseService {
         (allVideos as List).shuffle();
         final randomVideos = allVideos.take(limit).toList();
 
-        // Flatten nested username from FK relationship
-        final flattenedVideos = _flattenUsernamePath(randomVideos);
-
-        // Convert paths to URLs (service layer transformation)
-        final videosWithUsernames = await Future.wait(
-          flattenedVideos.map((v) => _convertVideoPathsToUrls(v)),
-        );
+        final sportVideos = await _buildSportVideosFromRows(randomVideos);
 
         print(
-          '✓ Fetched ${videosWithUsernames.length} random discovery videos from all categories',
+          '✓ Fetched ${sportVideos.length} random discovery videos from all categories',
         );
-        return videosWithUsernames;
+        return sportVideos;
       }
 
       // Step 2b: Extract subcategory IDs to exclude
@@ -3505,9 +3226,13 @@ class SupabaseService {
       final allDiscoveryVideos = await client
           .from('sport_videos')
           .select(
-            'id, user_id, user_video_id, title, thumbnail_path, video_path, bayesian_score, view_count, sport_id, user_personal_profiles(username)',
+            'id, user_id, user_video_id, title, thumbnail_path, video_path, average_rating, total_ratings, bayesian_score, view_count, sport_id, user_personal_profiles(username)',
           )
-          .not('subcategory_id', 'in', unwatchedSubcategoryIds) // NOT IN top 5
+          .not(
+            'subcategory_id',
+            'in',
+            _toPostgrestInList(List<Object>.from(unwatchedSubcategoryIds)),
+          )
           .limit(limit * 2); // Fetch 2x limit for better randomness
 
       if (allDiscoveryVideos.isEmpty) {
@@ -3521,21 +3246,17 @@ class SupabaseService {
       (allDiscoveryVideos as List).shuffle();
       final randomDiscoveryVideos = allDiscoveryVideos.take(limit).toList();
 
-      // Flatten nested username from FK relationship
-      final flattenedVideos = _flattenUsernamePath(randomDiscoveryVideos);
-
-      // Convert paths to URLs (service layer transformation)
-      final videosWithUsernames = await Future.wait(
-        flattenedVideos.map((v) => _convertVideoPathsToUrls(v)),
+      final sportVideos = await _buildSportVideosFromRows(
+        randomDiscoveryVideos,
       );
 
       print(
-        '✓ Fetched ${videosWithUsernames.length} random discovery videos (new random batch each call)',
+        '✓ Fetched ${sportVideos.length} random discovery videos (new random batch each call)',
       );
-      return videosWithUsernames;
+      return sportVideos;
     } catch (e) {
       print('Error fetching discovery videos: $e');
-      return [];
+      return <SportVideo>[];
     }
   }
 }

@@ -58,81 +58,72 @@ class EditThumbnailScreen extends StatelessWidget {
                   
               }
             },
-            child: BlocListener<EditThumbnailBloc, EditThumbnailState>(
-              listenWhen: (previous, current) =>
-                  current is VideoUploadProgressState,
-              listener: (context, state) {
-                // Progress state is handled in the UI builder
-              },
-              child: BlocBuilder<EditThumbnailBloc, EditThumbnailState>(
-                builder: (context, state) {
-                  final isSaving = state is SavingVideoState;
-                  final uploadProgress = state is VideoUploadProgressState
-                      ? state
-                      : null;
+            child: BlocBuilder<EditThumbnailBloc, EditThumbnailState>(
+              builder: (context, state) {
+                final isSaving = state is SavingVideoState;
+                final uploadProgress = state is VideoUploadProgressState
+                    ? state
+                    : null;
 
-                  return Stack(
-                    children: [
-                      Scaffold(
-                        appBar: AppBar(
-                          elevation: 0,
-                          backgroundColor: Colors.transparent,
-                          centerTitle: true,
-                          title: Text(
-                            'Edit Thumbnail',
-                            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: -0.5,
-                            ),
+                return Stack(
+                  children: [
+                    Scaffold(
+                      appBar: AppBar(
+                        elevation: 0,
+                        backgroundColor: Colors.transparent,
+                        centerTitle: true,
+                        title: Text(
+                          'Edit Thumbnail',
+                          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: -0.5,
                           ),
                         ),
-                        body: _buildBody(
-                          state,
-                          onBack: isSaving ? null : () => context.pop(),
-                          onUpload: isSaving
-                              ? null
-                              : () {
-                                  context.read<EditThumbnailBloc>().add(
-                                    const CustomThumbnailSelectedEvent(),
-                                  );
-                                },
-                        ),
-                        floatingActionButton:
-                            (state is ThumbnailsGeneratedState && !isSaving)
-                            ? FloatingActionButton.extended(
-                                onPressed: () {
-                                  HapticFeedback.mediumImpact();
-                                  print(sport);
-                                  _showTitleBottomSheet(
-                                    context,
-                                    onTitleSubmitted: (title) {
-                                      context.read<EditThumbnailBloc>().add(
-                                        SaveEvent(title: title),
-                                      );
-                                    },
-                                  );
-                                },
-                                backgroundColor: AppColors.cyan,
-                                foregroundColor: Colors.white,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                icon: const Icon(Icons.cloud_upload),
-                                label: const Text('Save'),
-                              )
-                            : null,
                       ),
-                      // Upload progress overlay - DEV: Always visible for testing
-                      UploadProgressOverlay(
-                        progressPercent: uploadProgress?.progressPercent ?? 0,
-                        sentBytes: uploadProgress?.sentBytes ?? 0,
-                        totalBytes: uploadProgress?.totalBytes ?? 0,
-                        isUploading: isSaving || uploadProgress != null,
+                      body: _buildBody(
+                        state,
+                        onUpload: isSaving
+                            ? null
+                            : () {
+                                context.read<EditThumbnailBloc>().add(
+                                  const CustomThumbnailSelectedEvent(),
+                                );
+                              },
                       ),
-                    ],
-                  );
-                },
-              ),
+                      floatingActionButton:
+                          (state is ThumbnailsGeneratedState && !isSaving)
+                          ? FloatingActionButton.extended(
+                              onPressed: () {
+                                HapticFeedback.mediumImpact();
+                                _showTitleBottomSheet(
+                                  context,
+                                  onTitleSubmitted: (title) {
+                                    context.read<EditThumbnailBloc>().add(
+                                      SaveEvent(title: title),
+                                    );
+                                  },
+                                );
+                              },
+                              backgroundColor: AppColors.cyan,
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              icon: const Icon(Icons.cloud_upload),
+                              label: const Text('Save'),
+                            )
+                          : null,
+                    ),
+                    // Upload progress overlay
+                    UploadProgressOverlay(
+                      progressPercent: uploadProgress?.progressPercent ?? 0,
+                      sentBytes: uploadProgress?.sentBytes ?? 0,
+                      totalBytes: uploadProgress?.totalBytes ?? 0,
+                      isUploading: isSaving || uploadProgress != null,
+                    ),
+                  ],
+                );
+              },
             ),
           ),
     );
@@ -140,7 +131,6 @@ class EditThumbnailScreen extends StatelessWidget {
 
   Widget _buildBody(
     EditThumbnailState state, {
-    required VoidCallback? onBack,
     required VoidCallback? onUpload,
   }) {
     if (state is ThumbnailsGeneratedState) {
@@ -183,6 +173,12 @@ class EditThumbnailScreen extends StatelessWidget {
       );
     }
 
+    // Handle SavingVideoState and VideoUploadProgressState - show empty container
+    // Upload progress is displayed in the overlay above the Scaffold
+    if (state is SavingVideoState || state is VideoUploadProgressState) {
+      return const SizedBox.expand();
+    }
+
     return const Center(child: Text('Unknown state'));
   }
 
@@ -196,8 +192,8 @@ class EditThumbnailScreen extends StatelessWidget {
         decoration: BoxDecoration(
           border: Border.all(
             color: onUploadTap != null
-                ? AppColors.electricMagenta.withOpacity(0.6)
-                : Colors.grey.withOpacity(0.3),
+                ? AppColors.electricMagenta.withValues(alpha: 0.6)
+                : Colors.grey.withValues(alpha: 0.3),
             width: 2,
             strokeAlign: BorderSide.strokeAlignInside,
           ),
@@ -210,16 +206,16 @@ class EditThumbnailScreen extends StatelessWidget {
               Icons.add_photo_alternate_outlined,
               size: 32,
               color: onUploadTap != null
-                  ? AppColors.electricMagenta.withOpacity(0.7)
-                  : Colors.grey.withOpacity(0.5),
+                  ? AppColors.electricMagenta.withValues(alpha: 0.7)
+                  : Colors.grey.withValues(alpha: 0.5),
             ),
             const SizedBox(height: 8),
             Text(
               'Upload Custom',
               style: TextStyle(
                 color: onUploadTap != null
-                    ? AppColors.electricMagenta.withOpacity(0.7)
-                    : Colors.grey.withOpacity(0.5),
+                    ? AppColors.electricMagenta.withValues(alpha: 0.7)
+                    : Colors.grey.withValues(alpha: 0.5),
                 fontWeight: FontWeight.w600,
                 fontSize: 12,
               ),
@@ -238,7 +234,7 @@ class EditThumbnailScreen extends StatelessWidget {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      barrierColor: Colors.black.withOpacity(0.5),
+      barrierColor: Colors.black.withValues(alpha: 0.5),
       builder: (context) => TitleInputBottomSheet(
         onTitleSubmitted: (title) {
           Navigator.pop(context);

@@ -1,12 +1,11 @@
 import 'package:beat_that/service_locator.dart';
+import 'package:beat_that/models/sport_video.dart';
 import 'package:beat_that/services/supabase_service.dart';
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 part 'explore_event.dart';
 part 'explore_state.dart';
-
-enum ExploreSearchMode { soft, startsWith, exact }
 
 class ExploreBloc extends Bloc<ExploreEvent, ExploreState> {
   static const int _pageSize = 20;
@@ -39,7 +38,6 @@ class ExploreBloc extends Bloc<ExploreEvent, ExploreState> {
     emit(
       ExploreLoading(
         query: normalizedQuery,
-        searchMode: event.searchMode,
         selectedSportId: normalizedSportId,
       ),
     );
@@ -49,18 +47,15 @@ class ExploreBloc extends Bloc<ExploreEvent, ExploreState> {
         normalizedQuery,
         limit: _pageSize,
         offset: 0,
-        exactMatch: event.searchMode == ExploreSearchMode.exact,
-        startsWithOnly: event.searchMode == ExploreSearchMode.startsWith,
         sportId: normalizedSportId,
       );
 
       emit(
         ExploreLoaded(
           query: normalizedQuery,
-          searchMode: event.searchMode,
           selectedSportId: normalizedSportId,
-          videos: List<Map<String, dynamic>>.from(
-            result['videos'] as List<dynamic>? ?? const [],
+          videos: List<SportVideo>.from(
+            result['videos'] as List<dynamic>? ?? const <SportVideo>[],
           ),
           totalCount: result['totalCount'] as int? ?? 0,
           hasMore: result['hasMore'] == true,
@@ -72,7 +67,6 @@ class ExploreBloc extends Bloc<ExploreEvent, ExploreState> {
         ExploreError(
           message: 'Failed to search videos: $e',
           query: normalizedQuery,
-          searchMode: event.searchMode,
           selectedSportId: normalizedSportId,
         ),
       );
@@ -97,21 +91,19 @@ class ExploreBloc extends Bloc<ExploreEvent, ExploreState> {
         currentState.query,
         limit: _pageSize,
         offset: currentState.nextOffset,
-        exactMatch: currentState.searchMode == ExploreSearchMode.exact,
-        startsWithOnly: currentState.searchMode == ExploreSearchMode.startsWith,
         sportId: currentState.selectedSportId,
       );
 
-      final newVideos = List<Map<String, dynamic>>.from(
-        result['videos'] as List<dynamic>? ?? const [],
+      final newVideos = List<SportVideo>.from(
+        result['videos'] as List<dynamic>? ?? const <SportVideo>[],
       );
       final existingIds = currentState.videos
-          .map((video) => video['id'] as String?)
+          .map((video) => video.id)
           .whereType<String>()
           .toSet();
       final dedupedVideos = newVideos.where((video) {
-        final videoId = video['id'] as String?;
-        return videoId == null || !existingIds.contains(videoId);
+        final videoId = video.id;
+        return !existingIds.contains(videoId);
       }).toList();
 
       emit(
@@ -138,7 +130,6 @@ class ExploreBloc extends Bloc<ExploreEvent, ExploreState> {
       add(
         SearchExploreVideosEvent(
           query: loadedState.query,
-          searchMode: loadedState.searchMode,
           selectedSportId: loadedState.selectedSportId,
         ),
       );
@@ -149,7 +140,6 @@ class ExploreBloc extends Bloc<ExploreEvent, ExploreState> {
       add(
         SearchExploreVideosEvent(
           query: errorState.query,
-          searchMode: errorState.searchMode,
           selectedSportId: errorState.selectedSportId,
         ),
       );
@@ -165,7 +155,6 @@ class ExploreBloc extends Bloc<ExploreEvent, ExploreState> {
       add(
         SearchExploreVideosEvent(
           query: currentState.query,
-          searchMode: currentState.searchMode,
           selectedSportId: currentState.selectedSportId,
         ),
       );
@@ -176,7 +165,6 @@ class ExploreBloc extends Bloc<ExploreEvent, ExploreState> {
       add(
         SearchExploreVideosEvent(
           query: currentState.query,
-          searchMode: currentState.searchMode,
           selectedSportId: currentState.selectedSportId,
         ),
       );

@@ -40,19 +40,22 @@ final class FeedLoading extends HomeState {
 /// [videos] - List of blended videos (40/30/20/10 distribution)
 /// [offset] - Current pagination offset
 /// [hasMoreContent] - Whether more content is available (for pagination logic)
+/// [nextCursor] - Per-source cursor used for the next continuation fetch
 final class FeedLoaded extends HomeState {
-  final List<Map<String, dynamic>> videos;
+  final List<SportVideo> videos;
   final int offset;
   final bool hasMoreContent;
+  final HomeFeedCursor nextCursor;
 
   const FeedLoaded({
     required this.videos,
     this.offset = 0,
     this.hasMoreContent = true,
+    this.nextCursor = const HomeFeedCursor.initial(),
   });
 
   @override
-  List<Object> get props => [videos, offset, hasMoreContent];
+  List<Object> get props => [videos, offset, hasMoreContent, nextCursor];
 }
 
 /// Feed loading failed

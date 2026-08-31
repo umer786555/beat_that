@@ -1,4 +1,6 @@
 import 'package:beat_that/routes/app_router.dart';
+import 'package:beat_that/reporting/models/report_target.dart';
+import 'package:beat_that/reporting/presentation/show_content_report_bottom_sheet.dart';
 import 'package:beat_that/widgets/custom_snackbar.dart';
 import 'package:beat_that/widgets/video_rating_bottom_sheet.dart';
 import 'package:bloc_presentation/bloc_presentation.dart';
@@ -12,7 +14,6 @@ import '../state/home_video_feed_state.dart';
 import 'events/home_video_feed_presentation_event.dart';
 import 'widgets/home_video_feed_page.dart';
 import 'widgets/home_video_feed_controls.dart';
-import 'widgets/home_video_feed_report.dart';
 
 class HomeVideoFeedScreen extends StatefulWidget {
   const HomeVideoFeedScreen({
@@ -61,10 +62,6 @@ class _HomeVideoFeedScreenState extends State<HomeVideoFeedScreen> {
                   showSuccessSnackBar(context, message: event.message);
                 case HomeVideoFeedRatingErrorEvent():
                   showErrorSnackBar(context, message: event.message);
-                case HomeVideoFeedReportSuccessEvent():
-                  showSuccessSnackBar(context, message: event.message);
-                case HomeVideoFeedReportErrorEvent():
-                  showErrorSnackBar(context, message: event.message);
               }
             },
             child: BlocBuilder<HomeVideoFeedCubit, HomeVideoFeedState>(
@@ -92,10 +89,10 @@ class _HomeVideoFeedScreenState extends State<HomeVideoFeedScreen> {
                             final errorMessage = isCurrentVideo
                                 ? state.errorMessage
                                 : null;
-                            final userId = video['user_id'] as String?;
+                            final userId = video.userId;
 
                             return HomeVideoFeedPage(
-                              key: ValueKey(video['id'] ?? index),
+                              key: ValueKey(video.id),
                               video: video,
                               controller: controller,
                               isCurrentVideo: isCurrentVideo,
@@ -115,13 +112,13 @@ class _HomeVideoFeedScreenState extends State<HomeVideoFeedScreen> {
                                       onSubmitRating: cubit.submitRating,
                                     )
                                   : null,
-                              onOpenCreatorProfile: userId == null
+                                onOpenCreatorProfile: userId.isEmpty
                                   ? null
                                   : () {
                                       HapticFeedback.mediumImpact();
-                                        debugPrint(
-                                          'Opening creator profile for userId: $userId',
-                                        );
+                                      debugPrint(
+                                        'Opening creator profile for userId: $userId',
+                                      );
                                       context.pushNamed(
                                         'creator-profile',
                                         extra: CreatorProfileExtra(
@@ -135,20 +132,25 @@ class _HomeVideoFeedScreenState extends State<HomeVideoFeedScreen> {
                             );
                           },
                         ),
-                        HomeVideoFeedBackButton(
-                          onPressed: () => context.pop(),
-                        ),
+                        HomeVideoFeedBackButton(onPressed: () => context.pop()),
 
                         HomeVideoFeedDropdownMenu(
-                          onReportPressed: () {
-                            final currentVideo = state.videos[state.currentIndex];
-                            final videoId = currentVideo['id'] as String? ?? '';
-                            
-                            _showReportBottomSheet(
+                          onReportPressed: () async {
+                            final videoId =
+                                cubit.reportVideoIdForIndex(
+                                  state.currentIndex,
+                                ) ??
+                                '';
+
+                            final message = await showContentReportBottomSheet(
                               context,
-                              videoId: videoId,
-                              onReportSubmitted: _submitVideoReport,
+                              target: ReportTarget.video(videoId),
                             );
+                            if (!context.mounted || message == null) {
+                              return;
+                            }
+
+                            showSuccessSnackBar(context, message: message);
                           },
                         ),
                       ],
@@ -159,49 +161,6 @@ class _HomeVideoFeedScreenState extends State<HomeVideoFeedScreen> {
             ),
           ),
     );
-  }
-
-  Future<void> _showReportBottomSheet(
-    BuildContext context, {
-    required String videoId,
-    required Function(String videoId, ReportReason reason)
-        onReportSubmitted,
-  }) async {
-    await showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.only(
-          topLeft: Radius.circular(16),
-          topRight: Radius.circular(16),
-        ),
-      ),
-      builder: (BuildContext context) {
-        return HomeVideoFeedReportBottomSheet(
-          onCancel: () {
-            Navigator.of(context).pop();
-          },
-          onReportSubmitted: (reason) {
-            Navigator.of(context).pop();
-            onReportSubmitted(videoId, reason);
-          },
-        );
-      },
-    );
-  }
-
-  void _submitVideoReport(
-    String videoId,
-    ReportReason reason,
-  ) {
-    debugPrint(
-      'Report submitted - VideoID: $videoId, Reason: ${reason.label}',
-    );
-
-    // Cubit handles service call, error handling, and presentation events
-    final cubit = context.read<HomeVideoFeedCubit>();
-    cubit.submitVideoReport(videoId, reason.name);
   }
 
   Future<void> _showRatingSheet(

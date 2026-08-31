@@ -105,6 +105,32 @@ class MyVideo {
     };
   }
 
+  /// Build the exact insert payload used when creating a my_videos row.
+  static Map<String, dynamic> createInsertJson({
+    required String userId,
+    required String title,
+    String? description,
+    required String videoPath,
+    required String thumbnailPath,
+    String? sportId,
+    int? subcategoryId,
+    String? subcategoryName,
+    String dataType = 'user_profile_video',
+  }) {
+    return {
+      'user_id': userId,
+      'title': title,
+      'description': description ?? '',
+      'video_path': videoPath,
+      'thumbnail_path': thumbnailPath,
+      'sport_id': sportId,
+      'subcategory_id': subcategoryId,
+      'subcategory_name': subcategoryName,
+      'view_count': 0,
+      'data_type': dataType,
+    };
+  }
+
   /// Create a copy of this object with optional field replacements
   MyVideo copyWith({
     String? id,

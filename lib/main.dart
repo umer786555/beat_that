@@ -140,6 +140,7 @@ class _MyAppState extends State<MyApp> {
                 ? ThemeMode.dark
                 : ThemeMode.light,
             routerConfig: _appRouter.router,
+            debugShowCheckedModeBanner: false,
           );
         },
       ),

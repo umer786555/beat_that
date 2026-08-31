@@ -1,11 +1,13 @@
+import 'package:beat_that/models/home_feed_cursor.dart';
+import 'package:beat_that/models/sport_video.dart';
 import 'package:equatable/equatable.dart';
 
 class HomeVideoFeedState extends Equatable {
   static const Object _sentinel = Object();
 
-  final List<Map<String, dynamic>> videos;
+  final List<SportVideo> videos;
   final int currentIndex;
-  final int nextOffset;
+  final HomeFeedCursor nextCursor;
   final bool hasMoreContent;
   final bool isLoadingMore;
   final int controllerGeneration;
@@ -16,7 +18,7 @@ class HomeVideoFeedState extends Equatable {
   const HomeVideoFeedState({
     required this.videos,
     required this.currentIndex,
-    required this.nextOffset,
+    required this.nextCursor,
     required this.hasMoreContent,
     this.isLoadingMore = false,
     this.controllerGeneration = 0,
@@ -26,9 +28,9 @@ class HomeVideoFeedState extends Equatable {
   });
 
   HomeVideoFeedState copyWith({
-    List<Map<String, dynamic>>? videos,
+    List<SportVideo>? videos,
     int? currentIndex,
-    int? nextOffset,
+    HomeFeedCursor? nextCursor,
     bool? hasMoreContent,
     bool? isLoadingMore,
     int? controllerGeneration,
@@ -40,7 +42,7 @@ class HomeVideoFeedState extends Equatable {
     return HomeVideoFeedState(
       videos: videos ?? this.videos,
       currentIndex: currentIndex ?? this.currentIndex,
-      nextOffset: nextOffset ?? this.nextOffset,
+      nextCursor: nextCursor ?? this.nextCursor,
       hasMoreContent: hasMoreContent ?? this.hasMoreContent,
       isLoadingMore: isLoadingMore ?? this.isLoadingMore,
       controllerGeneration: controllerGeneration ?? this.controllerGeneration,
@@ -58,7 +60,7 @@ class HomeVideoFeedState extends Equatable {
   List<Object?> get props => [
     videos,
     currentIndex,
-    nextOffset,
+    nextCursor,
     hasMoreContent,
     isLoadingMore,
     controllerGeneration,

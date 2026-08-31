@@ -1,3 +1,4 @@
+import 'package:beat_that/constants/app_colors.dart';
 import 'package:beat_that/constants/sports_data.dart';
 import 'package:flutter/material.dart';
 
@@ -29,7 +30,7 @@ class VideoFeedCard extends StatelessWidget {
   });
 
   /// Format view count as 1.2M, 500K, etc.
-  String _formatViewCount(int count) {
+  static String formatViewCount(int count) {
     if (count >= 1000000) {
       return '${(count / 1000000).toStringAsFixed(1)}M';
     } else if (count >= 1000) {
@@ -41,12 +42,7 @@ class VideoFeedCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final formattedViews = _formatViewCount(viewCount);
-    final theme = Theme.of(context);
-    final trimmedTitle = title?.trim();
-    final hasTitle = trimmedTitle != null && trimmedTitle.isNotEmpty;
-    final trimmedUsername = username?.trim();
-    final hasUsername = trimmedUsername != null && trimmedUsername.isNotEmpty;
+    final formattedViews = VideoFeedCard.formatViewCount(viewCount);
     final sportLabel = sportId != null && sportId!.isNotEmpty
         ? getDisplayNameForSport(sportId!)
         : null;
@@ -59,187 +55,224 @@ class VideoFeedCard extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         onLongPress: onLongPress,
-        splashFactory: InkSplash.splashFactory,
-        borderRadius: BorderRadius.circular(8),
+        splashFactory: NoSplash.splashFactory,
+        overlayColor: MaterialStateProperty.all(Colors.transparent),
+        borderRadius: BorderRadius.circular(12),
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(12),
           child: Stack(
             fit: StackFit.expand,
             children: [
-            Image.network(
-              thumbnailUrl,
-              fit: BoxFit.cover,
-              errorBuilder: (context, error, stackTrace) {
-                return Container(
-                  color: const Color(0xFF323846),
-                  child: const Center(
-                    child: Icon(
-                      Icons.video_library_outlined,
-                      color: Colors.white70,
-                      size: 36,
+              // Thumbnail image
+              Image.network(
+                thumbnailUrl,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) {
+                  return Container(
+                    color: const Color(0xFF323846),
+                    child: const Center(
+                      child: Icon(
+                        Icons.video_library_outlined,
+                        color: Colors.white70,
+                        size: 36,
+                      ),
                     ),
+                  );
+                },
+                loadingBuilder: (context, child, loadingProgress) {
+                  if (loadingProgress == null) return child;
+                  return Container(color: const Color(0xFFCDD3DD));
+                },
+              ),
+              // Modern gradient overlay - inspired by Instagram/TikTok
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.black.withValues(alpha: 0.0),
+                      Colors.black.withValues(alpha: 0.15),
+                      Colors.black.withValues(alpha: 0.85),
+                    ],
+                    stops: const [0.0, 0.5, 1.0],
                   ),
-                );
-              },
-              loadingBuilder: (context, child, loadingProgress) {
-                if (loadingProgress == null) return child;
-                return Container(color: const Color(0xFFCDD3DD));
-              },
-            ),
-            DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Colors.black.withOpacity(0.0),
-                    Colors.black.withOpacity(0.0),
-                    Colors.black.withOpacity(0.60),
-                  ],
-                  stops: const [0.0, 0.4, 1.0],
                 ),
               ),
-            ),
-            Positioned(
-              top: 12,
-              left: 12,
-              right: 12,
-              child: Align(
-                alignment: Alignment.topLeft,
-                child: sportLabel != null && sportIcon != null
-                    ? _OverlayChip(
-                        icon: sportIcon,
-                        label: sportLabel,
-                      )
-                    : const SizedBox.shrink(),
+              // Top sport badge
+              if (sportLabel != null && sportIcon != null)
+                Positioned(
+                  top: 10,
+                  left: 10,
+                  child: _ModernSportBadge(icon: sportIcon, label: sportLabel),
+                ),
+              // Bottom content area
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: _BottomContentOverlay(
+                  username: username,
+                  formattedViews: formattedViews,
+                  rating: rating,
+                  onUsernameTap: onUsernameTap,
+                ),
               ),
-            ),
-            Positioned(
-              left: 12,
-              right: 12,
-              bottom: 12,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (hasUsername)
-                    GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTap: onUsernameTap,
-                      child: Text(
-                        '@$trimmedUsername',
-                        style: theme.textTheme.labelLarge?.copyWith(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w700,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  if (hasUsername && hasTitle) const SizedBox(height: 4),
-                  if (hasTitle)
-                    Text(
-                      trimmedTitle,
-                      style: theme.textTheme.titleSmall?.copyWith(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w700,
-                        height: 1.18,
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  if (hasTitle || hasUsername) const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      _InlineStat(
-                        icon: Icons.visibility_outlined,
-                        label: formattedViews,
-                      ),
-                      const Spacer(),
-                      _InlineStat(
-                        icon: Icons.star_rounded,
-                        label: rating.toStringAsFixed(1),
-                        iconColor: const Color(0xFFFFC94D),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-        ),
-      ),
-    );
-  }
-}
-
-class _OverlayChip extends StatelessWidget {
-  final IconData icon;
-  final String label;
-
-  const _OverlayChip({
-    required this.icon,
-    required this.label,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
-      decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.38),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: Colors.white.withOpacity(0.10)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 13, color: Colors.white),
-          const SizedBox(width: 5),
-          Flexible(
-            child: Text(
-              label,
-              overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                color: Colors.white,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0.2,
-              ),
-            ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
 }
 
-class _InlineStat extends StatelessWidget {
+/// Subtle sport badge with minimalist design
+class _ModernSportBadge extends StatelessWidget {
   final IconData icon;
   final String label;
-  final Color iconColor;
 
-  const _InlineStat({
-    required this.icon,
-    required this.label,
-    this.iconColor = Colors.white,
-  });
+  const _ModernSportBadge({required this.icon, required this.label});
 
   @override
   Widget build(BuildContext context) {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, color: iconColor, size: 13),
-        const SizedBox(width: 4),
+        Icon(icon, size: 13, color: Colors.white.withValues(alpha: 0.9)),
+        const SizedBox(width: 5),
         Text(
           label,
-          style: Theme.of(context).textTheme.labelMedium?.copyWith(
-            color: Colors.white.withOpacity(0.92),
-            fontWeight: FontWeight.w600,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            color: Colors.white.withValues(alpha: 0.9),
+            fontWeight: FontWeight.w500,
+            fontSize: 11,
+            letterSpacing: 0.2,
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Modern bottom overlay showing creator info and engagement metrics
+class _BottomContentOverlay extends StatelessWidget {
+  final String? username;
+  final String formattedViews;
+  final double rating;
+  final VoidCallback? onUsernameTap;
+
+  const _BottomContentOverlay({
+    required this.username,
+    required this.formattedViews,
+    required this.rating,
+    this.onUsernameTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Creator name (if available)
+          if (username != null && username!.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: GestureDetector(
+                onTap: onUsernameTap,
+                child: Row(
+                  children: [
+                    Container(
+                      width: 24,
+                      height: 24,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: LinearGradient(
+                          colors: [
+                            AppColors.electricMagenta,
+                            AppColors.electricPurple,
+                          ],
+                        ),
+                      ),
+                      child: const Center(
+                        child: Icon(
+                          Icons.person_rounded,
+                          size: 12,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        username!,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 12,
+                          letterSpacing: 0.2,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          // Engagement metrics
+          Row(
+            children: [
+              // View count with icon
+              Expanded(
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.visibility_rounded,
+                      color: Colors.white,
+                      size: 14,
+                    ),
+                    const SizedBox(width: 5),
+                    Text(
+                      formattedViews,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              // Rating with animated star
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.star_rounded,
+                    color: AppColors.yellowDark,
+                    size: 14,
+                  ),
+                  const SizedBox(width: 5),
+                  Text(
+                    rating.toStringAsFixed(1),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }

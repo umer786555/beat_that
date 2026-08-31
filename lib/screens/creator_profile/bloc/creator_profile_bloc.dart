@@ -190,18 +190,9 @@ class CreatorProfileBloc extends Bloc<CreatorProfileEvent, CreatorProfileState>
   ) async {
     final currentState = state;
     try {
-      final result = await _supabaseService.blockUser(
+      await _supabaseService.blockUser(
         userIdToBlock: event.userId,
       );
-
-      if (result['success'] != true) {
-        emitPresentation(
-          CreatorProfileFollowStatusErrorEvent(
-            result['error'] as String? ?? 'Unable to block user.',
-          ),
-        );
-        return;
-      }
 
       // Update state to show the blocking UI
       if (currentState is CreatorProfileLoaded) {
@@ -212,9 +203,10 @@ class CreatorProfileBloc extends Bloc<CreatorProfileEvent, CreatorProfileState>
         CreatorProfileFollowStatusUpdatedEvent(),
       );
     } catch (e) {
+      final message = e.toString().replaceFirst('Exception: ', '');
       emitPresentation(
         CreatorProfileFollowStatusErrorEvent(
-          'Unable to block user: $e',
+          message.isEmpty ? 'Unable to block user.' : message,
         ),
       );
     }

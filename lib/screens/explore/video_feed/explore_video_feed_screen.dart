@@ -1,4 +1,5 @@
 import 'package:beat_that/constants/app_colors.dart';
+import 'package:beat_that/models/sport_video.dart';
 import 'package:beat_that/routes/app_router.dart';
 import 'package:beat_that/screens/explore/video_feed/explore_video_feed_cubit.dart';
 import 'package:beat_that/screens/explore/video_feed/explore_video_feed_presentation_event.dart';
@@ -46,7 +47,6 @@ class _ExploreVideoFeedScreenState extends State<ExploreVideoFeedScreen> {
         initialVideos: widget.extra.videos,
         initialIndex: widget.extra.initialIndex,
         query: widget.extra.query,
-        searchMode: widget.extra.searchMode,
         selectedSportId: widget.extra.selectedSportId,
         nextOffset: widget.extra.nextOffset,
         hasMoreContent: widget.extra.hasMoreContent,
@@ -171,7 +171,7 @@ class _ExploreVideoFeedView extends StatelessWidget {
                 final errorMessage = isCurrentVideo ? state.errorMessage : null;
 
                 return _VideoFeedPage(
-                  key: ValueKey(video['id'] ?? index),
+                  key: ValueKey(video.id),
                   video: video,
                   controller: controller,
                   isCurrentVideo: isCurrentVideo,
@@ -220,7 +220,7 @@ class _VideoFeedPage extends StatelessWidget {
     this.onRetry,
   });
 
-  final Map<String, dynamic> video;
+  final SportVideo video;
   final VideoPlayerController? controller;
   final bool isCurrentVideo;
   final String? errorMessage;
@@ -232,12 +232,13 @@ class _VideoFeedPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final title = video['title'] as String? ?? 'Untitled';
-    final username = video['username'] as String? ?? 'Unknown';
-    final userId = video['user_id'] as String?;
-    final description = video['description'] as String? ?? '';
-    final viewCount = (video['view_count'] as num?)?.toInt() ?? 0;
-    final rating = (video['average_rating'] as num?)?.toDouble() ?? 0.0;
+    final title = video.title;
+    final username = video.username ?? 'Unknown';
+    final userId = video.userId;
+    final description = video.description;
+    final viewCount = video.viewCount;
+    final rating = video.averageRating;
+    final canRateVideo = video.ratingTargetId != null;
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: isCurrentVideo ? onTogglePlayback : null,
@@ -343,7 +344,7 @@ class _VideoFeedPage extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 GestureDetector(
-                  onTap: userId == null
+                  onTap: userId.isEmpty
                       ? null
                       : () {
                           HapticFeedback.mediumImpact();
@@ -425,21 +426,22 @@ class _VideoFeedPage extends StatelessWidget {
               ],
             ),
           ),
-          Positioned(
-            right: 16,
-            bottom: 48,
-            child: SafeArea(
-              top: false,
-              child: _VideoActionButton(
-                icon: Icons.star_rounded,
-                label: currentUserRating == null
-                    ? 'Rate'
-                    : '${currentUserRating!}/10',
-                accentColor: Colors.amber,
-                onTap: onOpenRating,
+          if (canRateVideo)
+            Positioned(
+              right: 16,
+              bottom: 48,
+              child: SafeArea(
+                top: false,
+                child: _VideoActionButton(
+                  icon: Icons.star_rounded,
+                  label: currentUserRating == null
+                      ? 'Rate'
+                      : '${currentUserRating!}/10',
+                  accentColor: Colors.amber,
+                  onTap: onOpenRating,
+                ),
               ),
             ),
-          ),
         ],
       ),
     );

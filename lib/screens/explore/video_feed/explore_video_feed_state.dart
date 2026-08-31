@@ -1,9 +1,10 @@
+import 'package:beat_that/models/sport_video.dart';
 import 'package:equatable/equatable.dart';
 
 class ExploreVideoFeedState extends Equatable {
   static const Object _sentinel = Object();
 
-  final List<Map<String, dynamic>> videos;
+  final List<SportVideo> videos;
   final int currentIndex;
   final int nextOffset;
   final bool hasMoreContent;
@@ -26,7 +27,7 @@ class ExploreVideoFeedState extends Equatable {
   });
 
   ExploreVideoFeedState copyWith({
-    List<Map<String, dynamic>>? videos,
+    List<SportVideo>? videos,
     int? currentIndex,
     int? nextOffset,
     bool? hasMoreContent,

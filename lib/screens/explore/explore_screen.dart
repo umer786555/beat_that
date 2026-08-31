@@ -1,10 +1,14 @@
 import 'dart:async';
 
-import 'package:beat_that/constants/app_colors.dart';
 import 'package:beat_that/constants/sports_data.dart';
 import 'package:beat_that/routes/app_router.dart';
 import 'package:beat_that/screens/explore/bloc/explore_bloc.dart';
 import 'package:beat_that/screens/explore/video_feed/explore_video_feed_route_extra.dart';
+import 'package:beat_that/screens/explore/video_feed/widgets/explore_empty_state.dart';
+import 'package:beat_that/screens/explore/video_feed/widgets/explore_error_state.dart';
+import 'package:beat_that/screens/explore/video_feed/widgets/no_results_state.dart';
+import 'package:beat_that/screens/explore/video_feed/widgets/search_header.dart';
+import 'package:beat_that/screens/explore/video_feed/widgets/search_loading_card.dart';
 import 'package:beat_that/widgets/video_feed_card.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -38,10 +42,6 @@ class _ExploreViewState extends State<_ExploreView> {
   final ScrollController _scrollController = ScrollController();
   Timer? _debounce;
   String? _selectedSportId;
-
-  static final List<String> _availableSportIds = List<String>.from(
-    sportOrderByLocale['en'] ?? const <String>[],
-  );
 
   @override
   void initState() {
@@ -86,11 +86,7 @@ class _ExploreViewState extends State<_ExploreView> {
 
     if (value.trim().isEmpty) {
       context.read<ExploreBloc>().add(
-        SearchExploreVideosEvent(
-          query: '',
-          searchMode: ExploreSearchMode.soft,
-          selectedSportId: _selectedSportId,
-        ),
+        SearchExploreVideosEvent(query: '', selectedSportId: _selectedSportId),
       );
       return;
     }
@@ -103,7 +99,6 @@ class _ExploreViewState extends State<_ExploreView> {
       context.read<ExploreBloc>().add(
         SearchExploreVideosEvent(
           query: value,
-          searchMode: ExploreSearchMode.soft,
           selectedSportId: _selectedSportId,
         ),
       );
@@ -123,24 +118,16 @@ class _ExploreViewState extends State<_ExploreView> {
     context.read<ExploreBloc>().add(
       SearchExploreVideosEvent(
         query: _searchController.text,
-        searchMode: ExploreSearchMode.soft,
         selectedSportId: _selectedSportId,
       ),
     );
   }
 
-  void _clearAllFilters() {
+  void _clearSearchQuery() {
     _debounce?.cancel();
     _searchController.clear();
-    setState(() {
-      _selectedSportId = null;
-    });
     context.read<ExploreBloc>().add(
-      SearchExploreVideosEvent(
-        query: '',
-        searchMode: ExploreSearchMode.soft,
-        selectedSportId: null,
-      ),
+      SearchExploreVideosEvent(query: '', selectedSportId: _selectedSportId),
     );
   }
 
@@ -148,6 +135,11 @@ class _ExploreViewState extends State<_ExploreView> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
+    final platformLocale = WidgetsBinding.instance.platformDispatcher.locale;
+    final availableSportIds = getOrderedSportIdsForLocale(
+      platformLocale,
+    );
+
     Future<void> onRefresh() async {
       final exploreBloc = context.read<ExploreBloc>();
       final refreshCompletion = exploreBloc.stream.firstWhere(
@@ -160,34 +152,22 @@ class _ExploreViewState extends State<_ExploreView> {
     }
 
     return Scaffold(
-      appBar: AppBar(
-        elevation: 0,
-        backgroundColor: Colors.transparent,
-        centerTitle: true,
-        title: Text(
-          'Explore',
-          style: Theme.of(context).textTheme.titleLarge?.copyWith(
-            fontWeight: FontWeight.w800,
-            letterSpacing: -0.5,
-          ),
-        ),
-      ),
       body: SafeArea(
         child: Column(
           children: [
-            _SearchHeader(
+            SearchHeader(
               controller: _searchController,
               selectedSportId: _selectedSportId,
-              availableSportIds: _availableSportIds,
+              availableSportIds: availableSportIds,
               onChanged: _onQueryChanged,
               onSportChanged: _onSportChanged,
-              onClear: _clearAllFilters,
+              onClearQuery: _clearSearchQuery,
             ),
             Expanded(
               child: BlocBuilder<ExploreBloc, ExploreState>(
                 builder: (context, state) {
                   if (state is ExploreInitial) {
-                    return _ExploreEmptyState(isDark: isDark);
+                    return ExploreEmptyState(isDark: isDark);
                   }
 
                   if (state is ExploreLoading) {
@@ -197,7 +177,7 @@ class _ExploreViewState extends State<_ExploreView> {
                   if (state is ExploreError) {
                     return _buildRefreshableBody(
                       onRefresh: onRefresh,
-                      child: _ExploreErrorState(
+                      child: ExploreErrorState(
                         message: state.message,
                         onRetry: () {
                           context.read<ExploreBloc>().add(
@@ -212,7 +192,7 @@ class _ExploreViewState extends State<_ExploreView> {
                   if (loadedState.videos.isEmpty) {
                     return _buildRefreshableBody(
                       onRefresh: onRefresh,
-                      child: _NoResultsState(
+                      child: NoResultsState(
                         query: loadedState.query,
                         selectedSportId: loadedState.selectedSportId,
                       ),
@@ -243,53 +223,40 @@ class _ExploreViewState extends State<_ExploreView> {
                           onRefresh: onRefresh,
                           child: GridView.builder(
                             controller: _scrollController,
-                            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                            padding: const EdgeInsets.all(6),
                             physics: const AlwaysScrollableScrollPhysics(),
-                            gridDelegate:
-                                const SliverGridDelegateWithFixedCrossAxisCount(
-                                  crossAxisCount: 2,
-                                  crossAxisSpacing: 12,
-                                  mainAxisSpacing: 14,
-                                  childAspectRatio: 0.64,
-                                ),
+                            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: 2,
+                              crossAxisSpacing: 6,
+                              mainAxisSpacing: 6,
+                              childAspectRatio: 0.64,
+                            ),
                             itemCount:
                                 loadedState.videos.length +
                                 (loadedState.isLoadingMore ? 2 : 0),
                             itemBuilder: (context, index) {
                               if (index >= loadedState.videos.length) {
-                                return _SearchLoadingCard(isDark: isDark);
+                                return SearchLoadingCard(isDark: isDark);
                               }
 
                               final video = loadedState.videos[index];
                               return VideoFeedCard(
-                                videoId: video['id'] ?? '',
-                                thumbnailUrl: video['thumbnailUrl'] ?? '',
-                                title: video['title'] as String?,
-                                username: video['username'] as String?,
-                                sportId: video['sport_id'] as String?,
-                                viewCount:
-                                    (video['view_count'] as num?)?.toInt() ?? 0,
-                                rating:
-                                    (video['average_rating'] as num?)
-                                        ?.toDouble() ??
-                                    0.0,
+                                videoId: video.id,
+                                thumbnailUrl: video.thumbnailUrl ?? '',
+                                title: video.title,
+                                username: video.username,
+                                sportId: video.sportId,
+                                viewCount: video.viewCount,
+                                rating: video.averageRating,
                                 onTap: () {
                                   HapticFeedback.mediumImpact();
-
-                                  final initialVideos = loadedState.videos
-                                      .map(
-                                        (item) =>
-                                            Map<String, dynamic>.from(item),
-                                      )
-                                      .toList();
 
                                   context.pushNamed(
                                     'explore-video-feed',
                                     extra: ExploreVideoFeedExtra(
-                                      videos: initialVideos,
+                                      videos: List.of(loadedState.videos),
                                       initialIndex: index,
                                       query: loadedState.query,
-                                      searchMode: loadedState.searchMode,
                                       selectedSportId:
                                           loadedState.selectedSportId,
                                       nextOffset: loadedState.nextOffset,
@@ -298,8 +265,8 @@ class _ExploreViewState extends State<_ExploreView> {
                                   );
                                 },
                                 onUsernameTap: () {
-                                  final userId = video['user_id'] as String?;
-                                  if (userId == null || userId.isEmpty) {
+                                  final userId = video.userId;
+                                  if (userId.isEmpty) {
                                     return;
                                   }
 
@@ -341,259 +308,6 @@ class _ExploreViewState extends State<_ExploreView> {
           ),
         );
       },
-    );
-  }
-}
-
-class _SearchHeader extends StatelessWidget {
-  const _SearchHeader({
-    required this.controller,
-    required this.selectedSportId,
-    required this.availableSportIds,
-    required this.onChanged,
-    required this.onSportChanged,
-    required this.onClear,
-  });
-
-  final TextEditingController controller;
-  final String? selectedSportId;
-  final List<String> availableSportIds;
-  final ValueChanged<String> onChanged;
-  final ValueChanged<String?> onSportChanged;
-  final VoidCallback onClear;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-      child: Column(
-        children: [
-          TextField(
-            cursorColor: AppColors.cyan,
-            controller: controller,
-            onChanged: onChanged,
-            textInputAction: TextInputAction.search,
-            decoration: InputDecoration(
-              hintText: 'Search videos by title',
-              labelText: 'Search',
-              prefixIcon: Icon(Icons.search_rounded, size: 20),
-              suffixIcon: controller.text.isEmpty
-                  ? null
-                  : IconButton(
-                      onPressed: onClear,
-                      icon: const Icon(Icons.close_rounded),
-                    ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: [
-                  _SportChip(
-                    label: 'All Sports',
-                    selected: selectedSportId == null,
-                    onSelected: () => onSportChanged(null),
-                  ),
-                  ...availableSportIds.map(
-                    (sportId) => Padding(
-                      padding: const EdgeInsets.only(left: 10),
-                      child: _SportChip(
-                        label: getDisplayNameForSport(sportId),
-                        selected: selectedSportId == sportId,
-                        onSelected: () => onSportChanged(sportId),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SportChip extends StatelessWidget {
-  const _SportChip({
-    required this.label,
-    required this.selected,
-    required this.onSelected,
-  });
-
-  final String label;
-  final bool selected;
-  final VoidCallback onSelected;
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    return FilterChip(
-      label: Text(label),
-      selected: selected,
-      onSelected: (_) => onSelected(),
-      selectedColor: isDark
-          ? AppColors.cyan.withOpacity(0.88)
-          : AppColors.electricMagenta.withOpacity(0.88),
-      checkmarkColor: Colors.white,
-      labelStyle: TextStyle(
-        color: selected
-            ? Colors.white
-            : (isDark ? Colors.white70 : Colors.black87),
-        fontWeight: FontWeight.w600,
-      ),
-      backgroundColor: isDark
-          ? Colors.white.withOpacity(0.06)
-          : Colors.black.withOpacity(0.04),
-      side: BorderSide(
-        color: selected
-            ? Colors.transparent
-            : (isDark ? Colors.white24 : Colors.black12),
-      ),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-    );
-  }
-}
-
-class _ExploreEmptyState extends StatelessWidget {
-  const _ExploreEmptyState({required this.isDark});
-
-  final bool isDark;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 32),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: isDark
-                    ? AppColors.cyan.withOpacity(0.14)
-                    : AppColors.electricMagenta.withOpacity(0.10),
-              ),
-              child: Icon(
-                Icons.search_rounded,
-                color: isDark ? AppColors.cyan : AppColors.electricMagenta,
-                size: 38,
-              ),
-            ),
-            const SizedBox(height: 20),
-            const Text(
-              'Search Videos',
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(height: 10),
-            Text(
-              'Type a title or pick a sport to search for linked videos and see the results.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: Colors.grey[600],
-                fontSize: 15,
-                height: 1.4,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ExploreErrorState extends StatelessWidget {
-  const _ExploreErrorState({required this.message, required this.onRetry});
-
-  final String message;
-  final VoidCallback onRetry;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 24),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.error_outline_rounded, size: 56),
-            const SizedBox(height: 16),
-            Text(
-              message,
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.grey),
-            ),
-            const SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: () {
-                HapticFeedback.mediumImpact();
-                onRetry();
-              },
-              child: const Text('Retry'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _NoResultsState extends StatelessWidget {
-  const _NoResultsState({required this.query, this.selectedSportId});
-
-  final String query;
-  final String? selectedSportId;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 28),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.video_library_outlined, size: 56),
-            const SizedBox(height: 16),
-            Text(
-              selectedSportId == null
-                  ? 'No matching videos for "$query"'
-                  : query.isEmpty
-                  ? 'No videos in ${getDisplayNameForSport(selectedSportId!)}'
-                  : 'No matching videos for "$query" in ${getDisplayNameForSport(selectedSportId!)}',
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Try a different search or change your filters to see more videos.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.grey),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _SearchLoadingCard extends StatelessWidget {
-  const _SearchLoadingCard({required this.isDark});
-
-  final bool isDark;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
-        color: isDark ? Colors.white10 : Colors.black12,
-      ),
     );
   }
 }

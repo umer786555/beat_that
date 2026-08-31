@@ -98,7 +98,7 @@ class ThumbnailGridItem extends StatelessWidget {
               Positioned.fill(
                 child: Container(
                   decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.3),
+                    color: Colors.black.withValues(alpha: 0.3),
                     borderRadius: BorderRadius.circular(borderRadius ?? 8),
                   ),
                   child: Center(

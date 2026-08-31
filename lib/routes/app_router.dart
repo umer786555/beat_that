@@ -1,15 +1,16 @@
 import 'dart:convert';
 
 import 'package:beat_that/models/sport.dart';
+import 'package:beat_that/models/sport_video.dart';
 import 'package:beat_that/models/sport_subcategory.dart';
 import 'package:beat_that/constants/sports_data.dart';
 import 'package:beat_that/screens/explore/video_feed/explore_video_feed_route_extra.dart';
 import 'package:beat_that/screens/explore/video_feed/explore_video_feed_screen.dart';
-import 'package:beat_that/screens/explore/bloc/explore_bloc.dart';
 import 'package:beat_that/screens/play_uploaded_video.dart/play_uploaded_video_screen.dart';
 import 'package:beat_that/screens/edit_thumbnail/edit_thumbnail_screen.dart';
 import 'package:beat_that/screens/home/video_feed/models/home_video_feed_route_extra.dart';
 import 'package:beat_that/screens/home/video_feed/presentation/home_video_feed_screen.dart';
+import 'package:beat_that/screens/profile/rejected_video_guidance_screen.dart';
 import 'package:beat_that/screens/sports_hub/sport_details_screen.dart';
 import 'package:beat_that/screens/username_setup/username_setup_screen.dart';
 import 'package:flutter/material.dart';
@@ -84,6 +85,12 @@ class CreatorProfileExtra {
   CreatorProfileExtra({required this.userId});
 }
 
+class RejectedVideoGuidanceExtra {
+  final String videoTitle;
+
+  RejectedVideoGuidanceExtra({required this.videoTitle});
+}
+
 /// Custom codec for serializing/deserializing route extras
 class _RouteExtraCodec extends Codec<Object?, Object?> {
   const _RouteExtraCodec();
@@ -135,10 +142,9 @@ class _RouteExtraEncoder extends Converter<Object?, Object?> {
       case ExploreVideoFeedExtra _:
         return <Object?>[
           'ExploreVideoFeedExtra',
-          input.videos,
+          input.videos.map((video) => video.toMap()).toList(),
           input.initialIndex,
           input.query,
-          input.searchMode.name,
           input.selectedSportId,
           input.nextOffset,
           input.hasMoreContent,
@@ -147,6 +153,8 @@ class _RouteExtraEncoder extends Converter<Object?, Object?> {
         return <Object?>['ProfileConnectionsExtra', input.connectionType];
       case CreatorProfileExtra _:
         return <Object?>['CreatorProfileExtra', input.userId];
+      case RejectedVideoGuidanceExtra _:
+        return <Object?>['RejectedVideoGuidanceExtra', input.videoTitle];
       default:
         throw FormatException('Cannot encode type ${input.runtimeType}');
     }
@@ -226,17 +234,17 @@ class _RouteExtraDecoder extends Converter<Object?, Object?> {
     }
     if (inputAsList[0] == 'ExploreVideoFeedExtra') {
       return ExploreVideoFeedExtra(
-        videos: List<Map<String, dynamic>>.from(
+        videos: List<SportVideo>.from(
           (inputAsList[1] as List<dynamic>).map(
-            (item) => Map<String, dynamic>.from(item as Map),
+            (item) =>
+                SportVideo.fromMap(Map<String, dynamic>.from(item as Map)),
           ),
         ),
         initialIndex: inputAsList[2] as int,
         query: inputAsList[3] as String,
-        searchMode: ExploreSearchMode.values.byName(inputAsList[4] as String),
-        selectedSportId: inputAsList[5] as String?,
-        nextOffset: inputAsList[6] as int,
-        hasMoreContent: inputAsList[7] as bool,
+        selectedSportId: inputAsList[4] as String?,
+        nextOffset: inputAsList[5] as int,
+        hasMoreContent: inputAsList[6] as bool,
       );
     }
     if (inputAsList[0] == 'ProfileConnectionsExtra') {
@@ -246,6 +254,10 @@ class _RouteExtraDecoder extends Converter<Object?, Object?> {
     if (inputAsList[0] == 'CreatorProfileExtra') {
       final userId = inputAsList[1] as String;
       return CreatorProfileExtra(userId: userId);
+    }
+    if (inputAsList[0] == 'RejectedVideoGuidanceExtra') {
+      final videoTitle = inputAsList[1] as String;
+      return RejectedVideoGuidanceExtra(videoTitle: videoTitle);
     }
     throw FormatException('Unable to parse input: $input');
   }
@@ -272,6 +284,8 @@ class AppRoutes {
   // Profile routes
   static const String editUploadedVideo = '/profile/edit-uploaded-video';
   static const String editThumbnail = '/profile/edit-thumbnail';
+  static const String rejectedVideoGuidance =
+      '/profile/rejected-video-guidance';
   static const String settings = '/profile/settings';
 }
 
@@ -727,6 +741,34 @@ class AppRouter {
                           transitionsBuilder:
                               (context, animation, secondaryAnimation, child) {
                                 const begin = Offset(0.0, 1.0);
+                                const end = Offset.zero;
+                                final tween = Tween(begin: begin, end: end);
+                                final curvedAnimation = CurvedAnimation(
+                                  parent: animation,
+                                  curve: Curves.easeInOut,
+                                );
+                                return SlideTransition(
+                                  position: tween.animate(curvedAnimation),
+                                  child: child,
+                                );
+                              },
+                        );
+                      },
+                    ),
+
+                    GoRoute(
+                      path: 'rejected-video-guidance',
+                      name: 'rejected-video-guidance',
+                      pageBuilder: (context, state) {
+                        final extra = state.extra as RejectedVideoGuidanceExtra;
+                        return CustomTransitionPage(
+                          key: state.pageKey,
+                          child: RejectedVideoGuidanceScreen(
+                            videoTitle: extra.videoTitle,
+                          ),
+                          transitionsBuilder:
+                              (context, animation, secondaryAnimation, child) {
+                                const begin = Offset(1.0, 0.0);
                                 const end = Offset.zero;
                                 final tween = Tween(begin: begin, end: end);
                                 final curvedAnimation = CurvedAnimation(

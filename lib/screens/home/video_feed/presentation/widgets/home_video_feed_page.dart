@@ -1,4 +1,5 @@
 import 'package:beat_that/constants/app_colors.dart';
+import 'package:beat_that/models/sport_video.dart';
 import 'package:beat_that/widgets/interactive_button.dart';
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
@@ -19,7 +20,7 @@ class HomeVideoFeedPage extends StatelessWidget {
     this.onOpenCreatorProfile,
   });
 
-  final Map<String, dynamic> video;
+  final SportVideo video;
   final VideoPlayerController? controller;
   final bool isCurrentVideo;
   final String? errorMessage;
@@ -32,11 +33,12 @@ class HomeVideoFeedPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final title = video['title'] as String? ?? 'Untitled';
-    final username = video['username'] as String? ?? 'Unknown';
-    final description = video['description'] as String? ?? '';
-    final viewCount = (video['view_count'] as num?)?.toInt() ?? 0;
-    final rating = (video['average_rating'] as num?)?.toDouble() ?? 0.0;
+    final title = video.title;
+    final username = video.username ?? 'Unknown';
+    final description = video.description;
+    final viewCount = video.viewCount;
+    final rating = video.averageRating;
+    final canRateVideo = video.ratingTargetId != null;
 
     return GestureDetector(
       behavior: HitTestBehavior.deferToChild,
@@ -66,21 +68,22 @@ class HomeVideoFeedPage extends StatelessWidget {
               onOpenCreatorProfile: onOpenCreatorProfile,
             ),
           ),
-          Positioned(
-            right: 16,
-            bottom: 48,
-            child: SafeArea(
-              top: false,
-              child: _VideoActionButton(
-                icon: Icons.star_rounded,
-                label: currentUserRating == null
-                    ? 'Rate'
-                    : '${currentUserRating!}/10',
-                accentColor: Colors.amber,
-                onTap: onOpenRating,
+          if (canRateVideo)
+            Positioned(
+              right: 16,
+              bottom: 48,
+              child: SafeArea(
+                top: false,
+                child: _VideoActionButton(
+                  icon: Icons.star_rounded,
+                  label: currentUserRating == null
+                      ? 'Rate'
+                      : '${currentUserRating!}/10',
+                  accentColor: Colors.amber,
+                  onTap: onOpenRating,
+                ),
               ),
             ),
-          ),
         ],
       ),
     );

@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:bloc_presentation/bloc_presentation.dart';
-import 'package:beat_that/screens/explore/bloc/explore_bloc.dart';
+import 'package:beat_that/models/sport_video.dart';
 import 'package:beat_that/service_locator.dart';
 import 'package:beat_that/services/supabase_service.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -23,17 +23,16 @@ class ExploreVideoFeedCubit extends Cubit<ExploreVideoFeedState>
   static const int _continuationPageSize = 20;
 
   ExploreVideoFeedCubit({
-    required List<Map<String, dynamic>> initialVideos,
+    required List<SportVideo> initialVideos,
     required int initialIndex,
     required this.query,
-    required this.searchMode,
     required this.nextOffset,
     required this.hasMoreContent,
     this.selectedSportId,
   }) : _supabaseService = locator<SupabaseService>(),
        super(
          ExploreVideoFeedState(
-           videos: List<Map<String, dynamic>>.from(initialVideos),
+           videos: List<SportVideo>.from(initialVideos),
            currentIndex: initialIndex,
            nextOffset: nextOffset,
            hasMoreContent: hasMoreContent,
@@ -42,7 +41,6 @@ class ExploreVideoFeedCubit extends Cubit<ExploreVideoFeedState>
 
   final SupabaseService _supabaseService;
   final String query;
-  final ExploreSearchMode searchMode;
   final String? selectedSportId;
   final int nextOffset;
   final bool hasMoreContent;
@@ -196,23 +194,25 @@ class ExploreVideoFeedCubit extends Cubit<ExploreVideoFeedState>
     }
 
     final video = state.videos[index];
-    final videoPath = video['video_path'] as String?;
-    if (videoPath == null || videoPath.isEmpty) {
+    final videoPath = video.videoPath;
+    if (videoPath.isEmpty) {
       emit(state.copyWith(errorMessage: 'This video is unavailable.'));
       return;
     }
 
     final isNetworkUrl =
-      videoPath.startsWith('http://') || videoPath.startsWith('https://');
+        videoPath.startsWith('http://') || videoPath.startsWith('https://');
     final localFile = File(videoPath);
     final isLocalFile = !isNetworkUrl && await localFile.exists();
 
     final controller = isNetworkUrl
-      ? VideoPlayerController.networkUrl(Uri.parse(videoPath))
+        ? VideoPlayerController.networkUrl(Uri.parse(videoPath))
         : isLocalFile
         ? VideoPlayerController.file(localFile)
         : VideoPlayerController.networkUrl(
-        Uri.parse(await _supabaseService.resolveVideoPlaybackUrl(videoPath)),
+            Uri.parse(
+              await _supabaseService.resolveVideoPlaybackUrl(videoPath),
+            ),
           );
 
     try {
@@ -255,10 +255,8 @@ class ExploreVideoFeedCubit extends Cubit<ExploreVideoFeedState>
       return;
     }
 
-    final result = await _supabaseService.getUserRating(videoId: videoId);
-    final currentUserRating = result['success'] == true
-        ? result['rating'] as int?
-        : null;
+    final userRating = await _supabaseService.getUserRating(videoId: videoId);
+    final currentUserRating = userRating?.rating;
 
     emit(state.copyWith(currentUserRating: currentUserRating));
   }
@@ -268,14 +266,7 @@ class ExploreVideoFeedCubit extends Cubit<ExploreVideoFeedState>
       return null;
     }
 
-    final video = state.videos[index];
-    // For rating, we need the my_videos.id (stored in user_video_id for sport_videos)
-    // First try user_video_id (for feed videos from sport_videos table)
-    // Then fall back to id (for direct my_videos)
-    // Then try video_id (legacy fallback)
-    return video['user_video_id'] as String? ?? 
-           video['id'] as String? ?? 
-           video['video_id'] as String?;
+    return state.videos[index].ratingTargetId;
   }
 
   Future<void> _loadMoreIfNeeded(int index) async {
@@ -295,21 +286,19 @@ class ExploreVideoFeedCubit extends Cubit<ExploreVideoFeedState>
         query,
         limit: _continuationPageSize,
         offset: state.nextOffset,
-        exactMatch: searchMode == ExploreSearchMode.exact,
-        startsWithOnly: searchMode == ExploreSearchMode.startsWith,
         sportId: selectedSportId,
       );
 
-      final newVideos = List<Map<String, dynamic>>.from(
-        result['videos'] as List<dynamic>? ?? const [],
+      final newVideos = List<SportVideo>.from(
+        result['videos'] as List<dynamic>? ?? const <SportVideo>[],
       );
       final existingIds = state.videos
-          .map((video) => video['id'] as String?)
+          .map((video) => video.id)
           .whereType<String>()
           .toSet();
       final dedupedVideos = newVideos.where((video) {
-        final videoId = video['id'] as String?;
-        return videoId == null || !existingIds.contains(videoId);
+        final videoId = video.id;
+        return !existingIds.contains(videoId);
       }).toList();
 
       emit(
@@ -439,7 +428,7 @@ class ExploreVideoFeedCubit extends Cubit<ExploreVideoFeedState>
       return null;
     }
 
-    return state.videos[index]['id'] as String?;
+    return state.videos[index].id;
   }
 
   void _bumpControllerGeneration() {

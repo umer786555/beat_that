@@ -1,5 +1,5 @@
 import 'package:beat_that/constants/app_colors.dart';
-import 'package:beat_that/models/user_profile_summary.dart';
+import 'package:beat_that/models/user_block.dart';
 import 'package:beat_that/screens/creator_profile/widgets/profile_avatar.dart';
 import 'package:beat_that/screens/settings/bloc/blocked_users_cubit.dart';
 import 'package:beat_that/screens/profile/connections/empty_connections_widget.dart';
@@ -14,7 +14,7 @@ class BlockedUsersScreen extends StatelessWidget {
 
   Widget _buildBlockedUserTile(
     BuildContext context,
-    UserProfileSummary user,
+    UserBlock user,
     bool isUnblocking,
   ) {
     final theme = Theme.of(context);
@@ -63,7 +63,7 @@ class BlockedUsersScreen extends StatelessWidget {
               child: Row(
                 children: [
                   ProfileAvatar(
-                    profileUrl: user.profileUrl,
+                    profileUrl: user.blockedProfileUrl,
                     isDark: isDark,
                     size: 56,
                   ),
@@ -73,7 +73,7 @@ class BlockedUsersScreen extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          user.username,
+                          user.blockedUsername,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: theme.textTheme.titleMedium?.copyWith(

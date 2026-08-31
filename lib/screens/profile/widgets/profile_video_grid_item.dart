@@ -10,12 +10,14 @@ class ProfileVideoGridItem extends StatelessWidget {
     required this.thumbnail,
     required this.isDark,
     required this.onOpen,
+    required this.onReviewIssuesTap,
     required this.onDeleteConfirmed,
   });
 
   final MyVideo thumbnail;
   final bool isDark;
   final VoidCallback onOpen;
+  final VoidCallback onReviewIssuesTap;
   final ValueChanged<String> onDeleteConfirmed;
 
   Future<void> _handleLongPress(BuildContext context) async {
@@ -45,38 +47,48 @@ class ProfileVideoGridItem extends StatelessWidget {
         child: Container(
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: _getBorderColor(context),
-              width: 1.5,
-            ),
+            border: Border.all(color: _getBorderColor(context), width: 1.5),
           ),
           child: Stack(
             children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: VideoThumbnailItem(
-                  thumbnail: thumbnail,
-                  isDark: isDark,
-                  onTap: onOpen,
-                  onLongPress: (_) => _handleLongPress(context),
+              AbsorbPointer(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: VideoThumbnailItem(
+                    thumbnail: thumbnail,
+                    isDark: isDark,
+                    onTap: onOpen,
+                    onLongPress: (_) => _handleLongPress(context),
+                  ),
                 ),
               ),
-              // Overlay for rejected videos
               if (thumbnail.approved == false)
                 Positioned.fill(
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(8),
-                    child: Container(
-                      color: Colors.black.withValues(alpha: 0.3),
+                    child: IgnorePointer(
+                      child: ColoredBox(
+                        color: Colors.black.withValues(alpha: 0.3),
+                      ),
+                    ),
+                  ),
+                ),
+              if (thumbnail.approved == false)
+                Positioned(
+                  left: 10,
+                  right: 10,
+                  bottom: 10,
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: onReviewIssuesTap,
+                      borderRadius: BorderRadius.circular(12),
+                      child: _buildRejectedHint(context),
                     ),
                   ),
                 ),
               // Approval Status Badge
-              Positioned(
-                top: 8,
-                right: 8,
-                child: _buildApprovalBadge(context),
-              ),
+              Positioned(top: 8, right: 8, child: _buildApprovalBadge(context)),
             ],
           ),
         ),
@@ -94,6 +106,37 @@ class ProfileVideoGridItem extends StatelessWidget {
     }
   }
 
+  Widget _buildRejectedHint(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.7),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.info_outline, color: Colors.white, size: 16),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Tap to review issues',
+              style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          const Icon(
+            Icons.arrow_forward_ios_rounded,
+            color: Colors.white,
+            size: 14,
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildApprovalBadge(BuildContext context) {
     if (thumbnail.approved == true) {
       // Approved - Elegant small verification badge (TikTok/Instagram style)
@@ -103,11 +146,7 @@ class ProfileVideoGridItem extends StatelessWidget {
           color: Colors.blue,
           shape: BoxShape.circle,
         ),
-        child: const Icon(
-          Icons.check,
-          color: Colors.white,
-          size: 16,
-        ),
+        child: const Icon(Icons.check, color: Colors.white, size: 16),
       );
     } else if (thumbnail.approved == null) {
       // Pending - Subtle loading spinner (TikTok style)
@@ -136,11 +175,7 @@ class ProfileVideoGridItem extends StatelessWidget {
           color: Colors.red.withValues(alpha: 0.9),
           shape: BoxShape.circle,
         ),
-        child: const Icon(
-          Icons.close,
-          color: Colors.white,
-          size: 16,
-        ),
+        child: const Icon(Icons.close, color: Colors.white, size: 16),
       );
     }
   }

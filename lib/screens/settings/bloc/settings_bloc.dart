@@ -1,7 +1,6 @@
 import 'package:beat_that/constants/app_strings.dart';
 import 'package:beat_that/service_locator.dart';
 import 'package:beat_that/services/auth_service.dart';
-import 'package:beat_that/services/home_feed_service.dart';
 import 'package:beat_that/services/preferences_service.dart';
 import 'package:beat_that/services/supabase_service.dart';
 import 'package:equatable/equatable.dart';
@@ -17,7 +16,6 @@ class SettingsBloc extends Bloc<SettingsEvent, SettingsState> {
   }
 
   final PreferencesService _preferencesService = locator<PreferencesService>();
-  final HomeFeedService _homeFeedService = locator<HomeFeedService>();
   final AuthService _authService = locator<AuthService>();
   final SupabaseService _supabaseService = locator<SupabaseService>();
 
@@ -30,7 +28,6 @@ class SettingsBloc extends Bloc<SettingsEvent, SettingsState> {
     try {
       await _preferencesService.clearUserProfile();
       await _preferencesService.clearEngagement();
-      _homeFeedService.clearCache();
       await _authService.logout();
 
       emit(state.copyWith(status: SettingsStatus.loggedOut, clearError: true));
@@ -60,7 +57,6 @@ class SettingsBloc extends Bloc<SettingsEvent, SettingsState> {
 
       await _preferencesService.clearUserProfile();
       await _preferencesService.clearEngagement();
-      _homeFeedService.clearCache();
       await _authService.logout();
 
       emit(

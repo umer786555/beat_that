@@ -1,22 +1,21 @@
+import 'package:beat_that/models/home_feed_cursor.dart';
+import 'package:beat_that/models/sport_video.dart';
+
 class HomeVideoFeedSession {
   HomeVideoFeedSession({
     required this.id,
-    required List<Map<String, dynamic>> videos,
-    required this.nextOffset,
+    required List<SportVideo> videos,
+    required this.nextCursor,
     Set<String>? seenVideoIds,
     this.hasMoreContent = true,
-  }) : videos = List<Map<String, dynamic>>.from(videos),
+  }) : videos = List<SportVideo>.from(videos),
        seenVideoIds =
-           seenVideoIds ??
-           videos
-               .map((video) => video['id'] as String?)
-               .whereType<String>()
-               .toSet();
+           seenVideoIds ?? videos.map((video) => video.id).toSet();
 
   final String id;
-  final List<Map<String, dynamic>> videos;
+  final List<SportVideo> videos;
   final Set<String> seenVideoIds;
-  int nextOffset;
+  HomeFeedCursor nextCursor;
   bool hasMoreContent;
 }
 
@@ -25,8 +24,8 @@ class HomeVideoFeedSessionStore {
   final Map<String, HomeVideoFeedSession> _sessions = {};
 
   String createSession({
-    required List<Map<String, dynamic>> videos,
-    required int nextOffset,
+    required List<SportVideo> videos,
+    required HomeFeedCursor nextCursor,
     bool hasMoreContent = true,
   }) {
     _nextSessionId++;
@@ -34,7 +33,7 @@ class HomeVideoFeedSessionStore {
     _sessions[id] = HomeVideoFeedSession(
       id: id,
       videos: videos,
-      nextOffset: nextOffset,
+      nextCursor: nextCursor,
       hasMoreContent: hasMoreContent,
     );
     return id;
@@ -46,8 +45,8 @@ class HomeVideoFeedSessionStore {
 
   void appendVideos({
     required String sessionId,
-    required List<Map<String, dynamic>> videos,
-    required int nextOffset,
+    required List<SportVideo> videos,
+    required HomeFeedCursor nextCursor,
     required bool hasMoreContent,
   }) {
     final session = _sessions[sessionId];
@@ -56,14 +55,11 @@ class HomeVideoFeedSessionStore {
     }
 
     session.videos.addAll(videos);
-    session.nextOffset = nextOffset;
+  session.nextCursor = nextCursor;
     session.hasMoreContent = hasMoreContent;
 
     for (final video in videos) {
-      final videoId = video['id'] as String?;
-      if (videoId != null) {
-        session.seenVideoIds.add(videoId);
-      }
+      session.seenVideoIds.add(video.id);
     }
   }
 

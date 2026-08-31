@@ -28,7 +28,6 @@ class UploadProgressOverlay extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     final textColor = isDarkMode ? Colors.white : AppColors.black;
-    final secondaryTextColor = isDarkMode ? Colors.white : AppColors.black;
 
     return IgnorePointer(
       ignoring: !isUploading,
@@ -36,122 +35,100 @@ class UploadProgressOverlay extends StatelessWidget {
         opacity: isUploading ? 1 : 0,
         duration: const Duration(milliseconds: 300),
         child: Container(
-          color: isDarkMode ? Colors.black87 : Colors.white,
+          color: Colors.black.withValues(alpha: 0.85),
           child: Center(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 40),
+            child: Container(
+              width: 280,
+              padding: const EdgeInsets.all(32),
+              decoration: BoxDecoration(
+                color: isDarkMode ? Colors.grey[900] : Colors.white,
+                borderRadius: BorderRadius.circular(16),
+              ),
               child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Main heading
-                  Text(
-                    'Uploading Your Video',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.w600,
-                      color: textColor,
-                      letterSpacing: 0.5,
-                    ),
-                  ),
-
-                  const SizedBox(height: 12),
-
-                  // Reassuring subtitle
-                  Text(
-                    'Please keep the app open',
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w500,
-                      color: secondaryTextColor,
-                      letterSpacing: 0.3,
-                    ),
-                  ),
-
-                  const SizedBox(height: 48),
-
-                  // Linear progress bar
+                  // Circular progress indicator
                   SizedBox(
-                    height: 8,
-                    child: LinearProgressIndicator(
-                      value: progressPercent / 100,
-                      backgroundColor: isDarkMode
-                          ? Colors.white.withOpacity(0.06)
-                          : AppColors.greyLight,
-                      valueColor: const AlwaysStoppedAnimation<Color>(
-                        AppColors.electricMagenta,
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 32),
-
-                  // Percentage
-                  Text(
-                    '${progressPercent.toInt()}%',
-                    style: TextStyle(
-                      fontSize: 40,
-                      fontWeight: FontWeight.w800,
-                      color: textColor,
-                      height: 1.0,
-                    ),
-                  ),
-
-                  const SizedBox(height: 44),
-
-                  // File size info with better formatting
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 24,
-                      vertical: 16,
-                    ),
-                    decoration: BoxDecoration(
-                      color: isDarkMode
-                          ? Colors.white.withOpacity(0.07)
-                          : AppColors.greyLight.withOpacity(0.3),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Column(
+                    width: 80,
+                    height: 80,
+                    child: Stack(
+                      alignment: Alignment.center,
                       children: [
-                        Text(
-                          'Transfer Progress',
-                          style: TextStyle(
-                            fontSize: 16,
-                            color: secondaryTextColor.withOpacity(0.6),
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: 0.5,
+                        SizedBox(
+                          width: 80,
+                          height: 80,
+                          child: CircularProgressIndicator(
+                            value: progressPercent / 100,
+                            strokeWidth: 4,
+                            valueColor: const AlwaysStoppedAnimation<Color>(
+                              AppColors.electricMagenta,
+                            ),
+                            backgroundColor: isDarkMode
+                                ? Colors.white.withValues(alpha: 0.1)
+                                : AppColors.greyLight.withValues(alpha: 0.2),
                           ),
                         ),
-                        const SizedBox(height: 8),
+                        // Percentage text in center
                         Text(
-                          '${_formatBytes(sentBytes)} of ${_formatBytes(totalBytes)}',
+                          '${progressPercent.toInt()}%',
                           style: TextStyle(
-                            fontSize: 18,
-                            color: textColor,
+                            fontSize: 24,
                             fontWeight: FontWeight.w700,
-                            letterSpacing: 0.3,
+                            color: textColor,
                           ),
                         ),
                       ],
                     ),
                   ),
 
+                  const SizedBox(height: 28),
+
+                  // Main heading
+                  Text(
+                    'Uploading',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                      color: textColor,
+                      letterSpacing: 0.3,
+                    ),
+                  ),
+
+                  const SizedBox(height: 16),
+
+                  // File size info
+                  Text(
+                    '${_formatBytes(sentBytes)} of ${_formatBytes(totalBytes)}',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: textColor.withValues(alpha: 0.6),
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
 
                   // Optional cancel button
-                  if (onCancel != null)
-                    ElevatedButton(
-                      onPressed: onCancel,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: isDarkMode ? Colors.white : Colors.redAccent,
-                      ),
-                      child: Text(
-                        'Cancel',
-                        style: TextStyle(
-                          color: isDarkMode ? Colors.black : Colors.white,
+                  if (onCancel != null) ...[
+                    const SizedBox(height: 24),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 40,
+                      child: TextButton(
+                        onPressed: onCancel,
+                        style: TextButton.styleFrom(
+                          foregroundColor: AppColors.electricMagenta,
+                        ),
+                        child: const Text(
+                          'Cancel',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 14,
+                          ),
                         ),
                       ),
                     ),
+                  ],
                 ],
               ),
             ),
