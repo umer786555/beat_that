@@ -14,3 +14,7 @@ final class LogoutRequested extends SettingsEvent {
 final class DeleteAccountRequested extends SettingsEvent {
   const DeleteAccountRequested();
 }
+
+final class ResetOnboardingRequested extends SettingsEvent {
+  const ResetOnboardingRequested();
+}

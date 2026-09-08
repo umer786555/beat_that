@@ -5,7 +5,7 @@ class EmptyConnectionsWidget extends StatelessWidget {
   const EmptyConnectionsWidget({
     super.key,
     required this.title,
-    required this.description,
+    this.description = '',
     required this.icon,
     this.accentColor,
   });
@@ -20,28 +20,32 @@ class EmptyConnectionsWidget extends StatelessWidget {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final isDark = theme.brightness == Brightness.dark;
+    final normalizedTitle = title.toLowerCase();
     final isSearchState =
-        icon == Icons.search_off_rounded ||
-        title.toLowerCase().contains('match');
-    final accent = isDark ? (accentColor ?? AppColors.cyan) : AppColors.cyan;
-    final contrastAccent = AppColors.electricMagenta;
+        icon == Icons.search_off_rounded || normalizedTitle.contains('match');
+    final accent =
+        accentColor ?? (isDark ? AppColors.cyan : AppColors.electricMagenta);
     final titleColor = isDark ? colorScheme.onSurface : AppColors.black;
     final descriptionColor = isDark
         ? colorScheme.onSurfaceVariant
         : AppColors.black.withValues(alpha: 0.72);
-    final mutedColor = isDark
-        ? colorScheme.onSurfaceVariant.withValues(alpha: 0.86)
-        : AppColors.black.withValues(alpha: 0.56);
-    final ringColor = isDark
-        ? accent.withValues(alpha: 0.18)
-        : accent.withValues(alpha: 0.10);
-    final detailAccent = isDark ? accent : contrastAccent;
-    final iconInnerColor = colorScheme.surface.withValues(
-      alpha: isDark ? 0.92 : 1,
-    );
-    final helperText = isSearchState
-        ? 'Try another name or username.'
-        : 'This updates automatically when your connections change.';
+    final displayIcon = isSearchState
+        ? Icons.manage_search_rounded
+        : normalizedTitle.contains('blocked')
+        ? Icons.block_rounded
+        : normalizedTitle.contains('following')
+        ? Icons.person_add_alt_1_rounded
+        : normalizedTitle.contains('follower')
+        ? Icons.people_alt_rounded
+        : icon;
+    final iconColor = isSearchState
+        ? (isDark ? colorScheme.onSurfaceVariant : AppColors.greyDark)
+        : accent;
+    final helperText = description.isNotEmpty
+        ? description
+        : isSearchState
+        ? 'Try another name or username'
+        : 'When people connect with you, they will show up here';
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -53,83 +57,40 @@ class EmptyConnectionsWidget extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(24, 20, 24, 36),
               child: Center(
                 child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 420),
+                  constraints: const BoxConstraints(maxWidth: 340),
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      SizedBox(
-                        width: 112,
-                        height: 112,
-                        child: Stack(
-                          alignment: Alignment.center,
-                          children: [
-                            Container(
-                              width: 88,
-                              height: 88,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: ringColor,
-                              ),
+                      Icon(
+                        displayIcon,
+                        size: isSearchState ? 56 : 64,
+                        color: iconColor,
+                        shadows: [
+                          Shadow(
+                            color: iconColor.withValues(
+                              alpha: isDark ? 0.22 : 0.10,
                             ),
-                            Container(
-                              width: 64,
-                              height: 64,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: iconInnerColor,
-                              ),
-                              child: Icon(icon, color: detailAccent, size: 30),
-                            ),
-                            if (!isSearchState)
-                              Positioned(
-                                right: 12,
-                                bottom: 14,
-                                child: Container(
-                                  width: 20,
-                                  height: 20,
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    color: detailAccent,
-                                  ),
-                                  child: const Icon(
-                                    Icons.add,
-                                    color: Colors.white,
-                                    size: 14,
-                                  ),
-                                ),
-                              ),
-                          ],
-                        ),
+                            blurRadius: 18,
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 28),
+                      const SizedBox(height: 22),
                       Text(
                         title,
                         textAlign: TextAlign.center,
                         style: theme.textTheme.headlineSmall?.copyWith(
                           fontWeight: FontWeight.w800,
-                          letterSpacing: -0.5,
+                          letterSpacing: -0.4,
                           color: titleColor,
                         ),
                       ),
                       const SizedBox(height: 10),
-                      ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 320),
-                        child: Text(
-                          description,
-                          textAlign: TextAlign.center,
-                          style: theme.textTheme.bodyLarge?.copyWith(
-                            color: descriptionColor,
-                            height: 1.55,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
                       Text(
                         helperText,
                         textAlign: TextAlign.center,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: mutedColor,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: descriptionColor,
                           height: 1.45,
                         ),
                       ),

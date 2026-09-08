@@ -8,6 +8,26 @@ import '../models/user_personal_profile.dart';
 class PreferencesService {
   late SharedPreferences _prefs;
 
+  bool getBool(String key) {
+    return _prefs.getBool(key) ?? false;
+  }
+
+  Future<void> setBool(String key, bool value) async {
+    await _prefs.setBool(key, value);
+  }
+
+  int? getInt(String key) {
+    return _prefs.getInt(key);
+  }
+
+  Future<void> setInt(String key, int value) async {
+    await _prefs.setInt(key, value);
+  }
+
+  Future<void> remove(String key) async {
+    await _prefs.remove(key);
+  }
+
   /// Initialize the SharedPreferences instance
   /// Must be called exactly once during app startup before using the service
   Future<void> init() async {
@@ -57,7 +77,7 @@ class PreferencesService {
 
     final decodedJson = jsonDecode(profileJson) as Map<String, dynamic>;
     decodedJson['username'] = newUsername;
-    
+
     await _prefs.setString('user_personal_profile', jsonEncode(decodedJson));
   }
 
@@ -93,9 +113,12 @@ class PreferencesService {
       // Enforce max 20 categories - remove oldest if we exceed limit
       if (engagement.length > 20) {
         final sortedByTime = engagement.entries.toList()
-          ..sort((a, b) => DateTime.parse(a.value['last_viewed'] as String)
-              .compareTo(DateTime.parse(b.value['last_viewed'] as String)));
-        
+          ..sort(
+            (a, b) => DateTime.parse(
+              a.value['last_viewed'] as String,
+            ).compareTo(DateTime.parse(b.value['last_viewed'] as String)),
+          );
+
         engagement.remove(sortedByTime.first.key);
       }
 
@@ -108,8 +131,9 @@ class PreferencesService {
   /// Get top engaged subcategories sorted by view count (highest first)
   /// Returns list of MapEntry with subcategory ID and engagement data
   /// Limit defaults to 5, can be customized
-  Future<List<MapEntry<String, dynamic>>> getTopSubcategories(
-      {int limit = 5}) async {
+  Future<List<MapEntry<String, dynamic>>> getTopSubcategories({
+    int limit = 5,
+  }) async {
     try {
       final engagementJson = _prefs.getString('engagement_data');
       if (engagementJson == null) return [];
@@ -118,8 +142,10 @@ class PreferencesService {
 
       // Convert to list and sort by view count (descending)
       final sortedList = engagement.entries.toList()
-        ..sort((a, b) =>
-            (b.value['views'] as int).compareTo(a.value['views'] as int));
+        ..sort(
+          (a, b) =>
+              (b.value['views'] as int).compareTo(a.value['views'] as int),
+        );
 
       return sortedList.take(limit).toList();
     } catch (e) {

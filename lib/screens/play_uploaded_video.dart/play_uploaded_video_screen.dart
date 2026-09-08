@@ -3,6 +3,7 @@ import 'package:beat_that/constants/app_colors.dart';
 import 'package:beat_that/models/sport.dart';
 import 'package:beat_that/widgets/error_screen.dart';
 import 'package:beat_that/widgets/loading_screen.dart';
+import 'package:beat_that/widgets/custom_back_button.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
@@ -25,7 +26,7 @@ class PlayUploadedVideoScreen extends StatefulWidget {
   const PlayUploadedVideoScreen({
     super.key,
     required this.videoPath,
-    this.shouldShowEditButtons = true,
+    this.shouldShowEditButtons = false,
     this.sport,
     this.selectedSubcategory,
   });
@@ -300,19 +301,18 @@ class _PlayUploadedVideoScreenState extends State<PlayUploadedVideoScreen> {
                       ],
                     ),
                   ),
-                  child: Align(
-                    alignment: Alignment.topLeft,
-                    child: Padding(
-                      padding: const EdgeInsets.only(left: 8, top: 8),
-                      child: IconButton(
-                        icon: const Icon(
-                          Icons.arrow_back_ios,
-                          color: Colors.white,
+                  child: SafeArea(
+                    child: Align(
+                      alignment: Alignment.topLeft,
+                      child: Padding(
+                        padding: const EdgeInsets.only(left: 8),
+                        child: CustomBackButton(
+                          onPressed: () {
+                            bloc.add(const DisposeVideoEvent());
+                            Navigator.pop(context);
+                          },
+                          icon: Icons.arrow_back_ios,
                         ),
-                        onPressed: () {
-                          bloc.add(const DisposeVideoEvent());
-                          Navigator.pop(context);
-                        },
                       ),
                     ),
                   ),

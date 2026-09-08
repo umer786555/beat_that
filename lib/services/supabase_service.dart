@@ -22,7 +22,7 @@ class SupabaseService {
   static const int _profileImageMaxDimension = 1080;
   static const int _profileImageQuality = 78;
   static const int _thumbnailMaxDimension = 720;
-  static const int _thumbnailQuality = 80;
+  static const int _thumbnailQuality = 85;
   static const VideoQuality _videoCompressionQuality =
       VideoQuality.HighestQuality;
 
@@ -1958,9 +1958,7 @@ class SupabaseService {
 
       // This query already includes the nested username, so the shared row
       // builder can produce fully populated SportVideo models directly.
-      final sportVideos = await _buildSportVideosFromRows(
-        videos,
-      );
+      final sportVideos = await _buildSportVideosFromRows(videos);
 
       print(
         '✓ Fetched ${sportVideos.length} videos for $sportId/$subcategoryId',
@@ -2259,9 +2257,7 @@ class SupabaseService {
   ///
   /// Throws:
   /// - [Exception] when validation fails or the database request fails
-  Future<UserBlock> blockUser({
-    required String userIdToBlock,
-  }) async {
+  Future<UserBlock> blockUser({required String userIdToBlock}) async {
     final userId = getCurrentUserId();
     if (userId == null) {
       throw Exception('User not authenticated');
@@ -2274,10 +2270,7 @@ class SupabaseService {
     try {
       final response = await client
           .from('user_blocks')
-          .insert({
-            'blocker_id': userId,
-            'blocked_id': userIdToBlock,
-          })
+          .insert({'blocker_id': userId, 'blocked_id': userIdToBlock})
           .select('id, blocker_id, blocked_id, created_at')
           .single();
 
@@ -2308,9 +2301,7 @@ class SupabaseService {
   ///
   /// Throws:
   /// - [Exception] when validation fails or the database request fails
-  Future<void> unblockUser({
-    required UserBlock userBlock,
-  }) async {
+  Future<void> unblockUser({required UserBlock userBlock}) async {
     final userId = getCurrentUserId();
     if (userId == null) {
       throw Exception('User not authenticated');
@@ -2861,9 +2852,7 @@ class SupabaseService {
     return updated;
   }
 
-  Future<List<SportVideo>> _buildSportVideosFromRows(
-    List<dynamic> rows,
-  ) async {
+  Future<List<SportVideo>> _buildSportVideosFromRows(List<dynamic> rows) async {
     // Centralize the row -> URL-enriched map -> SportVideo conversion so every
     // public sport_videos method stays consistent.
     final videos = List<Map<String, dynamic>>.from(rows);
@@ -3005,9 +2994,7 @@ class SupabaseService {
         return [];
       }
 
-      final sportVideos = await _buildSportVideosFromRows(
-        videos,
-      );
+      final sportVideos = await _buildSportVideosFromRows(videos);
 
       print(
         '✓ Fetched ${sportVideos.length} personalized videos from top 5 engaged categories (bayesian_score sorted)',
@@ -3167,9 +3154,7 @@ class SupabaseService {
     }
   }
 
-  Future<List<SportVideo>> getRandomDiscoveryVideos({
-    int limit = 50,
-  }) async {
+  Future<List<SportVideo>> getRandomDiscoveryVideos({int limit = 50}) async {
     try {
       // Step 1: Get user's top 5 engaged subcategories from local storage
       final preferencesService = locator<PreferencesService>();

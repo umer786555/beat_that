@@ -80,7 +80,8 @@ class EditThumbnailScreen extends StatelessWidget {
                           ),
                         ),
                       ),
-                      body: _buildBody(
+                      body:
+                       _buildBody(
                         state,
                         onUpload: isSaving
                             ? null

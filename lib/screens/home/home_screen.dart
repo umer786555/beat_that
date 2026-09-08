@@ -8,7 +8,9 @@ import 'package:shimmer/shimmer.dart';
 import 'package:beat_that/service_locator.dart';
 import 'package:beat_that/screens/home/bloc/home_bloc.dart';
 import 'package:beat_that/screens/home/video_feed/models/home_video_feed_route_extra.dart';
+import 'package:beat_that/services/app_onboarding.dart';
 import 'package:beat_that/services/home_video_feed_session_store.dart';
+import 'package:beat_that/services/onboarding_service.dart';
 import 'package:beat_that/widgets/video_feed_card.dart';
 import 'package:beat_that/widgets/shimmer_loading.dart';
 
@@ -22,11 +24,15 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  static const int _homeOnboardingVersion = 1;
   late ScrollController _scrollController;
   static const double _scrollTriggerDistance = 500;
+  final OnboardingService _onboardingService = locator<OnboardingService>();
+  final GlobalKey _firstVideoCardOnboardingKey = GlobalKey();
   List<SportVideo> _lastLoadedVideos = const [];
   HomeFeedCursor _lastCursor = const HomeFeedCursor.initial();
   bool _lastHasMoreContent = true;
+  bool _hasAttemptedHomeOnboarding = false;
 
   @override
   void initState() {
@@ -72,6 +78,43 @@ class _HomeScreenState extends State<HomeScreen> {
     await refreshCompletion;
   }
 
+  Future<void> _maybePresentHomeOnboarding(List<SportVideo> videos) async {
+    if (_hasAttemptedHomeOnboarding || !mounted) {
+      return;
+    }
+
+    _hasAttemptedHomeOnboarding = true;
+
+    await _onboardingService.startFlow(
+      context,
+      OnboardingFlowRequest(
+        flowId: OnboardingFlowIds.homeFeed,
+        version: _homeOnboardingVersion,
+        steps: videos.isEmpty
+            ? const <OnboardingStepData>[]
+            : <OnboardingStepData>[
+                OnboardingStepData(
+                  key: _firstVideoCardOnboardingKey,
+                  title: 'Open your feed',
+                  description:
+                      'Tap any clip to jump into the full feed. Home will learn from what you watch and show you more of it here.',
+                ),
+              ],
+      ),
+      beforeStart: _showHomeOnboardingIntro,
+    );
+  }
+
+  Future<bool> _showHomeOnboardingIntro(BuildContext context) async {
+    return showAppOnboardingIntroSheet(
+      context,
+      icon: Icons.ondemand_video_rounded,
+      title: 'This is your Home feed',
+      description:
+          'Home is where Beat That will surface clips based on what you watch, who you follow, and the sports you engage with.',
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -99,6 +142,10 @@ class _HomeScreenState extends State<HomeScreen> {
             _lastLoadedVideos = List<SportVideo>.from(state.videos);
             _lastCursor = state.nextCursor;
             _lastHasMoreContent = state.hasMoreContent;
+
+            if (state.offset == 0) {
+              _maybePresentHomeOnboarding(state.videos);
+            }
           }
         },
 
@@ -218,7 +265,7 @@ class _HomeScreenState extends State<HomeScreen> {
               }
 
               final video = videos[index];
-              return VideoFeedCard(
+              final card = VideoFeedCard(
                 videoId: video.id,
                 thumbnailUrl: video.thumbnailUrl ?? '',
                 title: video.title,
@@ -247,6 +294,18 @@ class _HomeScreenState extends State<HomeScreen> {
                   print('Long pressed video: ${video.id}');
                 },
               );
+
+              if (index == 0) {
+                return AppOnboardingTarget(
+                  targetKey: _firstVideoCardOnboardingKey,
+                  title: 'Open your feed',
+                  description:
+                      'Tap any clip to jump into the full feed. Home learns from what you watch and uses that to improve recommendations.',
+                  child: card,
+                );
+              }
+
+              return card;
             },
           ),
 
@@ -326,7 +385,7 @@ class _HomeScreenState extends State<HomeScreen> {
           Text('No videos yet', style: Theme.of(context).textTheme.titleLarge),
           const SizedBox(height: 8),
           Text(
-            'Follow users or explore categories\nto see videos here',
+            'Your Home feed will learn from what you watch\nand who you follow. Explore a few clips to start shaping it.',
             textAlign: TextAlign.center,
             style: TextStyle(color: Colors.grey[600], fontSize: 14),
           ),

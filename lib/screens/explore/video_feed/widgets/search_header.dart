@@ -179,24 +179,21 @@ class _SearchHeaderState extends State<SearchHeader> {
                       labelText: widget.labelText,
                     ),
                   if (!_isSearchOpen) SizedBox(width: widget.sportChipSpacing),
-                  SportChip(
-                    label: 'All Sports',
-                    selected: widget.selectedSportId == null,
-                    onSelected: () => widget.onSportChanged(null),
-                    selectedColor: chipSelectedColor,
-                    selectedLabelColor: chipSelectedLabelColor,
-                    unselectedBackgroundColor: chipBackgroundColor,
-                    unselectedBorderColor: chipBorderColor,
-                    unselectedLabelColor: theme.colorScheme.onSurfaceVariant,
-                    borderRadius: 999,
-                  ),
-                  ...widget.availableSportIds.map(
-                    (sportId) => Padding(
-                      padding: EdgeInsets.only(left: widget.sportChipSpacing),
+                  ...widget.availableSportIds.indexed.map(
+                    (entry) {
+                      final index = entry.$1;
+                      final sportId = entry.$2;
+
+                      return Padding(
+                        padding: EdgeInsets.only(
+                          left: index == 0 ? 0 : widget.sportChipSpacing,
+                        ),
                       child: SportChip(
                         label: _getDisplayNameForSport(sportId),
                         selected: widget.selectedSportId == sportId,
-                        onSelected: () => widget.onSportChanged(sportId),
+                        onSelected: () => widget.onSportChanged(
+                          widget.selectedSportId == sportId ? null : sportId,
+                        ),
                         selectedColor: chipSelectedColor,
                         selectedLabelColor: chipSelectedLabelColor,
                         unselectedBackgroundColor: chipBackgroundColor,
@@ -205,7 +202,8 @@ class _SearchHeaderState extends State<SearchHeader> {
                             theme.colorScheme.onSurfaceVariant,
                         borderRadius: 999,
                       ),
-                    ),
+                    );
+                    },
                   ),
                 ],
               ),

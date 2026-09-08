@@ -123,10 +123,16 @@ class AppStrings {
   static const String privacyPolicy = 'Privacy policy';
   static const String deleteAccount = 'Delete account';
   static const String deleteAccountDialogTitle = 'Delete account?';
+  static const String deleteAccountDialogIntroMessage =
+      'You are about to delete your Beat That account. Are you sure?';
   static const String deleteAccountDialogMessage =
       'This permanently deletes your ratings, followers, following, uploaded videos, and profile data. This can\'t be undone.';
+  static const String deleteAccountDialogFinalTitle = 'Confirm deletion';
+  static const String deleteAccountDialogFinalConfirm = 'Delete';
   static const String deleteAccountFailed = 'Delete account failed';
   static const String logOut = 'Log out';
+  static const String logOutDialogTitle = 'Log Out';
+  static const String logOutDialogMessage = 'Are you sure you want to log out?';
   static const String cancel = 'Cancel';
   static const String delete = 'Delete';
   static const String recordVideo = 'Record Video';

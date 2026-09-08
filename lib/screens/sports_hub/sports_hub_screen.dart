@@ -1,6 +1,9 @@
 import 'package:beat_that/screens/sports_hub/sports_hub_bloc/sports_hub_bloc.dart';
 import 'package:beat_that/screens/sports_hub/sports_hub_bloc/sports_hub_event.dart';
 import 'package:beat_that/screens/sports_hub/sports_hub_bloc/sports_hub_state.dart';
+import 'package:beat_that/service_locator.dart';
+import 'package:beat_that/services/app_onboarding.dart';
+import 'package:beat_that/services/onboarding_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -12,8 +15,54 @@ import 'package:beat_that/routes/app_router.dart';
 
 /// Sports Hub screen - displays sports in a grid sorted by locale-based popularity
 /// Fetches sports from Supabase and applies locale-based ordering
-class SportsHubScreen extends StatelessWidget {
+class SportsHubScreen extends StatefulWidget {
   const SportsHubScreen({super.key});
+
+  @override
+  State<SportsHubScreen> createState() => _SportsHubScreenState();
+}
+
+class _SportsHubScreenState extends State<SportsHubScreen> {
+  static const int _sportsHubOnboardingVersion = 1;
+
+  final OnboardingService _onboardingService = locator<OnboardingService>();
+  final GlobalKey _firstSportCardOnboardingKey = GlobalKey();
+  bool _hasAttemptedSportsHubOnboarding = false;
+
+  Future<void> _maybePresentSportsHubOnboarding() async {
+    if (_hasAttemptedSportsHubOnboarding || !mounted) {
+      return;
+    }
+
+    _hasAttemptedSportsHubOnboarding = true;
+
+    await _onboardingService.startFlow(
+      context,
+      OnboardingFlowRequest(
+        flowId: OnboardingFlowIds.sportsHub,
+        version: _sportsHubOnboardingVersion,
+        steps: <OnboardingStepData>[
+          OnboardingStepData(
+            key: _firstSportCardOnboardingKey,
+            title: 'Choose a sport first',
+            description:
+                'Tap a sport to see its techniques. Then choose the exact move, like a three-point shot or dunk, and attach your video.',
+          ),
+        ],
+      ),
+      beforeStart: _showSportsHubIntro,
+    );
+  }
+
+  Future<bool> _showSportsHubIntro(BuildContext context) async {
+    return showAppOnboardingIntroSheet(
+      context,
+      icon: Icons.sports_score_rounded,
+      title: 'Pick a sport, then a technique',
+      description:
+          'Start with a sport, then pick the matching technique for your clip, like a three-point shot or dunk in basketball.',
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -42,7 +91,12 @@ class SportsHubScreen extends StatelessWidget {
             ],
           ),
         ),
-        body: BlocBuilder<SportsHubBloc, SportsHubState>(
+        body: BlocConsumer<SportsHubBloc, SportsHubState>(
+          listener: (context, state) {
+            if (state is SportsHubLoaded && state.sports.isNotEmpty) {
+              _maybePresentSportsHubOnboarding();
+            }
+          },
           builder: (context, state) {
             if (state is SportsHubLoading) {
               return const BeatLoadingScreen(message: 'Loading sports...');
@@ -80,7 +134,7 @@ class SportsHubScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'Upload your best move and battle for the top spot on the leaderboard',
+                      'Choose a sport, then the exact technique your video belongs to before you upload and compete.',
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                         color: Theme.of(context).colorScheme.onSurfaceVariant,
                       ),
@@ -98,7 +152,7 @@ class SportsHubScreen extends StatelessWidget {
                         itemCount: sports.length,
                         itemBuilder: (context, index) {
                           final sport = sports[index];
-                          return SportGridItem(
+                          final sportCard = SportGridItem(
                             sport: sport,
                             onTap: () {
                               HapticFeedback.lightImpact();
@@ -108,6 +162,18 @@ class SportsHubScreen extends StatelessWidget {
                               );
                             },
                           );
+
+                          if (index == 0) {
+                            return AppOnboardingTarget(
+                              targetKey: _firstSportCardOnboardingKey,
+                              title: 'Choose a sport first',
+                              description:
+                                  'Tap a sport to open its techniques. Next, choose the exact move, like a three-point shot or dunk, and attach your video.',
+                              child: sportCard,
+                            );
+                          }
+
+                          return sportCard;
                         },
                       ),
                     ),

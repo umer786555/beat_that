@@ -1,6 +1,7 @@
 import 'package:beat_that/constants/app_strings.dart';
 import 'package:beat_that/service_locator.dart';
 import 'package:beat_that/services/auth_service.dart';
+import 'package:beat_that/services/onboarding_service.dart';
 import 'package:beat_that/services/preferences_service.dart';
 import 'package:beat_that/services/supabase_service.dart';
 import 'package:equatable/equatable.dart';
@@ -13,11 +14,13 @@ class SettingsBloc extends Bloc<SettingsEvent, SettingsState> {
   SettingsBloc() : super(const SettingsState()) {
     on<LogoutRequested>(_onLogoutRequested);
     on<DeleteAccountRequested>(_onDeleteAccountRequested);
+    on<ResetOnboardingRequested>(_onResetOnboardingRequested);
   }
 
   final PreferencesService _preferencesService = locator<PreferencesService>();
   final AuthService _authService = locator<AuthService>();
   final SupabaseService _supabaseService = locator<SupabaseService>();
+  final OnboardingService _onboardingService = locator<OnboardingService>();
 
   Future<void> _onLogoutRequested(
     LogoutRequested event,
@@ -67,6 +70,35 @@ class SettingsBloc extends Bloc<SettingsEvent, SettingsState> {
         state.copyWith(
           status: SettingsStatus.failure,
           errorMessage: '${AppStrings.deleteAccountFailed}: $e',
+        ),
+      );
+    }
+  }
+
+  Future<void> _onResetOnboardingRequested(
+    ResetOnboardingRequested event,
+    Emitter<SettingsState> emit,
+  ) async {
+    emit(
+      state.copyWith(
+        status: SettingsStatus.resettingOnboarding,
+        clearError: true,
+      ),
+    );
+
+    try {
+      await _onboardingService.resetAllFeatureTips();
+      emit(
+        state.copyWith(
+          status: SettingsStatus.onboardingReset,
+          clearError: true,
+        ),
+      );
+    } catch (e) {
+      emit(
+        state.copyWith(
+          status: SettingsStatus.failure,
+          errorMessage: 'Failed to reset feature tips: $e',
         ),
       );
     }

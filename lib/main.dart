@@ -9,6 +9,7 @@ import 'package:beat_that/routes/app_router.dart';
 import 'package:beat_that/service_locator.dart';
 import 'package:beat_that/bloc/theme_bloc.dart';
 import 'package:beat_that/constants/app_themes.dart';
+import 'package:beat_that/services/app_onboarding.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -132,15 +133,17 @@ class _MyAppState extends State<MyApp> {
           //       : ThemeMode.light,
           //   routerConfig: _appRouter.router,
           // );
-          return MaterialApp.router(
-            title: 'Beat That',
-            theme: AppThemes.lightTheme(),
-            darkTheme: AppThemes.darkTheme(),
-            themeMode: themeState.themeMode.isDark
-                ? ThemeMode.dark
-                : ThemeMode.light,
-            routerConfig: _appRouter.router,
-            debugShowCheckedModeBanner: false,
+          return AppOnboarding(
+            child: MaterialApp.router(
+              title: 'Beat That',
+              theme: AppThemes.lightTheme(),
+              darkTheme: AppThemes.darkTheme(),
+              themeMode: themeState.themeMode.isDark
+                  ? ThemeMode.dark
+                  : ThemeMode.light,
+              routerConfig: _appRouter.router,
+              debugShowCheckedModeBanner: false,
+            ),
           );
         },
       ),

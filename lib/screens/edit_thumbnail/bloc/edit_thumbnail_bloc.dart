@@ -26,9 +26,9 @@ class EditThumbnailBloc extends Bloc<EditThumbnailEvent, EditThumbnailState>
   final PreferencesService preferencesService = locator<PreferencesService>();
 
   static const int _numberOfThumbnails = 5;
-  static const int _thumbnailWidth = 192;
-  static const int _thumbnailHeight = 192;
-  static const int _imageQuality = 80;
+
+  static const int _thumbnailMaxWidth = 720;
+  static const int _imageQuality = 100;
   static const int _thumbnailBatchSize = 2;
   static const Duration _minimumUploadDuration = Duration(seconds: 10);
 
@@ -82,7 +82,9 @@ class EditThumbnailBloc extends Bloc<EditThumbnailEvent, EditThumbnailState>
           timeIntervals.length,
         );
         final batch = timeIntervals.sublist(startIndex, endIndex);
-        final batchThumbnails = await Future.wait(batch.map(_generateThumbnail));
+        final batchThumbnails = await Future.wait(
+          batch.map(_generateThumbnail),
+        );
         thumbnails.addAll(batchThumbnails);
       }
 
@@ -124,8 +126,7 @@ class EditThumbnailBloc extends Bloc<EditThumbnailEvent, EditThumbnailState>
     return VideoThumbnail.thumbnailData(
       video: videoPath,
       imageFormat: ImageFormat.PNG,
-      maxWidth: _thumbnailWidth,
-      maxHeight: _thumbnailHeight,
+      maxWidth: _thumbnailMaxWidth,
       timeMs: timeMilliseconds,
       quality: _imageQuality,
     );

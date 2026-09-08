@@ -4,6 +4,8 @@ enum SettingsStatus {
   idle,
   loggingOut,
   loggedOut,
+  resettingOnboarding,
+  onboardingReset,
   deletingAccount,
   deletedAccount,
   failure,
@@ -16,8 +18,10 @@ final class SettingsState extends Equatable {
   final String? errorMessage;
 
   bool get isLoggingOut => status == SettingsStatus.loggingOut;
+  bool get isResettingOnboarding =>
+      status == SettingsStatus.resettingOnboarding;
   bool get isDeletingAccount => status == SettingsStatus.deletingAccount;
-  bool get isBusy => isLoggingOut || isDeletingAccount;
+  bool get isBusy => isLoggingOut || isDeletingAccount || isResettingOnboarding;
 
   SettingsState copyWith({
     SettingsStatus? status,

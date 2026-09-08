@@ -3,6 +3,7 @@ import 'package:beat_that/reporting/models/report_target.dart';
 import 'package:beat_that/reporting/presentation/show_content_report_bottom_sheet.dart';
 import 'package:beat_that/widgets/custom_snackbar.dart';
 import 'package:beat_that/widgets/video_rating_bottom_sheet.dart';
+import 'package:beat_that/widgets/custom_back_button.dart';
 import 'package:bloc_presentation/bloc_presentation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -31,6 +32,7 @@ class HomeVideoFeedScreen extends StatefulWidget {
 
 class _HomeVideoFeedScreenState extends State<HomeVideoFeedScreen> {
   late final PageController _pageController;
+  bool _isChromeVisible = false;
 
   @override
   void initState() {
@@ -42,6 +44,22 @@ class _HomeVideoFeedScreenState extends State<HomeVideoFeedScreen> {
   void dispose() {
     _pageController.dispose();
     super.dispose();
+  }
+
+  void _toggleChromeVisibility() {
+    setState(() {
+      _isChromeVisible = !_isChromeVisible;
+    });
+  }
+
+  void _hideChrome() {
+    if (!_isChromeVisible) {
+      return;
+    }
+
+    setState(() {
+      _isChromeVisible = false;
+    });
   }
 
   @override
@@ -80,6 +98,7 @@ class _HomeVideoFeedScreenState extends State<HomeVideoFeedScreen> {
                           itemCount: state.videos.length,
                           onPageChanged: (index) {
                             HapticFeedback.lightImpact();
+                            _hideChrome();
                             cubit.onPageChanged(index);
                           },
                           itemBuilder: (context, index) {
@@ -100,6 +119,9 @@ class _HomeVideoFeedScreenState extends State<HomeVideoFeedScreen> {
                               isLoadingMore:
                                   state.isLoadingMore &&
                                   index == state.videos.length - 1,
+                                showChrome:
+                                  isCurrentVideo && _isChromeVisible,
+                                onToggleChrome: _toggleChromeVisibility,
                               onTogglePlayback: () =>
                                   cubit.togglePlayback(index),
                               currentUserRating: isCurrentVideo
@@ -112,7 +134,7 @@ class _HomeVideoFeedScreenState extends State<HomeVideoFeedScreen> {
                                       onSubmitRating: cubit.submitRating,
                                     )
                                   : null,
-                                onOpenCreatorProfile: userId.isEmpty
+                              onOpenCreatorProfile: userId.isEmpty
                                   ? null
                                   : () {
                                       HapticFeedback.mediumImpact();
@@ -132,9 +154,9 @@ class _HomeVideoFeedScreenState extends State<HomeVideoFeedScreen> {
                             );
                           },
                         ),
-                        HomeVideoFeedBackButton(onPressed: () => context.pop()),
-
-                        HomeVideoFeedDropdownMenu(
+                        _HomeVideoFeedChrome(
+                          isVisible: _isChromeVisible,
+                          onBackPressed: () => context.pop(),
                           onReportPressed: () async {
                             final videoId =
                                 cubit.reportVideoIdForIndex(
@@ -195,6 +217,44 @@ class _HomeVideoFeedScreenState extends State<HomeVideoFeedScreen> {
               ),
         );
       },
+    );
+  }
+}
+
+class _HomeVideoFeedChrome extends StatelessWidget {
+  const _HomeVideoFeedChrome({
+    required this.isVisible,
+    required this.onBackPressed,
+    required this.onReportPressed,
+  });
+
+  final bool isVisible;
+  final VoidCallback onBackPressed;
+  final VoidCallback onReportPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!isVisible) {
+      return const SizedBox.shrink();
+    }
+
+    return Stack(
+      children: [
+        SafeArea(
+          child: Align(
+            alignment: Alignment.topLeft,
+            child: CustomBackButton(onPressed: onBackPressed),
+          ),
+        ),
+        SafeArea(
+          child: Align(
+            alignment: Alignment.topRight,
+            child: HomeVideoFeedDropdownMenu(
+              onReportPressed: onReportPressed,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

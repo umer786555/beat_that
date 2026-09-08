@@ -4,8 +4,8 @@ import 'package:beat_that/constants/app_enums.dart';
 import 'package:beat_that/constants/app_strings.dart';
 import 'package:beat_that/constants/app_urls.dart';
 import 'package:beat_that/screens/settings/bloc/settings_bloc.dart';
+import 'package:beat_that/widgets/confirmation_dialog.dart';
 import 'package:beat_that/widgets/custom_snackbar.dart';
-import 'package:beat_that/widgets/delete_account_confirmation_dialog.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -30,13 +30,78 @@ class SettingsScreen extends StatelessWidget {
     }
 
     try {
-      await launchUrl(
-        uri,
-        mode: LaunchMode.externalApplication,
-      );
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
     } catch (_) {
       return;
     }
+  }
+
+  static Future<bool> _showConfirmationDialog(
+    BuildContext context, {
+    required String title,
+    required String message,
+    required String confirmLabel,
+    required IconData icon,
+    required Color iconColor,
+  }) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) {
+        return ConfirmationDialog(
+          title: title,
+          message: message,
+          confirmLabel: confirmLabel,
+          icon: icon,
+          iconColor: iconColor,
+        );
+      },
+    );
+
+    return confirmed ?? false;
+  }
+
+  static Future<void> _confirmDeleteAccountFlow(BuildContext context) async {
+    final firstConfirmed = await _showConfirmationDialog(
+      context,
+      title: AppStrings.deleteAccountDialogTitle,
+      message: AppStrings.deleteAccountDialogIntroMessage,
+      confirmLabel: AppStrings.delete,
+      icon: Icons.delete_forever,
+      iconColor: AppColors.red,
+    );
+    if (!firstConfirmed || !context.mounted) {
+      return;
+    }
+
+    final secondConfirmed = await _showConfirmationDialog(
+      context,
+      title: AppStrings.deleteAccountDialogFinalTitle,
+      message: AppStrings.deleteAccountDialogMessage,
+      confirmLabel: AppStrings.deleteAccountDialogFinalConfirm,
+      icon: Icons.delete_forever,
+      iconColor: AppColors.red,
+    );
+    if (!secondConfirmed || !context.mounted) {
+      return;
+    }
+
+    context.read<SettingsBloc>().add(const DeleteAccountRequested());
+  }
+
+  static Future<void> _confirmLogoutFlow(BuildContext context) async {
+    final confirmed = await _showConfirmationDialog(
+      context,
+      title: AppStrings.logOutDialogTitle,
+      message: AppStrings.logOutDialogMessage,
+      confirmLabel: AppStrings.logOutDialogTitle,
+      icon: Icons.logout,
+      iconColor: AppColors.red,
+    );
+    if (!confirmed || !context.mounted) {
+      return;
+    }
+
+    context.read<SettingsBloc>().add(const LogoutRequested());
   }
 
   Widget _buildNavigationTile({
@@ -134,10 +199,19 @@ class SettingsScreen extends StatelessWidget {
 
     return BlocListener<SettingsBloc, SettingsState>(
       listenWhen: (previous, current) =>
-          previous.errorMessage != current.errorMessage &&
-          current.errorMessage != null,
+          previous.errorMessage != current.errorMessage ||
+          previous.status != current.status,
       listener: (context, state) {
-        showErrorSnackBar(context, message: state.errorMessage!);
+        if (state.errorMessage != null) {
+          showErrorSnackBar(context, message: state.errorMessage!);
+        }
+
+        if (state.status == SettingsStatus.onboardingReset) {
+          showSuccessSnackBar(
+            context,
+            message: 'Feature tips have been reset for testing.',
+          );
+        }
       },
       child: Scaffold(
         appBar: AppBar(
@@ -172,7 +246,9 @@ class SettingsScreen extends StatelessWidget {
                         ),
                         secondary: Icon(
                           isDark ? Icons.dark_mode : Icons.light_mode,
-                          color: isDark ? AppColors.cyan : AppColors.electricMagenta,
+                          color: isDark
+                              ? AppColors.cyan
+                              : AppColors.electricMagenta,
                         ),
                         title: const Text(AppStrings.darkTheme),
                         onChanged: (_) {
@@ -190,6 +266,42 @@ class SettingsScreen extends StatelessWidget {
                       title: AppStrings.blockedUsers,
                       onTap: () {
                         context.pushNamed('blocked-users');
+                      },
+                    ),
+                    const SizedBox(height: 24),
+                    _buildSectionLabel(context, 'Testing'),
+                    BlocBuilder<SettingsBloc, SettingsState>(
+                      builder: (context, state) {
+                        return Card(
+                          child: ListTile(
+                            leading: Icon(
+                              Icons.refresh_rounded,
+                              color: accentColor,
+                            ),
+                            title: const Text('Reset feature tips'),
+                            subtitle: const Text(
+                              'Show onboarding hints again on Home, Profile, and Sports Hub.',
+                            ),
+                            trailing: state.isResettingOnboarding
+                                ? const SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Icon(Icons.chevron_right),
+                            enabled: !state.isBusy,
+                            onTap: state.isBusy
+                                ? null
+                                : () {
+                                    HapticFeedback.mediumImpact();
+                                    context.read<SettingsBloc>().add(
+                                      const ResetOnboardingRequested(),
+                                    );
+                                  },
+                          ),
+                        );
                       },
                     ),
                     const SizedBox(height: 24),
@@ -222,62 +334,47 @@ class SettingsScreen extends StatelessWidget {
                                 enabled: !state.isBusy,
                                 onTap: state.isBusy
                                     ? null
-                                    : () {
+                                    : () async {
                                         HapticFeedback.mediumImpact();
-                                        context.read<SettingsBloc>().add(
-                                          const LogoutRequested(),
-                                        );
+                                        await _confirmLogoutFlow(context);
                                       },
                               ),
                             ),
-                                  const SizedBox(height: 12),
-                                  Card(
-                                    child: ListTile(
-                                      leading: Icon(
-                                        Icons.delete_outline,
+                            const SizedBox(height: 12),
+                            Card(
+                              child: ListTile(
+                                leading: Icon(
+                                  Icons.delete_outline,
+                                  color: theme.colorScheme.onSurface,
+                                ),
+                                title: Text(
+                                  AppStrings.deleteAccount,
+                                  style: theme.textTheme.titleMedium?.copyWith(
+                                    color: theme.colorScheme.onSurface,
+                                  ),
+                                ),
+                                trailing: state.isDeletingAccount
+                                    ? const SizedBox(
+                                        width: 20,
+                                        height: 20,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
+                                      )
+                                    : Icon(
+                                        Icons.chevron_right,
                                         color: theme.colorScheme.onSurface,
                                       ),
-                                      title: Text(
-                                        AppStrings.deleteAccount,
-                                        style: theme.textTheme.titleMedium?.copyWith(
-                                          color: theme.colorScheme.onSurface,
-                                        ),
-                                      ),
-                                      trailing: state.isDeletingAccount
-                                          ? const SizedBox(
-                                              width: 20,
-                                              height: 20,
-                                              child: CircularProgressIndicator(
-                                                strokeWidth: 2,
-                                              ),
-                                            )
-                                          : Icon(
-                                              Icons.chevron_right,
-                                              color: theme.colorScheme.onSurface,
-                                            ),
-                                      enabled: !state.isBusy,
-                                      onTap: state.isBusy
-                                          ? null
-                                          : () {
-                                              HapticFeedback.selectionClick();
-                                              showDialog<void>(
-                                                context: context,
-                                                builder: (dialogContext) {
-                                                  return DeleteAccountConfirmationDialog(
-                                                    onCancel: () {
-                                                      Navigator.of(dialogContext).pop();
-                                                    },
-                                                    onConfirm: () {
-                                                      Navigator.of(dialogContext).pop();
-                                                      context.read<SettingsBloc>().add(
-                                                        const DeleteAccountRequested(),
-                                                      );
-                                                    },
-                                                  );
-                                                },
-                                              );
-                                            },
-                                    ),
+                                enabled: !state.isBusy,
+                                onTap: state.isBusy
+                                    ? null
+                                    : () async {
+                                        HapticFeedback.selectionClick();
+                                        await _confirmDeleteAccountFlow(
+                                          context,
+                                        );
+                                      },
+                              ),
                             ),
                           ],
                         );

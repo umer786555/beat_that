@@ -18,10 +18,80 @@ import 'package:beat_that/screens/profile/connections/bloc/profile_connections_b
 import 'package:beat_that/screens/profile/widgets/profile_videos_grid.dart';
 import 'package:beat_that/screens/profile/widgets/empty_videos_state.dart';
 import 'package:beat_that/screens/profile/widgets/profile_header.dart';
+import 'package:beat_that/services/app_onboarding.dart';
+import 'package:beat_that/services/onboarding_service.dart';
 import 'package:beat_that/routes/app_router.dart';
+import 'package:beat_that/service_locator.dart';
 
-class ProfileScreen extends StatelessWidget {
+class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
+
+  @override
+  State<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends State<ProfileScreen> {
+  static const int _profileOnboardingVersion = 1;
+
+  final OnboardingService _onboardingService = locator<OnboardingService>();
+  final GlobalKey _profilePictureOnboardingKey = GlobalKey();
+  final GlobalKey _statsOnboardingKey = GlobalKey();
+  final GlobalKey _settingsOnboardingKey = GlobalKey();
+  final GlobalKey _sportsHubOnboardingKey = GlobalKey();
+  bool _hasAttemptedProfileOnboarding = false;
+
+  Future<void> _maybePresentProfileOnboarding() async {
+    if (_hasAttemptedProfileOnboarding || !mounted) {
+      return;
+    }
+
+    _hasAttemptedProfileOnboarding = true;
+
+    await _onboardingService.startFlow(
+      context,
+      OnboardingFlowRequest(
+        flowId: OnboardingFlowIds.profileScreen,
+        version: _profileOnboardingVersion,
+        steps: <OnboardingStepData>[
+          OnboardingStepData(
+            key: _profilePictureOnboardingKey,
+            title: 'Edit your profile',
+            description:
+                'Tap your profile image to add or change the photo people will see across Beat That.',
+          ),
+          OnboardingStepData(
+            key: _statsOnboardingKey,
+            title: 'Track your network',
+            description:
+                'Use Following and Followers to see your connections and jump into those lists.',
+          ),
+          OnboardingStepData(
+            key: _settingsOnboardingKey,
+            title: 'Open settings',
+            description:
+                'Manage theme, safety controls, and account actions from here.',
+          ),
+          OnboardingStepData(
+            key: _sportsHubOnboardingKey,
+            title: 'Go to Sports Hub',
+            description:
+                'Pick a sport, upload your best move, and compete on the leaderboard from Sports Hub.',
+          ),
+        ],
+      ),
+      beforeStart: _showProfileOnboardingIntro,
+    );
+  }
+
+  Future<bool> _showProfileOnboardingIntro(BuildContext context) async {
+    return showAppOnboardingIntroSheet(
+      context,
+      icon: Icons.person_rounded,
+      title: 'This is your profile',
+      description:
+          'Profile is where you manage your identity, review your connections, and get back to the sports you want to compete in.',
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -34,7 +104,12 @@ class ProfileScreen extends StatelessWidget {
             showErrorSnackBar(context, message: event.message);
         }
       },
-      child: BlocBuilder<ProfileBloc, ProfileState>(
+      child: BlocConsumer<ProfileBloc, ProfileState>(
+        listener: (context, state) {
+          if (state is ProfileLoaded) {
+            _maybePresentProfileOnboarding();
+          }
+        },
         builder: (context, state) {
           final isDark = context.watch<ThemeBloc>().state.themeMode.isDark;
           if (state is CameraPermissionDenied) {
@@ -79,12 +154,18 @@ class ProfileScreen extends StatelessWidget {
                     ),
                   ),
                   actions: [
-                    IconButton(
-                      icon: const Icon(Icons.settings_outlined),
-                      onPressed: () {
-                        HapticFeedback.mediumImpact();
-                        GoRouter.of(context).pushNamed('settings');
-                      },
+                    AppOnboardingTarget(
+                      targetKey: _settingsOnboardingKey,
+                      title: 'Open settings',
+                      description:
+                          'Manage theme, safety controls, and account actions from here.',
+                      child: IconButton(
+                        icon: const Icon(Icons.settings_outlined),
+                        onPressed: () {
+                          HapticFeedback.mediumImpact();
+                          GoRouter.of(context).pushNamed('settings');
+                        },
+                      ),
                     ),
                   ],
                 ),
@@ -101,6 +182,18 @@ class ProfileScreen extends StatelessWidget {
                         profileUrl: state.profileUrl,
                         username: state.username,
                         isDark: isDark,
+                        profilePictureOnboardingStep: OnboardingStepData(
+                          key: _profilePictureOnboardingKey,
+                          title: 'Edit your profile',
+                          description:
+                              'Tap your profile image to add or change the photo people will see across Beat That.',
+                        ),
+                        statsOnboardingStep: OnboardingStepData(
+                          key: _statsOnboardingKey,
+                          title: 'Track your network',
+                          description:
+                              'Use Following and Followers to see your connections and jump into those lists.',
+                        ),
                         onProfilePictureTap: () {
                           context.read<ProfileBloc>().add(
                             const AddProfileImageEvent(),
@@ -110,8 +203,7 @@ class ProfileScreen extends StatelessWidget {
                           GoRouter.of(context).pushNamed(
                             'profile-connections',
                             extra: ProfileConnectionsExtra(
-                              connectionType:
-                                  ProfileConnectionsType.following,
+                              connectionType: ProfileConnectionsType.following,
                             ),
                           );
                         },
@@ -119,39 +211,44 @@ class ProfileScreen extends StatelessWidget {
                           GoRouter.of(context).pushNamed(
                             'profile-connections',
                             extra: ProfileConnectionsExtra(
-                              connectionType:
-                                  ProfileConnectionsType.followers,
+                              connectionType: ProfileConnectionsType.followers,
                             ),
                           );
                         },
                       ),
-                    if (state.myVideo.isEmpty)
-                      EmptyVideosState(isDark: isDark)
-                    else
-                      ProfileVideosGrid(
-                        videos: state.myVideo,
-                        isDark: isDark,
-                        onVideoOpen: (videoPath) {},
-                        onVideoDeleteConfirmed: (videoId) {},
-                      ),
-                  ],
-                ),
-                ),
-                floatingActionButton: FloatingActionButton.extended(
-                  onPressed: () async {
-                    HapticFeedback.mediumImpact();
-                    GoRouter.of(context).pushNamed('sports-hub');
-                  },
-                  backgroundColor: isDark
-                      ? AppColors.cyan
-                      : AppColors.electricMagenta,
-                  foregroundColor: isDark ? AppColors.white : AppColors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+                      if (state.myVideo.isEmpty)
+                        EmptyVideosState(isDark: isDark)
+                      else
+                        ProfileVideosGrid(
+                          videos: state.myVideo,
+                          isDark: isDark,
+                          onVideoOpen: (videoPath) {},
+                          onVideoDeleteConfirmed: (videoId) {},
+                        ),
+                    ],
                   ),
-                  icon: const Icon(Icons.sports_cricket),
-                  label: const Text('Sports Hub'),
-                  tooltip: 'Browse Sports',
+                ),
+                floatingActionButton: AppOnboardingTarget(
+                  targetKey: _sportsHubOnboardingKey,
+                  title: 'Go to Sports Hub',
+                  description:
+                      'Pick a sport, upload your best move, and compete on the leaderboard from Sports Hub.',
+                  child: FloatingActionButton.extended(
+                    onPressed: () async {
+                      HapticFeedback.mediumImpact();
+                      GoRouter.of(context).pushNamed('sports-hub');
+                    },
+                    backgroundColor: isDark
+                        ? AppColors.cyan
+                        : AppColors.electricMagenta,
+                    foregroundColor: isDark ? AppColors.white : AppColors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    icon: const Icon(Icons.sports_cricket),
+                    label: const Text('Sports Hub'),
+                    tooltip: 'Browse Sports',
+                  ),
                 ),
               ),
             );
@@ -168,9 +265,7 @@ class ProfileScreen extends StatelessWidget {
               message: state.message,
               primaryButtonText: 'Retry',
               primaryButtonCallback: () {
-                context.read<ProfileBloc>().add(
-                  const LoadProfileEvent(),
-                );
+                context.read<ProfileBloc>().add(const LoadProfileEvent());
               },
             );
           }

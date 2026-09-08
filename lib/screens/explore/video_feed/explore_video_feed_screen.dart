@@ -5,7 +5,7 @@ import 'package:beat_that/screens/explore/video_feed/explore_video_feed_cubit.da
 import 'package:beat_that/screens/explore/video_feed/explore_video_feed_presentation_event.dart';
 import 'package:beat_that/screens/explore/video_feed/explore_video_feed_state.dart';
 import 'package:beat_that/widgets/custom_snackbar.dart';
-import 'package:beat_that/widgets/interactive_button.dart';
+import 'package:beat_that/widgets/video_overlay_action_button.dart';
 import 'package:beat_that/widgets/video_rating_bottom_sheet.dart';
 import 'package:bloc_presentation/bloc_presentation.dart';
 import 'package:flutter/material.dart';
@@ -80,7 +80,7 @@ class _ExploreVideoFeedScreenState extends State<ExploreVideoFeedScreen> {
                   onOpenRating: () => _showRatingSheet(
                     context,
                     cubit: cubit,
-                    onSubmitRating: cubit. submitRating,
+                    onSubmitRating: cubit.submitRating,
                   ),
                   onRetryActiveVideo: onRetryActiveVideo,
                   onBack: context.pop,
@@ -338,110 +338,120 @@ class _VideoFeedPage extends StatelessWidget {
             ),
           Positioned(
             left: 16,
-            right: 88,
-            bottom: 40,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                GestureDetector(
-                  onTap: userId.isEmpty
-                      ? null
-                      : () {
-                          HapticFeedback.mediumImpact();
-                          context.pushNamed(
-                            'creator-profile',
-                            extra: CreatorProfileExtra(userId: userId),
-                          );
-                        },
-                  child: Text(
-                    '@$username',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  title,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                if (description.isNotEmpty) ...[
-                  const SizedBox(height: 8),
-                  Text(
-                    description,
-                    maxLines: 3,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.86),
-                      fontSize: 14,
-                      height: 1.3,
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    _VideoInfoChip(
-                      icon: Icons.visibility_outlined,
-                      label: _formatViewCount(viewCount),
-                    ),
-                    const SizedBox(width: 8),
-                    _VideoInfoChip(
-                      icon: Icons.star_rounded,
-                      label: rating.toStringAsFixed(1),
-                      iconColor: Colors.amber,
-                    ),
-                  ],
-                ),
-                if (isLoadingMore) ...[
-                  const SizedBox(height: 18),
-                  Row(
-                    children: const [
-                      SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation<Color>(
-                            AppColors.green,
+            right: 16,
+            bottom: 0,
+            child: SafeArea(
+              top: false,
+              minimum: const EdgeInsets.only(bottom: 24),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Expanded(
+                    child: Padding(
+                      padding: EdgeInsets.only(right: canRateVideo ? 16 : 0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          GestureDetector(
+                            onTap: userId.isEmpty
+                                ? null
+                                : () {
+                                    HapticFeedback.mediumImpact();
+                                    context.pushNamed(
+                                      'creator-profile',
+                                      extra: CreatorProfileExtra(
+                                        userId: userId,
+                                      ),
+                                    );
+                                  },
+                            child: Text(
+                              '@$username',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
                           ),
-                        ),
+                          const SizedBox(height: 10),
+                          Text(
+                            title,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          if (description.isNotEmpty) ...[
+                            const SizedBox(height: 8),
+                            Text(
+                              description,
+                              maxLines: 3,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.86),
+                                fontSize: 14,
+                                height: 1.3,
+                              ),
+                            ),
+                          ],
+                          const SizedBox(height: 12),
+                          Row(
+                            children: [
+                              _VideoInfoChip(
+                                icon: Icons.visibility_outlined,
+                                label: _formatViewCount(viewCount),
+                              ),
+                              const SizedBox(width: 8),
+                              _VideoInfoChip(
+                                icon: Icons.star_rounded,
+                                label: rating.toStringAsFixed(1),
+                                iconColor: Colors.amber,
+                              ),
+                            ],
+                          ),
+                          if (isLoadingMore) ...[
+                            const SizedBox(height: 18),
+                            Row(
+                              children: const [
+                                SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                      AppColors.green,
+                                    ),
+                                  ),
+                                ),
+                                SizedBox(width: 10),
+                                Text(
+                                  'Loading more videos',
+                                  style: TextStyle(color: Colors.white),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ],
                       ),
-                      SizedBox(width: 10),
-                      Text(
-                        'Loading more videos',
-                        style: TextStyle(color: Colors.white),
-                      ),
-                    ],
+                    ),
                   ),
+                  if (canRateVideo)
+                    VideoOverlayActionButton(
+                      icon: Icons.star_rounded,
+                      label: currentUserRating == null
+                          ? 'Rate'
+                          : '${currentUserRating!}/10',
+                      accentColor: Colors.amber,
+                      onTap: onOpenRating,
+                    ),
                 ],
-              ],
-            ),
-          ),
-          if (canRateVideo)
-            Positioned(
-              right: 16,
-              bottom: 48,
-              child: SafeArea(
-                top: false,
-                child: _VideoActionButton(
-                  icon: Icons.star_rounded,
-                  label: currentUserRating == null
-                      ? 'Rate'
-                      : '${currentUserRating!}/10',
-                  accentColor: Colors.amber,
-                  onTap: onOpenRating,
-                ),
               ),
             ),
+          ),
         ],
       ),
     );
@@ -455,59 +465,6 @@ class _VideoFeedPage extends StatelessWidget {
       return '${(count / 1000).toStringAsFixed(1)}K';
     }
     return count.toString();
-  }
-}
-
-class _VideoActionButton extends StatelessWidget {
-  const _VideoActionButton({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-    this.accentColor = Colors.white,
-  });
-
-  final IconData icon;
-  final String label;
-  final Color accentColor;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return InteractiveButton(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(24),
-      child: Container(
-        width: 64,
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
-        decoration: BoxDecoration(
-          color: Colors.black.withValues(alpha: 0.34),
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.22),
-              blurRadius: 18,
-              offset: const Offset(0, 10),
-            ),
-          ],
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, color: accentColor, size: 28),
-            const SizedBox(height: 6),
-            Text(
-              label,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 }
 
@@ -572,3 +529,4 @@ class _VideoInfoChip extends StatelessWidget {
     );
   }
 }
+

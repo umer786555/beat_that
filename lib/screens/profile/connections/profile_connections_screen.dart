@@ -111,9 +111,7 @@ class _ProfileConnectionsScreenState extends State<ProfileConnectionsScreen> {
     final emptyTitle = isFollowers
         ? 'No followers yet'
         : 'Not following anyone';
-    final emptyDescription = isFollowers
-        ? 'When people follow you, they will appear here.'
-        : 'When you follow people, they will appear here.';
+
     final emptyIcon = isFollowers
         ? Icons.group_outlined
         : Icons.person_add_alt_1_outlined;
@@ -164,7 +162,7 @@ class _ProfileConnectionsScreenState extends State<ProfileConnectionsScreen> {
             if (isInitialEmptyState) {
               return EmptyConnectionsWidget(
                 title: emptyTitle,
-                description: emptyDescription,
+                description: '',
                 icon: emptyIcon,
                 accentColor: emptyAccent,
               );

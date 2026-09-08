@@ -62,10 +62,12 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState>
           .checkPhotosPermissionOnLoad();
 
       // Step 2: Fetch all thumbnail URLs for the current user's videos from Supabase
-        final myVideos = await supabaseService.getMyVideo();
+      final myVideos = await supabaseService.getMyVideo();
 
       // Step 3: Fetch the username from preferences and cache at block level
       userProfile = await preferencesService.fetchUserProfile();
+
+      await _syncApprovalSubscription(myVideos);
 
       // Initialize with permissions, thumbnails, and cached profile data.
       emit(
@@ -77,24 +79,22 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState>
           profileUrl: userProfile?.profileUrl,
         ),
       );
-
-      // ==================== Setup Realtime Listener ====================
-      // Only subscribe to approval changes if any video has a null approved status
-      final hasNullApproval = myVideos.any((video) => video.approved == null);
-
-      if (hasNullApproval) {
-        print(
-          '[PROFILE] Videos with null approval detected - subscribing to realtime updates',
-        );
-        _subscribeToApprovalChanges();
-      } else {
-        print(
-          '[PROFILE] All videos have approval status - realtime listener not needed',
-        );
-      }
     } catch (e) {
       emit(ProfileError(message: '${AppStrings.failedToLoadProfile}: $e'));
     }
+  }
+
+  Future<void> _syncApprovalSubscription(List<MyVideo> videos) async {
+    final hasPendingApproval = videos.any((video) => video.approved == null);
+
+    if (hasPendingApproval) {
+      if (_approvalChannel == null) {
+        _subscribeToApprovalChanges();
+      }
+      return;
+    }
+
+    await _unsubscribeFromApprovalChanges();
   }
 
   /// Subscribe to real-time approval status changes
@@ -114,9 +114,21 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState>
           );
         },
       );
-      print('[PROFILE] Successfully subscribed to approval changes');
     } catch (e) {
       print('[ERROR] Failed to subscribe to approval changes: $e');
+    }
+  }
+
+  Future<void> _unsubscribeFromApprovalChanges() async {
+    if (_approvalChannel == null) {
+      return;
+    }
+
+    try {
+      await _approvalChannel!.unsubscribe();
+      _approvalChannel = null;
+    } catch (e) {
+      print('[ERROR] Failed to unsubscribe from approval changes: $e');
     }
   }
 
@@ -261,12 +273,16 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState>
     Emitter<ProfileState> emit,
   ) async {
     try {
-      // Save current state before emitting loading
       final previousState = state;
-      emit(ProfileLoading());
+
+      // Keep the current profile content visible during video-only refreshes.
+      if (previousState is! ProfileLoaded) {
+        emit(ProfileLoading());
+      }
 
       // Fetch updated thumbnails
       final updatedThumbnails = await supabaseService.getMyVideo();
+      await _syncApprovalSubscription(updatedThumbnails);
 
       // Emit success with updated thumbnails
       if (previousState is ProfileLoaded) {
@@ -296,11 +312,8 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState>
     try {
       final currentState = state;
 
-      // Only process if we're in ProfileLoaded state
       if (currentState is! ProfileLoaded) {
-        print(
-          '[PROFILE] Ignoring approval update - not in ProfileLoaded state',
-        );
+        add(const RefreshVideosEvent());
         return;
       }
 
@@ -310,9 +323,7 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState>
       );
 
       if (videoIndex == -1) {
-        print(
-          '[PROFILE] Video not found for approval update: ${event.videoId}',
-        );
+        add(const RefreshVideosEvent());
         return;
       }
 
@@ -324,6 +335,8 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState>
       // Create new videos list with updated video
       final updatedVideos = List<MyVideo>.from(currentState.myVideo);
       updatedVideos[videoIndex] = updatedVideo;
+
+      await _syncApprovalSubscription(updatedVideos);
 
       print(
         '[PROFILE] Updated video approval: ${event.videoId} -> ${event.approvalStatus}',
@@ -342,15 +355,7 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState>
   /// and stop receiving approval change updates.
   @override
   Future<void> close() async {
-    if (_approvalChannel != null) {
-      try {
-        print('[PROFILE] Unsubscribing from approval changes');
-        await _approvalChannel!.unsubscribe();
-        _approvalChannel = null;
-      } catch (e) {
-        print('[ERROR] Failed to unsubscribe from approval changes: $e');
-      }
-    }
+    await _unsubscribeFromApprovalChanges();
     return super.close();
   }
 

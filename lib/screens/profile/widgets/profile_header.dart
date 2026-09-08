@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:beat_that/bloc/follow_counts_cubit.dart';
 import 'package:beat_that/constants/app_colors.dart';
+import 'package:beat_that/services/app_onboarding.dart';
+import 'package:beat_that/services/onboarding_service.dart';
 import 'package:beat_that/screens/profile/widgets/profile_stat_tile.dart';
 
 /// A reusable profile header widget displaying user info, profile picture, and stats.
@@ -45,6 +47,12 @@ class ProfileHeader extends StatelessWidget {
   /// Callback triggered when "Followers" stat is tapped
   final VoidCallback onFollowersTap;
 
+  /// Optional onboarding step for profile picture
+  final OnboardingStepData? profilePictureOnboardingStep;
+
+  /// Optional onboarding step for the stats row
+  final OnboardingStepData? statsOnboardingStep;
+
   const ProfileHeader({
     super.key,
     required this.profileUrl,
@@ -53,11 +61,13 @@ class ProfileHeader extends StatelessWidget {
     required this.onProfilePictureTap,
     required this.onFollowingTap,
     required this.onFollowersTap,
+    this.profilePictureOnboardingStep,
+    this.statsOnboardingStep,
   });
 
   /// Builds the profile picture widget with a solid outer ring
   Widget _buildProfilePicture() {
-    return GestureDetector(
+    final picture = GestureDetector(
       onTap: () {
         HapticFeedback.mediumImpact();
         onProfilePictureTap();
@@ -65,10 +75,7 @@ class ProfileHeader extends StatelessWidget {
       child: Container(
         width: 72,
         height: 72,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          
-        ),
+        decoration: BoxDecoration(shape: BoxShape.circle),
         child: Stack(
           alignment: Alignment.center,
           children: [
@@ -115,11 +122,13 @@ class ProfileHeader extends StatelessWidget {
                               ? [
                                   AppColors.cyan.withValues(alpha: 0.2),
                                   AppColors.electricPurple.withValues(
-                                      alpha: 0.2),
+                                    alpha: 0.2,
+                                  ),
                                 ]
                               : [
-                                  AppColors.electricMagenta
-                                      .withValues(alpha: 0.1),
+                                  AppColors.electricMagenta.withValues(
+                                    alpha: 0.1,
+                                  ),
                                   AppColors.cyan.withValues(alpha: 0.08),
                                 ],
                         ),
@@ -129,14 +138,25 @@ class ProfileHeader extends StatelessWidget {
                         size: 36,
                         color: isDark
                             ? AppColors.cyan.withValues(alpha: 0.7)
-                            : AppColors.electricMagenta.withValues(
-                                alpha: 0.6),
+                            : AppColors.electricMagenta.withValues(alpha: 0.6),
                       ),
                     ),
             ),
           ],
         ),
       ),
+    );
+
+    final onboardingStep = profilePictureOnboardingStep;
+    if (onboardingStep == null) {
+      return picture;
+    }
+
+    return AppOnboardingTarget(
+      targetKey: onboardingStep.key,
+      title: onboardingStep.title,
+      description: onboardingStep.description,
+      child: picture,
     );
   }
 
@@ -156,6 +176,44 @@ class ProfileHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final statsRow = Row(
+      mainAxisAlignment: MainAxisAlignment.start,
+      children: [
+        Expanded(
+          child: BlocBuilder<FollowCountsCubit, FollowCountsState>(
+            builder: (context, followCountsState) {
+              return _buildStatTile(
+                label: 'Following',
+                count: followCountsState.following,
+                onTap: onFollowingTap,
+              );
+            },
+          ),
+        ),
+        Expanded(
+          child: BlocBuilder<FollowCountsCubit, FollowCountsState>(
+            builder: (context, followCountsState) {
+              return _buildStatTile(
+                label: 'Followers',
+                count: followCountsState.followers,
+                onTap: onFollowersTap,
+              );
+            },
+          ),
+        ),
+      ],
+    );
+
+    final statsOnboarding = statsOnboardingStep;
+    final statsSection = statsOnboarding == null
+        ? statsRow
+        : AppOnboardingTarget(
+            targetKey: statsOnboarding.key,
+            title: statsOnboarding.title,
+            description: statsOnboarding.description,
+            child: statsRow,
+          );
+
     return SliverToBoxAdapter(
       child: Padding(
         padding: const EdgeInsets.all(12),
@@ -187,35 +245,7 @@ class ProfileHeader extends StatelessWidget {
                       ),
                       const SizedBox(height: 8),
                       // Stats row (Following and Followers)
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.start,
-                        children: [
-                          Expanded(
-                            child: BlocBuilder<FollowCountsCubit,
-                                FollowCountsState>(
-                              builder: (context, followCountsState) {
-                                return _buildStatTile(
-                                  label: 'Following',
-                                  count: followCountsState.following,
-                                  onTap: onFollowingTap,
-                                );
-                              },
-                            ),
-                          ),
-                          Expanded(
-                            child: BlocBuilder<FollowCountsCubit,
-                                FollowCountsState>(
-                              builder: (context, followCountsState) {
-                                return _buildStatTile(
-                                  label: 'Followers',
-                                  count: followCountsState.followers,
-                                  onTap: onFollowersTap,
-                                );
-                              },
-                            ),
-                          ),
-                        ],
-                      ),
+                      statsSection,
                     ],
                   ),
                 ),
@@ -228,18 +258,11 @@ class ProfileHeader extends StatelessWidget {
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   colors: [
-                    (isDark
-                            ? Colors.white
-                            : Colors.black)
-                        .withValues(alpha: 0),
-                    (isDark
-                            ? Colors.white
-                            : Colors.black)
-                        .withValues(alpha: 0.1),
-                    (isDark
-                            ? Colors.white
-                            : Colors.black)
-                        .withValues(alpha: 0),
+                    (isDark ? Colors.white : Colors.black).withValues(alpha: 0),
+                    (isDark ? Colors.white : Colors.black).withValues(
+                      alpha: 0.1,
+                    ),
+                    (isDark ? Colors.white : Colors.black).withValues(alpha: 0),
                   ],
                 ),
               ),
