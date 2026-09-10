@@ -9,6 +9,7 @@ import 'package:beat_that/screens/explore/video_feed/widgets/explore_error_state
 import 'package:beat_that/screens/explore/video_feed/widgets/no_results_state.dart';
 import 'package:beat_that/screens/explore/video_feed/widgets/search_header.dart';
 import 'package:beat_that/screens/explore/video_feed/widgets/search_loading_card.dart';
+import 'package:beat_that/widgets/explore_feed_native_ad_card.dart';
 import 'package:beat_that/widgets/video_feed_card.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -37,6 +38,8 @@ class _ExploreView extends StatefulWidget {
 class _ExploreViewState extends State<_ExploreView> {
   static const Duration _searchDebounce = Duration(milliseconds: 350);
   static const double _loadMoreThreshold = 360;
+  static const int _firstAdInsertionIndex = 4;
+  static const int _subsequentAdInsertionInterval = 8;
 
   final TextEditingController _searchController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
@@ -136,9 +139,7 @@ class _ExploreViewState extends State<_ExploreView> {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final platformLocale = WidgetsBinding.instance.platformDispatcher.locale;
-    final availableSportIds = getOrderedSportIdsForLocale(
-      platformLocale,
-    );
+    final availableSportIds = getOrderedSportIdsForLocale(platformLocale);
 
     Future<void> onRefresh() async {
       final exploreBloc = context.read<ExploreBloc>();
@@ -221,62 +222,9 @@ class _ExploreViewState extends State<_ExploreView> {
                       Expanded(
                         child: RefreshIndicator(
                           onRefresh: onRefresh,
-                          child: GridView.builder(
-                            controller: _scrollController,
-                            padding: const EdgeInsets.all(6),
-                            physics: const AlwaysScrollableScrollPhysics(),
-                            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                              crossAxisCount: 2,
-                              crossAxisSpacing: 6,
-                              mainAxisSpacing: 6,
-                              childAspectRatio: 0.64,
-                            ),
-                            itemCount:
-                                loadedState.videos.length +
-                                (loadedState.isLoadingMore ? 2 : 0),
-                            itemBuilder: (context, index) {
-                              if (index >= loadedState.videos.length) {
-                                return SearchLoadingCard(isDark: isDark);
-                              }
-
-                              final video = loadedState.videos[index];
-                              return VideoFeedCard(
-                                videoId: video.id,
-                                thumbnailUrl: video.thumbnailUrl ?? '',
-                                title: video.title,
-                                username: video.username,
-                                sportId: video.sportId,
-                                viewCount: video.viewCount,
-                                rating: video.averageRating,
-                                onTap: () {
-                                  HapticFeedback.mediumImpact();
-
-                                  context.pushNamed(
-                                    'explore-video-feed',
-                                    extra: ExploreVideoFeedExtra(
-                                      videos: List.of(loadedState.videos),
-                                      initialIndex: index,
-                                      query: loadedState.query,
-                                      selectedSportId:
-                                          loadedState.selectedSportId,
-                                      nextOffset: loadedState.nextOffset,
-                                      hasMoreContent: loadedState.hasMore,
-                                    ),
-                                  );
-                                },
-                                onUsernameTap: () {
-                                  final userId = video.userId;
-                                  if (userId.isEmpty) {
-                                    return;
-                                  }
-
-                                  context.pushNamed(
-                                    'creator-profile',
-                                    extra: CreatorProfileExtra(userId: userId),
-                                  );
-                                },
-                              );
-                            },
+                          child: _buildExploreGrid(
+                            loadedState: loadedState,
+                            isDark: isDark,
                           ),
                         ),
                       ),
@@ -289,6 +237,139 @@ class _ExploreViewState extends State<_ExploreView> {
         ),
       ),
     );
+  }
+
+  Widget _buildExploreGrid({
+    required ExploreLoaded loadedState,
+    required bool isDark,
+  }) {
+    final sections = _buildFeedSections(loadedState.videos);
+
+    return CustomScrollView(
+      controller: _scrollController,
+      physics: const AlwaysScrollableScrollPhysics(),
+      slivers: [
+        for (
+          var sectionIndex = 0;
+          sectionIndex < sections.length;
+          sectionIndex++
+        ) ...[
+          _buildVideoSectionSliver(
+            sections[sectionIndex],
+            loadedState: loadedState,
+          ),
+          if (sections[sectionIndex].showsAdAfter)
+            SliverToBoxAdapter(
+              child: ExploreFeedNativeAdCard(slotIndex: sectionIndex),
+            ),
+        ],
+        if (loadedState.isLoadingMore) _buildLoadingSliver(isDark: isDark),
+        const SliverToBoxAdapter(child: SizedBox(height: 24)),
+      ],
+    );
+  }
+
+  SliverPadding _buildVideoSectionSliver(
+    _ExploreFeedSection section, {
+    required ExploreLoaded loadedState,
+  }) {
+    return SliverPadding(
+      padding: EdgeInsets.fromLTRB(
+        6,
+        section.startVideoIndex == 0 ? 6 : 0,
+        6,
+        0,
+      ),
+      sliver: SliverGrid(
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2,
+          crossAxisSpacing: 6,
+          mainAxisSpacing: 6,
+          childAspectRatio: 0.64,
+        ),
+        delegate: SliverChildBuilderDelegate((context, localIndex) {
+          final globalIndex = section.startVideoIndex + localIndex;
+          final video = section.videos[localIndex];
+          return VideoFeedCard(
+            videoId: video.id,
+            thumbnailUrl: video.thumbnailUrl ?? '',
+            title: video.title,
+            username: video.username,
+            sportId: video.sportId,
+            viewCount: video.viewCount,
+            rating: video.averageRating,
+            onTap: () {
+              HapticFeedback.mediumImpact();
+
+              context.pushNamed(
+                'explore-video-feed',
+                extra: ExploreVideoFeedExtra(
+                  videos: List.of(loadedState.videos),
+                  initialIndex: globalIndex,
+                  query: loadedState.query,
+                  selectedSportId: loadedState.selectedSportId,
+                  nextOffset: loadedState.nextOffset,
+                  hasMoreContent: loadedState.hasMore,
+                ),
+              );
+            },
+            onUsernameTap: () {
+              final userId = video.userId;
+              if (userId.isEmpty) {
+                return;
+              }
+
+              context.pushNamed(
+                'creator-profile',
+                extra: CreatorProfileExtra(userId: userId),
+              );
+            },
+          );
+        }, childCount: section.videos.length),
+      ),
+    );
+  }
+
+  SliverPadding _buildLoadingSliver({required bool isDark}) {
+    return SliverPadding(
+      padding: const EdgeInsets.fromLTRB(6, 12, 6, 0),
+      sliver: SliverGrid(
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2,
+          crossAxisSpacing: 6,
+          mainAxisSpacing: 6,
+          childAspectRatio: 0.64,
+        ),
+        delegate: SliverChildBuilderDelegate((context, index) {
+          return SearchLoadingCard(isDark: isDark);
+        }, childCount: 2),
+      ),
+    );
+  }
+
+  List<_ExploreFeedSection> _buildFeedSections(List<dynamic> videos) {
+    final sections = <_ExploreFeedSection>[];
+    var start = 0;
+    var nextChunkLength = _firstAdInsertionIndex;
+
+    while (start < videos.length) {
+      final end = (start + nextChunkLength < videos.length)
+          ? start + nextChunkLength
+          : videos.length;
+
+      sections.add(
+        _ExploreFeedSection(
+          startVideoIndex: start,
+          videos: videos.sublist(start, end),
+          showsAdAfter: end < videos.length,
+        ),
+      );
+
+      start = end;
+      nextChunkLength = _subsequentAdInsertionInterval;
+    }
+
+    return sections;
   }
 
   Widget _buildRefreshableBody({
@@ -310,4 +391,16 @@ class _ExploreViewState extends State<_ExploreView> {
       },
     );
   }
+}
+
+class _ExploreFeedSection {
+  const _ExploreFeedSection({
+    required this.startVideoIndex,
+    required this.videos,
+    required this.showsAdAfter,
+  });
+
+  final int startVideoIndex;
+  final List<dynamic> videos;
+  final bool showsAdAfter;
 }

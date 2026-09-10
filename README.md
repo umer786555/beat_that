@@ -15,3 +15,7 @@ A few resources to get you started if this is your first Flutter project:
 For help getting started with Flutter development, view the
 [online documentation](https://docs.flutter.dev/), which offers tutorials,
 samples, guidance on mobile development, and a full API reference.
+
+## AdMob
+
+The repo's current AdMob configuration, platform setup, consent flow, live placements, and release/testing notes are documented in [docs/admob.md](/Users/umermalik/beat_that/docs/admob.md).

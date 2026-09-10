@@ -8,6 +8,7 @@ import 'package:beat_that/service_locator.dart';
 import 'package:beat_that/services/video_picker_service.dart';
 import 'package:beat_that/screens/profile/widgets/upload_video_bottom_sheet.dart';
 import 'package:beat_that/routes/app_router.dart';
+import 'package:beat_that/widgets/sport_details_native_ad_card.dart';
 import 'package:beat_that/widgets/loading_screen.dart';
 import 'package:beat_that/widgets/subcategory_grid_item.dart';
 import 'bloc/sport_details_bloc.dart';
@@ -43,6 +44,7 @@ class SportDetailsScreen extends StatelessWidget {
             );
           }
         },
+
         onUploadFromGallerySelected: () async {
           final video = await videoPickerService.pickGalleryVideo();
           if (video != null && context.mounted) {
@@ -121,6 +123,8 @@ class SportDetailsScreen extends StatelessWidget {
                       height: 1.4,
                     ),
                   ),
+                  const SizedBox(height: 10),
+                  const SportDetailsNativeAdCard(),
                   const SizedBox(height: 18),
                   for (
                     var index = 0;

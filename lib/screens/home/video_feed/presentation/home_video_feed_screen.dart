@@ -1,14 +1,21 @@
+import 'dart:async';
+
+import 'package:beat_that/constants/ad_mob_ids.dart';
 import 'package:beat_that/routes/app_router.dart';
 import 'package:beat_that/reporting/models/report_target.dart';
 import 'package:beat_that/reporting/presentation/show_content_report_bottom_sheet.dart';
+import 'package:beat_that/service_locator.dart';
+import 'package:beat_that/services/ad_mob_consent_service.dart';
 import 'package:beat_that/widgets/custom_snackbar.dart';
 import 'package:beat_that/widgets/video_rating_bottom_sheet.dart';
 import 'package:beat_that/widgets/custom_back_button.dart';
 import 'package:bloc_presentation/bloc_presentation.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+import 'package:google_mobile_ads/google_mobile_ads.dart';
 
 import '../state/home_video_feed_cubit.dart';
 import '../state/home_video_feed_state.dart';
@@ -31,19 +38,154 @@ class HomeVideoFeedScreen extends StatefulWidget {
 }
 
 class _HomeVideoFeedScreenState extends State<HomeVideoFeedScreen> {
+  static const int _firstInterstitialThreshold = 3;
+  static const int _subsequentInterstitialInterval = 3;
+
   late final PageController _pageController;
+  late final AdMobConsentService _consentService;
   bool _isChromeVisible = false;
+  InterstitialAd? _interstitialAd;
+  bool _isInterstitialLoading = false;
+  bool _isShowingInterstitial = false;
+  int _lastVisitedIndex = 0;
+  int _videosAdvancedCount = 0;
+  int _nextInterstitialThreshold = _firstInterstitialThreshold;
+
+  bool get _supportsInterstitialAds =>
+      !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.android ||
+          defaultTargetPlatform == TargetPlatform.iOS);
+
+  String get _interstitialAdUnitId {
+    switch (defaultTargetPlatform) {
+      case TargetPlatform.android:
+        return AdMobIds.androidHomeVideoFeedInterstitial;
+      case TargetPlatform.iOS:
+        return AdMobIds.iosHomeVideoFeedInterstitial;
+      case TargetPlatform.fuchsia:
+      case TargetPlatform.linux:
+      case TargetPlatform.macOS:
+      case TargetPlatform.windows:
+        throw UnsupportedError(
+          'Interstitial ads are only supported on Android and iOS.',
+        );
+    }
+  }
 
   @override
   void initState() {
     super.initState();
     _pageController = PageController(initialPage: widget.initialIndex);
+    _consentService = locator<AdMobConsentService>();
+    _consentService.addListener(_handleConsentStateChanged);
+    _lastVisitedIndex = widget.initialIndex;
+
+    if (_consentService.canRequestAds) {
+      _loadInterstitialAd();
+    }
   }
 
   @override
   void dispose() {
+    _consentService.removeListener(_handleConsentStateChanged);
+    _disposeInterstitialAd();
     _pageController.dispose();
     super.dispose();
+  }
+
+  void _handleConsentStateChanged() {
+    if (!_consentService.canRequestAds) {
+      _disposeInterstitialAd();
+      return;
+    }
+
+    _loadInterstitialAd();
+  }
+
+  void _disposeInterstitialAd() {
+    _interstitialAd?.dispose();
+    _interstitialAd = null;
+  }
+
+  Future<void> _loadInterstitialAd() async {
+    if (!_supportsInterstitialAds ||
+        !_consentService.canRequestAds ||
+        _isInterstitialLoading ||
+        _interstitialAd != null) {
+      return;
+    }
+
+    _isInterstitialLoading = true;
+
+    InterstitialAd.load(
+      adUnitId: _interstitialAdUnitId,
+      request: const AdRequest(),
+      adLoadCallback: InterstitialAdLoadCallback(
+        onAdLoaded: (ad) {
+          _isInterstitialLoading = false;
+          _interstitialAd = ad;
+          ad.fullScreenContentCallback = FullScreenContentCallback(
+            onAdDismissedFullScreenContent: (ad) {
+              _isShowingInterstitial = false;
+              ad.dispose();
+              if (identical(_interstitialAd, ad)) {
+                _interstitialAd = null;
+              }
+              unawaited(_loadInterstitialAd());
+            },
+            onAdFailedToShowFullScreenContent: (ad, error) {
+              _isShowingInterstitial = false;
+              ad.dispose();
+              if (identical(_interstitialAd, ad)) {
+                _interstitialAd = null;
+              }
+              debugPrint('Failed to show home video feed interstitial: $error');
+              unawaited(_loadInterstitialAd());
+            },
+          );
+        },
+        onAdFailedToLoad: (error) {
+          _isInterstitialLoading = false;
+          debugPrint('Failed to load home video feed interstitial ad: $error');
+        },
+      ),
+    );
+  }
+
+  Future<void> _handlePageChanged(HomeVideoFeedCubit cubit, int index) async {
+    HapticFeedback.lightImpact();
+    _hideChrome();
+    await cubit.onPageChanged(index);
+    _trackForwardProgress(index);
+    await _maybeShowInterstitial();
+  }
+
+  void _trackForwardProgress(int index) {
+    if (index > _lastVisitedIndex) {
+      _videosAdvancedCount += index - _lastVisitedIndex;
+    }
+
+    _lastVisitedIndex = index;
+  }
+
+  Future<void> _maybeShowInterstitial() async {
+    if (!_supportsInterstitialAds ||
+        !_consentService.canRequestAds ||
+        _isShowingInterstitial ||
+        _videosAdvancedCount < _nextInterstitialThreshold) {
+      return;
+    }
+
+    final interstitialAd = _interstitialAd;
+    if (interstitialAd == null) {
+      await _loadInterstitialAd();
+      return;
+    }
+
+    _isShowingInterstitial = true;
+    _nextInterstitialThreshold += _subsequentInterstitialInterval;
+    _interstitialAd = null;
+    interstitialAd.show();
   }
 
   void _toggleChromeVisibility() {
@@ -96,11 +238,8 @@ class _HomeVideoFeedScreenState extends State<HomeVideoFeedScreen> {
                           controller: _pageController,
                           scrollDirection: Axis.vertical,
                           itemCount: state.videos.length,
-                          onPageChanged: (index) {
-                            HapticFeedback.lightImpact();
-                            _hideChrome();
-                            cubit.onPageChanged(index);
-                          },
+                          onPageChanged: (index) =>
+                              _handlePageChanged(cubit, index),
                           itemBuilder: (context, index) {
                             final video = state.videos[index];
                             final controller = cubit.controllerFor(index);
@@ -119,9 +258,8 @@ class _HomeVideoFeedScreenState extends State<HomeVideoFeedScreen> {
                               isLoadingMore:
                                   state.isLoadingMore &&
                                   index == state.videos.length - 1,
-                                showChrome:
-                                  isCurrentVideo && _isChromeVisible,
-                                onToggleChrome: _toggleChromeVisibility,
+                              showChrome: isCurrentVideo && _isChromeVisible,
+                              onToggleChrome: _toggleChromeVisibility,
                               onTogglePlayback: () =>
                                   cubit.togglePlayback(index),
                               currentUserRating: isCurrentVideo
@@ -249,9 +387,7 @@ class _HomeVideoFeedChrome extends StatelessWidget {
         SafeArea(
           child: Align(
             alignment: Alignment.topRight,
-            child: HomeVideoFeedDropdownMenu(
-              onReportPressed: onReportPressed,
-            ),
+            child: HomeVideoFeedDropdownMenu(onReportPressed: onReportPressed),
           ),
         ),
       ],

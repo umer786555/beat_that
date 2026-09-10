@@ -1,9 +1,13 @@
+import 'dart:async';
+
 import 'package:beat_that/bloc/theme_bloc.dart';
 import 'package:beat_that/constants/app_colors.dart';
 import 'package:beat_that/constants/app_enums.dart';
 import 'package:beat_that/constants/app_strings.dart';
 import 'package:beat_that/constants/app_urls.dart';
+import 'package:beat_that/service_locator.dart';
 import 'package:beat_that/screens/settings/bloc/settings_bloc.dart';
+import 'package:beat_that/services/ad_mob_consent_service.dart';
 import 'package:beat_that/widgets/confirmation_dialog.dart';
 import 'package:beat_that/widgets/custom_snackbar.dart';
 import 'package:flutter/material.dart';
@@ -102,6 +106,16 @@ class SettingsScreen extends StatelessWidget {
     }
 
     context.read<SettingsBloc>().add(const LogoutRequested());
+  }
+
+  static Future<void> _openPrivacyChoices(BuildContext context) async {
+    final errorMessage = await locator<AdMobConsentService>()
+        .showPrivacyOptionsForm();
+    if (!context.mounted || errorMessage == null) {
+      return;
+    }
+
+    showErrorSnackBar(context, message: errorMessage);
   }
 
   Widget _buildNavigationTile({
@@ -259,6 +273,28 @@ class SettingsScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 24),
                     _buildSectionLabel(context, 'Safety'),
+                    AnimatedBuilder(
+                      animation: locator<AdMobConsentService>(),
+                      builder: (context, child) {
+                        if (!locator<AdMobConsentService>()
+                            .isPrivacyOptionsRequired) {
+                          return const SizedBox.shrink();
+                        }
+
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: _buildNavigationTile(
+                            context: context,
+                            icon: Icons.privacy_tip_outlined,
+                            iconColor: accentColor,
+                            title: 'Privacy choices',
+                            onTap: () {
+                              unawaited(_openPrivacyChoices(context));
+                            },
+                          ),
+                        );
+                      },
+                    ),
                     _buildNavigationTile(
                       context: context,
                       icon: Icons.block_outlined,

@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:get_it/get_it.dart';
 import 'package:beat_that/services/auth_service.dart';
+import 'package:beat_that/services/ad_mob_consent_service.dart';
 import 'package:beat_that/services/theme_service.dart';
 import 'package:beat_that/services/preferences_service.dart';
 import 'package:beat_that/services/permission_service.dart';
@@ -59,6 +60,8 @@ void setupServiceLocator(PreferencesService preferencesService) {
 
     // Register AuthService
     locator.registerSingleton<AuthService>(AuthService());
+
+    locator.registerSingleton<AdMobConsentService>(AdMobConsentService());
 
     // Register DioUploadService (must be before SupabaseService)
     // SupabaseService depends on DioUploadService in its constructor

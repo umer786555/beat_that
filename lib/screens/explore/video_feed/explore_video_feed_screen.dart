@@ -1,17 +1,24 @@
+import 'dart:async';
+
+import 'package:beat_that/constants/ad_mob_ids.dart';
 import 'package:beat_that/constants/app_colors.dart';
 import 'package:beat_that/models/sport_video.dart';
 import 'package:beat_that/routes/app_router.dart';
 import 'package:beat_that/screens/explore/video_feed/explore_video_feed_cubit.dart';
 import 'package:beat_that/screens/explore/video_feed/explore_video_feed_presentation_event.dart';
 import 'package:beat_that/screens/explore/video_feed/explore_video_feed_state.dart';
+import 'package:beat_that/service_locator.dart';
+import 'package:beat_that/services/ad_mob_consent_service.dart';
 import 'package:beat_that/widgets/custom_snackbar.dart';
 import 'package:beat_that/widgets/video_overlay_action_button.dart';
 import 'package:beat_that/widgets/video_rating_bottom_sheet.dart';
 import 'package:bloc_presentation/bloc_presentation.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:video_player/video_player.dart';
 
 import 'explore_video_feed_route_extra.dart';
@@ -26,18 +33,159 @@ class ExploreVideoFeedScreen extends StatefulWidget {
 }
 
 class _ExploreVideoFeedScreenState extends State<ExploreVideoFeedScreen> {
+  static const int _firstInterstitialThreshold = 3;
+  static const int _subsequentInterstitialInterval = 3;
+
   late final PageController _pageController;
+  late final AdMobConsentService _consentService;
+  InterstitialAd? _interstitialAd;
+  bool _isInterstitialLoading = false;
+  bool _isShowingInterstitial = false;
+  int _lastVisitedIndex = 0;
+  int _videosAdvancedCount = 0;
+  int _nextInterstitialThreshold = _firstInterstitialThreshold;
+
+  bool get _supportsInterstitialAds =>
+      !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.android ||
+          defaultTargetPlatform == TargetPlatform.iOS);
+
+  String get _interstitialAdUnitId {
+    switch (defaultTargetPlatform) {
+      case TargetPlatform.android:
+        return AdMobIds.androidExploreVideoFeedInterstitial;
+      case TargetPlatform.iOS:
+        return AdMobIds.iosExploreVideoFeedInterstitial;
+      case TargetPlatform.fuchsia:
+      case TargetPlatform.linux:
+      case TargetPlatform.macOS:
+      case TargetPlatform.windows:
+        throw UnsupportedError(
+          'Interstitial ads are only supported on Android and iOS.',
+        );
+    }
+  }
 
   @override
   void initState() {
     super.initState();
     _pageController = PageController(initialPage: widget.extra.initialIndex);
+    _consentService = locator<AdMobConsentService>();
+    _consentService.addListener(_handleConsentStateChanged);
+    _lastVisitedIndex = widget.extra.initialIndex;
+
+    if (_consentService.canRequestAds) {
+      _loadInterstitialAd();
+    }
   }
 
   @override
   void dispose() {
+    _consentService.removeListener(_handleConsentStateChanged);
+    _disposeInterstitialAd();
     _pageController.dispose();
     super.dispose();
+  }
+
+  void _handleConsentStateChanged() {
+    if (!_consentService.canRequestAds) {
+      _disposeInterstitialAd();
+      return;
+    }
+
+    _loadInterstitialAd();
+  }
+
+  void _disposeInterstitialAd() {
+    _interstitialAd?.dispose();
+    _interstitialAd = null;
+  }
+
+  Future<void> _loadInterstitialAd() async {
+    if (!_supportsInterstitialAds ||
+        !_consentService.canRequestAds ||
+        _isInterstitialLoading ||
+        _interstitialAd != null) {
+      return;
+    }
+
+    _isInterstitialLoading = true;
+
+    InterstitialAd.load(
+      adUnitId: _interstitialAdUnitId,
+      request: const AdRequest(),
+      adLoadCallback: InterstitialAdLoadCallback(
+        onAdLoaded: (ad) {
+          _isInterstitialLoading = false;
+          _interstitialAd = ad;
+          ad.fullScreenContentCallback = FullScreenContentCallback(
+            onAdDismissedFullScreenContent: (ad) {
+              _isShowingInterstitial = false;
+              ad.dispose();
+              if (identical(_interstitialAd, ad)) {
+                _interstitialAd = null;
+              }
+              unawaited(_loadInterstitialAd());
+            },
+            onAdFailedToShowFullScreenContent: (ad, error) {
+              _isShowingInterstitial = false;
+              ad.dispose();
+              if (identical(_interstitialAd, ad)) {
+                _interstitialAd = null;
+              }
+              debugPrint(
+                'Failed to show explore video feed interstitial: $error',
+              );
+              unawaited(_loadInterstitialAd());
+            },
+          );
+        },
+        onAdFailedToLoad: (error) {
+          _isInterstitialLoading = false;
+          debugPrint(
+            'Failed to load explore video feed interstitial ad: $error',
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> _handlePageChanged(
+    ExploreVideoFeedCubit cubit,
+    int index,
+  ) async {
+    HapticFeedback.lightImpact();
+    await cubit.onPageChanged(index);
+    _trackForwardProgress(index);
+    await _maybeShowInterstitial();
+  }
+
+  void _trackForwardProgress(int index) {
+    if (index > _lastVisitedIndex) {
+      _videosAdvancedCount += index - _lastVisitedIndex;
+    }
+
+    _lastVisitedIndex = index;
+  }
+
+  Future<void> _maybeShowInterstitial() async {
+    if (!_supportsInterstitialAds ||
+        !_consentService.canRequestAds ||
+        _isShowingInterstitial ||
+        _videosAdvancedCount < _nextInterstitialThreshold) {
+      return;
+    }
+
+    final interstitialAd = _interstitialAd;
+    if (interstitialAd == null) {
+      await _loadInterstitialAd();
+      return;
+    }
+
+    _isShowingInterstitial = true;
+    _nextInterstitialThreshold += _subsequentInterstitialInterval;
+    _interstitialAd = null;
+    interstitialAd.show();
   }
 
   @override
@@ -67,7 +215,6 @@ class _ExploreVideoFeedScreenState extends State<ExploreVideoFeedScreen> {
             child: BlocBuilder<ExploreVideoFeedCubit, ExploreVideoFeedState>(
               builder: (context, state) {
                 final cubit = context.read<ExploreVideoFeedCubit>();
-                final onPageChanged = cubit.onPageChanged;
                 final onTogglePlayback = cubit.togglePlayback;
                 final onRetryActiveVideo = cubit.retryActiveVideo;
 
@@ -75,7 +222,7 @@ class _ExploreVideoFeedScreenState extends State<ExploreVideoFeedScreen> {
                   state: state,
                   pageController: _pageController,
                   controllerFor: cubit.controllerFor,
-                  onPageChanged: onPageChanged,
+                  onPageChanged: (index) => _handlePageChanged(cubit, index),
                   onTogglePlayback: onTogglePlayback,
                   onOpenRating: () => _showRatingSheet(
                     context,
@@ -529,4 +676,3 @@ class _VideoInfoChip extends StatelessWidget {
     );
   }
 }
-

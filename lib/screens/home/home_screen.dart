@@ -11,6 +11,7 @@ import 'package:beat_that/screens/home/video_feed/models/home_video_feed_route_e
 import 'package:beat_that/services/app_onboarding.dart';
 import 'package:beat_that/services/home_video_feed_session_store.dart';
 import 'package:beat_that/services/onboarding_service.dart';
+import 'package:beat_that/widgets/home_feed_native_ad_card.dart';
 import 'package:beat_that/widgets/video_feed_card.dart';
 import 'package:beat_that/widgets/shimmer_loading.dart';
 
@@ -25,6 +26,8 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   static const int _homeOnboardingVersion = 1;
+  static const int _firstAdInsertionIndex = 4;
+  static const int _subsequentAdInsertionInterval = 8;
   late ScrollController _scrollController;
   static const double _scrollTriggerDistance = 500;
   final OnboardingService _onboardingService = locator<OnboardingService>();
@@ -232,94 +235,152 @@ class _HomeScreenState extends State<HomeScreen> {
     HomeFeedCursor nextCursor = const HomeFeedCursor.initial(),
     bool isLoading = false,
   }) {
+    final sections = _buildFeedSections(videos);
+
     return RefreshIndicator(
       onRefresh: _onRefresh,
-      child: Stack(
-        children: [
-          /// Main grid
-          GridView.builder(
-            controller: _scrollController,
-            padding: const EdgeInsets.all(6),
-            physics: const AlwaysScrollableScrollPhysics(),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              crossAxisSpacing: 6,
-              mainAxisSpacing: 6,
-              childAspectRatio: 0.64,
+      child: CustomScrollView(
+        controller: _scrollController,
+        physics: const AlwaysScrollableScrollPhysics(),
+        slivers: [
+          for (
+            var sectionIndex = 0;
+            sectionIndex < sections.length;
+            sectionIndex++
+          ) ...[
+            _buildVideoSectionSliver(
+              sections[sectionIndex],
+              allVideos: videos,
+              hasMoreContent: hasMoreContent,
+              nextCursor: nextCursor,
             ),
-            itemCount: videos.length + (isLoading ? 2 : 0),
-            itemBuilder: (context, index) {
-              // Show shimmer cards at bottom during pagination
-              if (index >= videos.length) {
-                return Shimmer.fromColors(
-                  baseColor: Colors.grey[300]!,
-                  highlightColor: Colors.grey[100]!,
-                  period: const Duration(milliseconds: 1500),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(12),
-                      color: Colors.grey[300],
-                    ),
-                  ),
-                );
-              }
-
-              final video = videos[index];
-              final card = VideoFeedCard(
-                videoId: video.id,
-                thumbnailUrl: video.thumbnailUrl ?? '',
-                title: video.title,
-                username: video.username ?? '',
-                sportId: video.sportId,
-                viewCount: video.viewCount,
-                rating: video.averageRating,
-                onTap: () {
-                  final sessionStore = locator<HomeVideoFeedSessionStore>();
-                  final sessionId = sessionStore.createSession(
-                    videos: List.of(videos),
-                    nextCursor: nextCursor,
-                    hasMoreContent: hasMoreContent,
-                  );
-
-                  context.pushNamed(
-                    'home-video-feed',
-                    extra: HomeVideoFeedExtra(
-                      sessionId: sessionId,
-                      initialIndex: index,
-                    ),
-                  );
-                },
-                onLongPress: () {
-                  // TODO: Show context menu (share, report, etc.)
-                  print('Long pressed video: ${video.id}');
-                },
-              );
-
-              if (index == 0) {
-                return AppOnboardingTarget(
-                  targetKey: _firstVideoCardOnboardingKey,
-                  title: 'Open your feed',
-                  description:
-                      'Tap any clip to jump into the full feed. Home learns from what you watch and uses that to improve recommendations.',
-                  child: card,
-                );
-              }
-
-              return card;
-            },
-          ),
-
-          /// Loading indicator at bottom
-          if (isLoading && videos.isNotEmpty)
-            Positioned(
-              bottom: 0,
-              left: 0,
-              right: 0,
-              child: ShimmerLoadingIndicator(),
-            ),
+            if (sections[sectionIndex].showsAdAfter)
+              SliverToBoxAdapter(
+                child: HomeFeedNativeAdCard(slotIndex: sectionIndex),
+              ),
+          ],
+          if (isLoading && videos.isNotEmpty) _buildLoadingSliver(),
+          const SliverToBoxAdapter(child: SizedBox(height: 24)),
         ],
       ),
     );
+  }
+
+  SliverPadding _buildVideoSectionSliver(
+    _HomeFeedSection section, {
+    required List<SportVideo> allVideos,
+    required bool hasMoreContent,
+    required HomeFeedCursor nextCursor,
+  }) {
+    return SliverPadding(
+      padding: EdgeInsets.fromLTRB(
+        6,
+        section.startVideoIndex == 0 ? 6 : 0,
+        6,
+        0,
+      ),
+      sliver: SliverGrid(
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2,
+          crossAxisSpacing: 6,
+          mainAxisSpacing: 6,
+          childAspectRatio: 0.64,
+        ),
+        delegate: SliverChildBuilderDelegate((context, localIndex) {
+          final globalIndex = section.startVideoIndex + localIndex;
+          final video = section.videos[localIndex];
+          final card = VideoFeedCard(
+            videoId: video.id,
+            thumbnailUrl: video.thumbnailUrl ?? '',
+            title: video.title,
+            username: video.username ?? '',
+            sportId: video.sportId,
+            viewCount: video.viewCount,
+            rating: video.averageRating,
+            onTap: () {
+              final sessionStore = locator<HomeVideoFeedSessionStore>();
+              final sessionId = sessionStore.createSession(
+                videos: List.of(allVideos),
+                nextCursor: nextCursor,
+                hasMoreContent: hasMoreContent,
+              );
+
+              context.pushNamed(
+                'home-video-feed',
+                extra: HomeVideoFeedExtra(
+                  sessionId: sessionId,
+                  initialIndex: globalIndex,
+                ),
+              );
+            },
+          );
+
+          if (globalIndex == 0) {
+            return AppOnboardingTarget(
+              targetKey: _firstVideoCardOnboardingKey,
+              title: 'Open your feed',
+              description:
+                  'Tap any clip to jump into the full feed. Home learns from what you watch and uses that to improve recommendations.',
+              child: card,
+            );
+          }
+
+          return card;
+        }, childCount: section.videos.length),
+      ),
+    );
+  }
+
+  SliverPadding _buildLoadingSliver() {
+    return SliverPadding(
+      padding: const EdgeInsets.fromLTRB(6, 12, 6, 0),
+      sliver: SliverGrid(
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2,
+          crossAxisSpacing: 6,
+          mainAxisSpacing: 6,
+          childAspectRatio: 0.64,
+        ),
+        delegate: SliverChildBuilderDelegate((context, index) {
+          return Shimmer.fromColors(
+            baseColor: Colors.grey[300]!,
+            highlightColor: Colors.grey[100]!,
+            period: const Duration(milliseconds: 1500),
+            child: Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                color: Colors.grey[300],
+              ),
+            ),
+          );
+        }, childCount: 2),
+      ),
+    );
+  }
+
+  List<_HomeFeedSection> _buildFeedSections(List<SportVideo> videos) {
+    final sections = <_HomeFeedSection>[];
+    var start = 0;
+    var nextChunkLength = _firstAdInsertionIndex;
+
+    while (start < videos.length) {
+      final end = (start + nextChunkLength < videos.length)
+          ? start + nextChunkLength
+          : videos.length;
+
+      sections.add(
+        _HomeFeedSection(
+          startVideoIndex: start,
+          videos: videos.sublist(start, end),
+          showsAdAfter: end < videos.length,
+        ),
+      );
+
+      start = end;
+      nextChunkLength = _subsequentAdInsertionInterval;
+    }
+
+    return sections;
   }
 
   Widget _buildRefreshableBody({required Widget child}) {
@@ -403,4 +464,16 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
+}
+
+class _HomeFeedSection {
+  const _HomeFeedSection({
+    required this.startVideoIndex,
+    required this.videos,
+    required this.showsAdAfter,
+  });
+
+  final int startVideoIndex;
+  final List<SportVideo> videos;
+  final bool showsAdAfter;
 }

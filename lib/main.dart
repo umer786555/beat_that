@@ -1,8 +1,13 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:beat_that/bloc/follow_counts_cubit.dart';
 import 'package:beat_that/services/auth_service.dart';
+import 'package:beat_that/services/ad_mob_consent_service.dart';
 import 'package:beat_that/services/theme_service.dart';
 import 'package:beat_that/constants/app_enums.dart';
 import 'package:beat_that/routes/app_router.dart';
@@ -10,6 +15,11 @@ import 'package:beat_that/service_locator.dart';
 import 'package:beat_that/bloc/theme_bloc.dart';
 import 'package:beat_that/constants/app_themes.dart';
 import 'package:beat_that/services/app_onboarding.dart';
+
+bool get _supportsMobileAds =>
+    !kIsWeb &&
+    (defaultTargetPlatform == TargetPlatform.android ||
+        defaultTargetPlatform == TargetPlatform.iOS);
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -33,6 +43,10 @@ void main() async {
 
   // Register all services with initialized dependencies
   setupServiceLocator(preferencesService);
+
+  if (_supportsMobileAds) {
+    await MobileAds.instance.initialize();
+  }
 
   runApp(const MyApp());
 }
@@ -73,6 +87,10 @@ class _MyAppState extends State<MyApp> {
     // lifting shared state to a higher scope.
     _followCountsCubit = FollowCountsCubit();
     _followCountsCubit.refresh();
+
+    if (_supportsMobileAds) {
+      unawaited(locator<AdMobConsentService>().requestConsentInfoUpdate());
+    }
 
     // Get AuthService from service locator to listen to auth state changes
     final authService = locator<AuthService>();
