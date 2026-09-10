@@ -16,6 +16,10 @@ class AppStrings {
       'Share your game, rate the competition, and get back to the action fast.';
   static const String authChoiceHint =
       'Google is the fastest way in. You can always use email instead.';
+  static const String authLegalConsentLabel =
+      'I agree to the Terms and conditions and Privacy policy.';
+  static const String authLegalConsentHint =
+      'Required before creating an account or signing in.';
   static const String orContinueWith = 'or continue with';
   static const String dontHaveAccount = "Don't have an account? ";
   static const String signUp = 'Sign Up';

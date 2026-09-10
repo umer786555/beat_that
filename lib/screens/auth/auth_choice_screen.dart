@@ -2,6 +2,7 @@ import 'dart:io' show Platform;
 
 import 'package:beat_that/constants/app_colors.dart';
 import 'package:beat_that/constants/app_strings.dart';
+import 'package:beat_that/screens/auth/widgets/auth_legal_consent_section.dart';
 import 'package:beat_that/widgets/custom_snackbar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -13,8 +14,15 @@ import 'bloc/login_bloc.dart';
 import 'bloc/login_event.dart';
 import 'bloc/login_state.dart';
 
-class AuthChoiceScreen extends StatelessWidget {
+class AuthChoiceScreen extends StatefulWidget {
   const AuthChoiceScreen({super.key});
+
+  @override
+  State<AuthChoiceScreen> createState() => _AuthChoiceScreenState();
+}
+
+class _AuthChoiceScreenState extends State<AuthChoiceScreen> {
+  bool _hasAcceptedLegal = false;
 
   static const double _primaryActionHeight = 54;
   static const double _primaryActionRadius = 8;
@@ -41,6 +49,7 @@ class AuthChoiceScreen extends StatelessWidget {
         },
         builder: (context, state) {
           final isLoading = state is LoginLoading;
+          final canContinue = !isLoading && _hasAcceptedLegal;
 
           return Scaffold(
             backgroundColor: AppColors.black,
@@ -122,9 +131,20 @@ class AuthChoiceScreen extends StatelessWidget {
                                   crossAxisAlignment:
                                       CrossAxisAlignment.stretch,
                                   children: [
-                                 if (Platform.isIOS) ...[
+                                    AuthLegalConsentSection(
+                                      value: _hasAcceptedLegal,
+                                      enabled: !isLoading,
+                                      onChanged: (value) {
+                                        setState(() {
+                                          _hasAcceptedLegal = value;
+                                        });
+                                      },
+                                    ),
+                                    const SizedBox(height: 18),
+                                    if (Platform.isIOS) ...[
                                       _buildAuthButton(
                                         isLoading: isLoading,
+                                        isEnabled: canContinue,
                                         text: AppStrings.continueWithApple,
                                         backgroundColor: AppColors.white,
                                         foregroundColor: AppColors.black,
@@ -140,9 +160,10 @@ class AuthChoiceScreen extends StatelessWidget {
                                         },
                                       ),
                                       const SizedBox(height: 14),
-                               ],
+                                    ],
                                     _buildAuthButton(
                                       isLoading: isLoading,
+                                      isEnabled: canContinue,
                                       text: AppStrings.continueWithGoogle,
                                       backgroundColor: AppColors.white,
                                       foregroundColor: const Color(0xFF1F1F1F),
@@ -162,6 +183,7 @@ class AuthChoiceScreen extends StatelessWidget {
                                     const SizedBox(height: 18),
                                     _buildAuthButton(
                                       isLoading: isLoading,
+                                      isEnabled: canContinue,
                                       text: AppStrings.continueWithEmail,
                                       backgroundColor: AppColors.white
                                           .withValues(alpha: 0.08),
@@ -196,6 +218,7 @@ class AuthChoiceScreen extends StatelessWidget {
 
   Widget _buildAuthButton({
     required bool isLoading,
+    required bool isEnabled,
     required String text,
     required Color backgroundColor,
     required Color foregroundColor,
@@ -209,9 +232,9 @@ class AuthChoiceScreen extends StatelessWidget {
     );
 
     return IgnorePointer(
-      ignoring: isLoading,
+      ignoring: isLoading || !isEnabled,
       child: AnimatedOpacity(
-        opacity: isLoading ? 0.6 : 1.0,
+        opacity: isLoading ? 0.6 : (isEnabled ? 1.0 : 0.45),
         duration: const Duration(milliseconds: 200),
         child: DecoratedBox(
           decoration: BoxDecoration(
@@ -240,9 +263,7 @@ class AuthChoiceScreen extends StatelessWidget {
               width: double.infinity,
               splashColor: foregroundColor.withValues(alpha: 0.08),
               highlightColor: foregroundColor.withValues(alpha: 0.05),
-              textStyle: _authButtonTextStyle.copyWith(
-                color: foregroundColor,
-              ),
+              textStyle: _authButtonTextStyle.copyWith(color: foregroundColor),
             ),
           ),
         ),

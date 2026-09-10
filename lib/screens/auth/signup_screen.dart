@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:beat_that/constants/app_strings.dart';
 import 'package:beat_that/constants/app_colors.dart';
+import 'package:beat_that/screens/auth/widgets/auth_legal_consent_section.dart';
 import 'package:beat_that/widgets/custom_snackbar.dart';
 import 'package:beat_that/widgets/auth_button_styles.dart';
 import 'bloc/signup_bloc.dart';
@@ -11,8 +12,15 @@ import 'bloc/signup_event.dart';
 import 'bloc/signup_state.dart';
 
 /// Signup screen for new users to create an account
-class SignupScreen extends StatelessWidget {
+class SignupScreen extends StatefulWidget {
   const SignupScreen({super.key});
+
+  @override
+  State<SignupScreen> createState() => _SignupScreenState();
+}
+
+class _SignupScreenState extends State<SignupScreen> {
+  bool _hasAcceptedLegal = false;
 
   @override
   Widget build(BuildContext context) {
@@ -215,9 +223,20 @@ class SignupScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 24),
 
+                    AuthLegalConsentSection(
+                      value: _hasAcceptedLegal,
+                      enabled: !isLoading,
+                      onChanged: (value) {
+                        setState(() {
+                          _hasAcceptedLegal = value;
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 24),
+
                     // Signup button
                     ElevatedButton(
-                      onPressed: isLoading
+                      onPressed: isLoading || !_hasAcceptedLegal
                           ? null
                           : () {
                               HapticFeedback.mediumImpact();
