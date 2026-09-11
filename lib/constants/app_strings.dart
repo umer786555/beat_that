@@ -19,7 +19,7 @@ class AppStrings {
   static const String authLegalConsentLabel =
       'I agree to the Terms and conditions and Privacy policy.';
   static const String authLegalConsentHint =
-      'Required before creating an account or signing in.';
+      'Required before creating an account.';
   static const String orContinueWith = 'or continue with';
   static const String dontHaveAccount = "Don't have an account? ";
   static const String signUp = 'Sign Up';
@@ -43,6 +43,12 @@ class AppStrings {
   static const String createAccount = 'Create Account';
   static const String joinBeatThatToday = 'Join Beat That today';
   static const String alreadyHaveAccount = 'Already have an account? ';
+    static const String createYourUsername = 'Create Your Username';
+    static const String chooseAUniqueUsernameToGetStarted =
+            'Choose a unique username to get started';
+    static const String enterYourUsername = 'Enter your username';
+    static const String username = 'Username';
+    static const String continueAction = 'Continue';
 
   // Form Fields - Email
   static const String email = 'Email';
@@ -82,6 +88,8 @@ class AppStrings {
       'We couldn\'t send the confirmation email right now. Please try again in a bit.';
   static const String signupFailedPleaseTryAgain =
       'We couldn\'t create your account right now. Please try again.';
+  static const String acceptTermsToCreateAccount =
+      'Accept the Terms and conditions and Privacy policy to create your account.';
 
   // Network Errors
   static const String networkErrorPleaseCheckYourConnection =

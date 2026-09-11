@@ -3,10 +3,13 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:bloc_presentation/bloc_presentation.dart';
 import 'package:go_router/go_router.dart';
 import 'package:beat_that/constants/app_colors.dart';
+import 'package:beat_that/constants/app_strings.dart';
+import 'package:beat_that/service_locator.dart';
+import 'package:beat_that/screens/auth/widgets/auth_legal_consent_section.dart';
 import 'package:beat_that/screens/username_setup/bloc/username_setup_bloc.dart';
+import 'package:beat_that/services/auth_service.dart';
 import 'package:beat_that/widgets/custom_snackbar.dart';
 import 'package:beat_that/widgets/auth_button_styles.dart';
-import 'package:beat_that/widgets/form_input_decoration.dart';
 
 /// Full-screen username setup screen for new users
 class UsernameSetupScreen extends StatefulWidget {
@@ -18,11 +21,15 @@ class UsernameSetupScreen extends StatefulWidget {
 
 class _UsernameSetupScreenState extends State<UsernameSetupScreen> {
   late final TextEditingController _usernameController;
+  late final bool _requiresLegalAcceptance;
+  bool _hasAcceptedLegal = false;
 
   @override
   void initState() {
     super.initState();
     _usernameController = TextEditingController();
+    _requiresLegalAcceptance =
+        !locator<AuthService>().hasAcceptedCurrentLegalVersion();
   }
 
   @override
@@ -40,7 +47,12 @@ class _UsernameSetupScreenState extends State<UsernameSetupScreen> {
       return;
     }
 
-    context.read<UsernameSetupBloc>().add(SaveUsernameEvent(username));
+    context.read<UsernameSetupBloc>().add(
+      SaveUsernameEvent(
+        username: username,
+        hasAcceptedLegal: !_requiresLegalAcceptance || _hasAcceptedLegal,
+      ),
+    );
   }
 
   @override
@@ -55,10 +67,8 @@ class _UsernameSetupScreenState extends State<UsernameSetupScreen> {
             listener: (context, event) {
               switch (event) {
                 case UsernameSetupSuccessEvent():
-                  print('✓ UsernameSetupSuccessEvent received, navigating to /home');
                   context.go('/home');
                 case UsernameSetupErrorEvent():
-                  print('✗ UsernameSetupErrorEvent received: ${event.message}');
                   showErrorSnackBar(context, message: event.message);
               }
             },
@@ -82,7 +92,7 @@ class _UsernameSetupScreenState extends State<UsernameSetupScreen> {
                           ),
                           const SizedBox(height: 32),
                           const Text(
-                            'Create Your Username',
+                            AppStrings.createYourUsername,
                             style: TextStyle(
                               fontSize: 24,
                               fontWeight: FontWeight.bold,
@@ -92,7 +102,7 @@ class _UsernameSetupScreenState extends State<UsernameSetupScreen> {
                           ),
                           const SizedBox(height: 12),
                           const Text(
-                            'Choose a unique username to get started',
+                            AppStrings.chooseAUniqueUsernameToGetStarted,
                             style: TextStyle(
                               fontSize: 16,
                               color: AppColors.white,
@@ -108,8 +118,8 @@ class _UsernameSetupScreenState extends State<UsernameSetupScreen> {
 
                            // style: getAuthTextFormFieldStyle(),
                             decoration: InputDecoration(
-                              hintText: 'Enter your username',
-                              labelText: 'Username',
+                              hintText: AppStrings.enterYourUsername,
+                              labelText: AppStrings.username,
                               prefixIcon: Icon(
                                 Icons.person,
                                 color: AppColors.cyan,
@@ -117,16 +127,30 @@ class _UsernameSetupScreenState extends State<UsernameSetupScreen> {
                               ),
                             ),
                           ),
+                          if (_requiresLegalAcceptance) ...[
+                            const SizedBox(height: 24),
+                            AuthLegalConsentSection(
+                              value: _hasAcceptedLegal,
+                              enabled: !isLoading,
+                              onChanged: (value) {
+                                setState(() {
+                                  _hasAcceptedLegal = value;
+                                });
+                              },
+                            ),
+                          ],
                           const SizedBox(height: 24),
                           ElevatedButton(
-                            onPressed: isLoading
+                            onPressed: isLoading ||
+                                    (_requiresLegalAcceptance &&
+                                        !_hasAcceptedLegal)
                                 ? null
                                 : () => _handleContinue(context),
                             style: getAuthElevatedButtonStyle(),
                             child: isLoading
                                 ? getAuthLoadingSpinner()
                                 : const Text(
-                                    'Continue',
+                                    AppStrings.continueAction,
                                     style: TextStyle(
                                       fontSize: 16,
                                       fontWeight: FontWeight.bold,

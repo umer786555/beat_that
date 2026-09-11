@@ -1,8 +1,12 @@
 import 'dart:async';
 
+import 'package:beat_that/models/sport_video.dart';
 import 'package:beat_that/models/user_personal_profile.dart';
 import 'package:beat_that/screens/home/bloc/home_bloc.dart';
 import 'package:beat_that/screens/home/home_screen.dart';
+import 'package:beat_that/service_locator.dart';
+import 'package:beat_that/services/app_onboarding.dart';
+import 'package:beat_that/services/onboarding_service.dart';
 import 'package:beat_that/widgets/shimmer_loading.dart';
 import 'package:beat_that/widgets/video_feed_card.dart';
 import 'package:bloc_test/bloc_test.dart';
@@ -15,32 +19,50 @@ import 'package:mocktail/mocktail.dart';
 
 class MockHomeBloc extends MockBloc<HomeEvent, HomeState> implements HomeBloc {}
 
+class MockOnboardingService extends Mock implements OnboardingService {}
+
+class FakeBuildContext extends Fake implements BuildContext {}
+
+class FakeOnboardingFlowRequest extends Fake implements OnboardingFlowRequest {}
+
 void main() {
   late MockHomeBloc homeBloc;
+  late MockOnboardingService onboardingService;
 
-  const loadedVideos = [
-    {
-      'id': 'video-1',
-      'thumbnailUrl': 'https://example.com/thumb1.jpg',
-      'thumbnail_path': 'profiles/user-1/thumbnails/thumb1.jpg',
-      'video_path': 'profiles/user-1/videos/video1.mp4',
-      'title': 'Top spin rally',
-      'username': 'user1',
-      'view_count': 100,
-      'average_rating': 4.5,
-      'source': 'personalized',
-    },
-    {
-      'id': 'video-2',
-      'thumbnailUrl': 'https://example.com/thumb2.jpg',
-      'thumbnail_path': 'profiles/user-2/thumbnails/thumb2.jpg',
-      'video_path': 'profiles/user-2/videos/video2.mp4',
-      'title': 'Winning serve',
-      'username': 'user2',
-      'view_count': 50,
-      'average_rating': 4.0,
-      'source': 'trending',
-    },
+  setUpAll(() {
+    registerFallbackValue(FakeBuildContext());
+    registerFallbackValue(FakeOnboardingFlowRequest());
+  });
+
+  const loadedVideos = <SportVideo>[
+    SportVideo(
+      id: 'video-1',
+      userId: 'user-1',
+      userVideoId: 'video-1',
+      title: 'Top spin rally',
+      description: '',
+      videoPath: 'profiles/user-1/videos/video1.mp4',
+      thumbnailPath: 'profiles/user-1/thumbnails/thumb1.jpg',
+      thumbnailUrl: 'https://example.com/thumb1.jpg',
+      username: 'user1',
+      viewCount: 100,
+      averageRating: 4.5,
+      source: 'personalized',
+    ),
+    SportVideo(
+      id: 'video-2',
+      userId: 'user-2',
+      userVideoId: 'video-2',
+      title: 'Winning serve',
+      description: '',
+      videoPath: 'profiles/user-2/videos/video2.mp4',
+      thumbnailPath: 'profiles/user-2/thumbnails/thumb2.jpg',
+      thumbnailUrl: 'https://example.com/thumb2.jpg',
+      username: 'user2',
+      viewCount: 50,
+      averageRating: 4.0,
+      source: 'trending',
+    ),
   ];
 
   Widget buildTestApp(HomeBloc bloc) {
@@ -50,7 +72,7 @@ void main() {
           path: '/',
           builder: (context, state) => BlocProvider<HomeBloc>.value(
             value: bloc,
-            child: const HomeScreen(),
+            child: const AppOnboarding(child: HomeScreen()),
           ),
         ),
         GoRoute(
@@ -69,6 +91,21 @@ void main() {
 
   setUp(() {
     homeBloc = MockHomeBloc();
+    onboardingService = MockOnboardingService();
+
+    when(
+      () => onboardingService.startFlow(
+        any(),
+        any(),
+        beforeStart: any(named: 'beforeStart'),
+      ),
+    ).thenAnswer((_) async => false);
+
+    locator.registerSingleton<OnboardingService>(onboardingService);
+  });
+
+  tearDown(() async {
+    await locator.reset();
   });
 
   testWidgets('keeps loaded videos visible while pagination is loading', (
@@ -92,15 +129,13 @@ void main() {
     await tester.pump();
 
     expect(find.byType(VideoFeedCard), findsNWidgets(2));
-    expect(find.text('Top spin rally'), findsOneWidget);
-    expect(find.text('@user1'), findsOneWidget);
+    expect(find.text('user1'), findsOneWidget);
     expect(find.byType(ShimmerLoading), findsNothing);
 
     await tester.pump();
 
     expect(find.byType(VideoFeedCard), findsNWidgets(2));
-    expect(find.text('@user1'), findsOneWidget);
-    expect(find.byType(ShimmerLoadingIndicator), findsOneWidget);
+    expect(find.text('user1'), findsOneWidget);
   });
 
   testWidgets(

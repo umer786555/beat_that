@@ -25,9 +25,27 @@ This project uses the Flutter `google_mobile_ads` plugin for Android and iOS ad 
 
 - App ID is stored as `GADApplicationIdentifier` in [ios/Runner/Info.plist](/Users/umermalik/beat_that/ios/Runner/Info.plist).
 - `SKAdNetworkItems` are included in [ios/Runner/Info.plist](/Users/umermalik/beat_that/ios/Runner/Info.plist) using Google's published list.
+- `NSUserTrackingUsageDescription` is included in [ios/Runner/Info.plist](/Users/umermalik/beat_that/ios/Runner/Info.plist) because Google's iOS IDFA guidance requires it before the ATT alert can appear.
 - CocoaPods configuration in [ios/Podfile](/Users/umermalik/beat_that/ios/Podfile) follows the official Flutter AdMob example shape:
   - `use_frameworks!`
   - `use_modular_headers!`
+
+### iOS ATT and IDFA
+
+Official Google flow for `google_mobile_ads: 9.0.0` on Flutter:
+
+1. Keep the existing UMP startup flow in [lib/services/ad_mob_consent_service.dart](/Users/umermalik/beat_that/lib/services/ad_mob_consent_service.dart):
+   - `requestConsentInfoUpdate()`
+   - `loadAndShowConsentFormIfRequired()`
+   - only request ads when `canRequestAds()` is `true`
+2. In the AdMob console, create an **IDFA message** under Privacy and messaging for the iOS app.
+3. Keep `NSUserTrackingUsageDescription` in [ios/Runner/Info.plist](/Users/umermalik/beat_that/ios/Runner/Info.plist).
+
+Important behavior from Google's docs:
+
+- On iOS, the UMP SDK shows the IDFA explainer message before the Apple ATT alert when an IDFA message exists in AdMob.
+- If the user denies ATT, continue requesting ads normally; the Google Mobile Ads Flutter plugin does not send IDFA in the ad request.
+- If App Store Connect privacy labels claim tracking, the AdMob IDFA message must actually be configured or App Review will not see the ATT prompt.
 
 ## Runtime Flow
 
@@ -40,6 +58,7 @@ Official flow followed:
 1. `requestConsentInfoUpdate()` on app launch
 2. `loadAndShowConsentFormIfRequired()`
 3. only load ads when `canRequestAds()` is `true`
+4. on iOS, UMP can only surface the ATT alert if the AdMob app has an IDFA message configured and the plist contains `NSUserTrackingUsageDescription`
 
 ## Home Feed Placement
 
@@ -171,3 +190,5 @@ For full-screen video flows:
 - Home video feed interstitials are still on testing cadence: first ad after 3 videos, then every 3 videos.
 - Explore video feed interstitials are still on testing cadence: first ad after 3 videos, then every 3 videos.
 - Before shipping, reset both full-screen video feed placements to the intended release cadence: first interstitial after 8 videos, then every 10 videos after that.
+- If iOS privacy labels in App Store Connect claim tracking, verify the AdMob Privacy and messaging page has an active IDFA message for this app before submitting.
+- Add an App Review note telling reviewers that the ATT prompt appears through the AdMob UMP consent flow on first launch.

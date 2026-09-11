@@ -22,6 +22,11 @@ class AuthService {
   static const String authCallbackHost = 'login-callback';
   static const String authCallbackUrl =
       '$authCallbackScheme://$authCallbackHost';
+  static const String currentLegalVersion = '2026-09-11';
+  static const String _acceptedTermsAtKey = 'accepted_terms_at';
+  static const String _acceptedTermsVersionKey = 'accepted_terms_version';
+  static const String _acceptedPrivacyAtKey = 'accepted_privacy_at';
+  static const String _acceptedPrivacyVersionKey = 'accepted_privacy_version';
   static const String googleWebClientId =
       '310151412384-84sep6me1mq6188f2lurcu2jfvqshg6b.apps.googleusercontent.com';
   static const String googleIosClientId =
@@ -45,6 +50,45 @@ class AuthService {
       clientId: googleIosClientId.isEmpty ? null : googleIosClientId,
     );
     _googleSignInInitialized = true;
+  }
+
+  Map<String, dynamic> buildLegalAcceptanceMetadata({DateTime? acceptedAt}) {
+    final acceptedAtIso =
+        (acceptedAt ?? DateTime.now()).toUtc().toIso8601String();
+
+    return {
+      _acceptedTermsAtKey: acceptedAtIso,
+      _acceptedTermsVersionKey: currentLegalVersion,
+      _acceptedPrivacyAtKey: acceptedAtIso,
+      _acceptedPrivacyVersionKey: currentLegalVersion,
+    };
+  }
+
+  bool hasAcceptedCurrentLegalVersion() {
+    final metadata = _supabase.auth.currentUser?.userMetadata;
+    if (metadata == null) {
+      return false;
+    }
+
+    return metadata[_acceptedTermsVersionKey]?.toString() ==
+            currentLegalVersion &&
+        metadata[_acceptedPrivacyVersionKey]?.toString() ==
+            currentLegalVersion;
+  }
+
+  Future<UserResponse> updateUserMetadata(Map<String, dynamic> updates) async {
+    final currentMetadata =
+        Map<String, dynamic>.from(_supabase.auth.currentUser?.userMetadata ?? {});
+
+    currentMetadata.addAll(updates);
+
+    return updateUser(UserAttributes(data: currentMetadata));
+  }
+
+  Future<UserResponse> recordLegalAcceptance({DateTime? acceptedAt}) async {
+    return updateUserMetadata(
+      buildLegalAcceptanceMetadata(acceptedAt: acceptedAt),
+    );
   }
 
   /// Sign up a new user with email and password
@@ -206,14 +250,12 @@ class AuthService {
         ];
 
         try {
-          await _supabase.auth.updateUser(
-            UserAttributes(
-              data: {
-                'full_name': nameParts.join(' '),
-                'given_name': credential.givenName,
-                'family_name': credential.familyName,
-              },
-            ),
+          await updateUserMetadata(
+            {
+              'full_name': nameParts.join(' '),
+              'given_name': credential.givenName,
+              'family_name': credential.familyName,
+            },
           );
         } catch (error, stackTrace) {
           debugPrint('Apple sign-in profile update failed: $error');

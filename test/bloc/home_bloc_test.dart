@@ -108,6 +108,50 @@ void main() {
     });
 
     blocTest<HomeBloc, HomeState>(
+      'loads the home feed for guests on InitialEvent',
+      setUp: () {
+        when(() => mockAuthService.isLoggedIn()).thenReturn(false);
+        when(() => mockPreferencesService.clearUserProfile()).thenAnswer(
+          (_) async {},
+        );
+        when(
+          () => mockHomeFeedService.getHomeFeedContinuation(
+            seenVideoIds: any(named: 'seenVideoIds'),
+            cursor: any(named: 'cursor'),
+            limit: any(named: 'limit'),
+          ),
+        ).thenAnswer(
+          (_) async => {
+            'videos': sampleVideos,
+            'nextCursor': const HomeFeedCursor.initial(),
+            'hasMoreContent': true,
+          },
+        );
+      },
+      build: () => homeBloc,
+      act: (bloc) => bloc.add(const InitialEvent()),
+      expect: () => [
+        isA<FeedLoading>(),
+        isA<FeedLoaded>().having(
+          (state) => state.videos,
+          'videos',
+          equals(sampleVideos),
+        ),
+      ],
+      verify: (_) {
+        verify(() => mockPreferencesService.clearUserProfile()).called(1);
+        verifyNever(() => mockSupabaseService.fetchUserPersonalProfile());
+        verify(
+          () => mockHomeFeedService.getHomeFeedContinuation(
+            seenVideoIds: any(named: 'seenVideoIds'),
+            cursor: any(named: 'cursor'),
+            limit: 24,
+          ),
+        ).called(1);
+      },
+    );
+
+    blocTest<HomeBloc, HomeState>(
       'emits [FeedLoading, FeedLoaded] when FetchFeedEvent succeeds',
       setUp: () {
         when(

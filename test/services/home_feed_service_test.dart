@@ -90,25 +90,33 @@ void main() {
 
   group('HomeFeedService', () {
     test('continuation fetches and blends from all 4 sources', () async {
-      when(() => mockSupabaseService.getPersonalizedVideos(
-            limit: any(named: 'limit'),
-            offset: any(named: 'offset'),
-          )).thenAnswer((_) async => [videoFromPersonalized]);
+      when(
+        () => mockSupabaseService.getPersonalizedVideos(
+          limit: any(named: 'limit'),
+          offset: any(named: 'offset'),
+        ),
+      ).thenAnswer((_) async => [videoFromPersonalized]);
 
-      when(() => mockSupabaseService.getFollowingVideos(
-            limit: any(named: 'limit'),
-            offset: any(named: 'offset'),
-          )).thenAnswer((_) async => [videoFromFollowing]);
+      when(
+        () => mockSupabaseService.getFollowingVideos(
+          limit: any(named: 'limit'),
+          offset: any(named: 'offset'),
+        ),
+      ).thenAnswer((_) async => [videoFromFollowing]);
 
-      when(() => mockSupabaseService.getTrendingVideos(
-            limit: any(named: 'limit'),
-            offset: any(named: 'offset'),
-          )).thenAnswer((_) async => [videoFromTrending]);
+      when(
+        () => mockSupabaseService.getTrendingVideos(
+          limit: any(named: 'limit'),
+          offset: any(named: 'offset'),
+        ),
+      ).thenAnswer((_) async => [videoFromTrending]);
 
-      when(() => mockSupabaseService.getDiscoveryVideos(
-            limit: any(named: 'limit'),
-            excludedVideoIds: any(named: 'excludedVideoIds'),
-          )).thenAnswer((_) async => [videoFromDiscovery]);
+      when(
+        () => mockSupabaseService.getDiscoveryVideos(
+          limit: any(named: 'limit'),
+          excludedVideoIds: any(named: 'excludedVideoIds'),
+        ),
+      ).thenAnswer((_) async => [videoFromDiscovery]);
 
       final response = await homeFeedService.getHomeFeedContinuation(
         seenVideoIds: <String>{},
@@ -139,65 +147,86 @@ void main() {
         equals('discovery'),
       );
 
-      verify(() => mockSupabaseService.getPersonalizedVideos(
-            limit: any(named: 'limit'),
-            offset: any(named: 'offset'),
-          )).called(1);
-      verify(() => mockSupabaseService.getFollowingVideos(
-            limit: any(named: 'limit'),
-            offset: any(named: 'offset'),
-          )).called(1);
-      verify(() => mockSupabaseService.getTrendingVideos(
-            limit: any(named: 'limit'),
-            offset: any(named: 'offset'),
-          )).called(1);
-      verify(() => mockSupabaseService.getDiscoveryVideos(
-            limit: any(named: 'limit'),
-            excludedVideoIds: any(named: 'excludedVideoIds'),
-          )).called(1);
+      verify(
+        () => mockSupabaseService.getPersonalizedVideos(
+          limit: any(named: 'limit'),
+          offset: any(named: 'offset'),
+        ),
+      ).called(1);
+      verify(
+        () => mockSupabaseService.getFollowingVideos(
+          limit: any(named: 'limit'),
+          offset: any(named: 'offset'),
+        ),
+      ).called(1);
+      verify(
+        () => mockSupabaseService.getTrendingVideos(
+          limit: any(named: 'limit'),
+          offset: any(named: 'offset'),
+        ),
+      ).called(1);
+      verify(
+        () => mockSupabaseService.getDiscoveryVideos(
+          limit: any(named: 'limit'),
+          excludedVideoIds: any(named: 'excludedVideoIds'),
+        ),
+      ).called(1);
     });
 
-    test('continuation deduplicates videos by ID, keeping first occurrence', () async {
-      final duplicateInTrending = makeVideo(
-        'p-1',
-        sourceUser: 'user-5',
-        title: 'Trending version of p-1',
-        bayesianScore: 95,
-        username: 'user5',
-      );
+    test(
+      'continuation deduplicates videos by ID, keeping first occurrence',
+      () async {
+        final duplicateInTrending = makeVideo(
+          'p-1',
+          sourceUser: 'user-5',
+          title: 'Trending version of p-1',
+          bayesianScore: 95,
+          username: 'user5',
+        );
 
-      when(() => mockSupabaseService.getPersonalizedVideos(
+        when(
+          () => mockSupabaseService.getPersonalizedVideos(
             limit: any(named: 'limit'),
             offset: any(named: 'offset'),
-          )).thenAnswer((_) async => [videoFromPersonalized]);
+          ),
+        ).thenAnswer((_) async => [videoFromPersonalized]);
 
-      when(() => mockSupabaseService.getFollowingVideos(
+        when(
+          () => mockSupabaseService.getFollowingVideos(
             limit: any(named: 'limit'),
             offset: any(named: 'offset'),
-          )).thenAnswer((_) async => []);
+          ),
+        ).thenAnswer((_) async => []);
 
-      when(() => mockSupabaseService.getTrendingVideos(
+        when(
+          () => mockSupabaseService.getTrendingVideos(
             limit: any(named: 'limit'),
             offset: any(named: 'offset'),
-          )).thenAnswer((_) async => [duplicateInTrending]);
+          ),
+        ).thenAnswer((_) async => [duplicateInTrending]);
 
-      when(() => mockSupabaseService.getDiscoveryVideos(
+        when(
+          () => mockSupabaseService.getDiscoveryVideos(
             limit: any(named: 'limit'),
             excludedVideoIds: any(named: 'excludedVideoIds'),
-          )).thenAnswer((_) async => []);
+          ),
+        ).thenAnswer((_) async => []);
 
-      final response = await homeFeedService.getHomeFeedContinuation(
-        seenVideoIds: <String>{},
-        cursor: const HomeFeedCursor.initial(),
-        limit: 50,
-      );
-      final result = List<SportVideo>.from(response['videos'] as List<dynamic>);
+        final response = await homeFeedService.getHomeFeedContinuation(
+          seenVideoIds: <String>{},
+          cursor: const HomeFeedCursor.initial(),
+          limit: 50,
+        );
+        final result = List<SportVideo>.from(
+          response['videos'] as List<dynamic>,
+        );
 
-      expect(result.length, equals(1));
-      expect(result[0].id, equals('p-1'));
-      expect(result[0].source, equals('personalized'));
-      expect(result[0].bayesianScore, equals(80));
-    });
+        expect(result.length, equals(1));
+        expect(result[0].id, equals('p-1'));
+        expect(result[0].source, equals('personalized'));
+        expect(result[0].bayesianScore, equals(80));
+      },
+    );
 
     test('continuation sorts videos by composite score descending', () async {
       final lowScoringVideo = makeVideo(
@@ -213,25 +242,33 @@ void main() {
         username: 'user_high',
       );
 
-      when(() => mockSupabaseService.getPersonalizedVideos(
-            limit: any(named: 'limit'),
-            offset: any(named: 'offset'),
-          )).thenAnswer((_) async => [lowScoringVideo]);
+      when(
+        () => mockSupabaseService.getPersonalizedVideos(
+          limit: any(named: 'limit'),
+          offset: any(named: 'offset'),
+        ),
+      ).thenAnswer((_) async => [lowScoringVideo]);
 
-      when(() => mockSupabaseService.getFollowingVideos(
-            limit: any(named: 'limit'),
-            offset: any(named: 'offset'),
-          )).thenAnswer((_) async => [highScoringVideo]);
+      when(
+        () => mockSupabaseService.getFollowingVideos(
+          limit: any(named: 'limit'),
+          offset: any(named: 'offset'),
+        ),
+      ).thenAnswer((_) async => [highScoringVideo]);
 
-      when(() => mockSupabaseService.getTrendingVideos(
-            limit: any(named: 'limit'),
-            offset: any(named: 'offset'),
-          )).thenAnswer((_) async => []);
+      when(
+        () => mockSupabaseService.getTrendingVideos(
+          limit: any(named: 'limit'),
+          offset: any(named: 'offset'),
+        ),
+      ).thenAnswer((_) async => []);
 
-      when(() => mockSupabaseService.getDiscoveryVideos(
-            limit: any(named: 'limit'),
-            excludedVideoIds: any(named: 'excludedVideoIds'),
-          )).thenAnswer((_) async => []);
+      when(
+        () => mockSupabaseService.getDiscoveryVideos(
+          limit: any(named: 'limit'),
+          excludedVideoIds: any(named: 'excludedVideoIds'),
+        ),
+      ).thenAnswer((_) async => []);
 
       final response = await homeFeedService.getHomeFeedContinuation(
         seenVideoIds: <String>{},
@@ -246,25 +283,33 @@ void main() {
     });
 
     test('propagates source fetch errors to the caller', () async {
-      when(() => mockSupabaseService.getPersonalizedVideos(
-            limit: any(named: 'limit'),
-            offset: any(named: 'offset'),
-          )).thenThrow(Exception('Network error'));
+      when(
+        () => mockSupabaseService.getPersonalizedVideos(
+          limit: any(named: 'limit'),
+          offset: any(named: 'offset'),
+        ),
+      ).thenThrow(Exception('Network error'));
 
-      when(() => mockSupabaseService.getFollowingVideos(
-            limit: any(named: 'limit'),
-            offset: any(named: 'offset'),
-          )).thenAnswer((_) async => []);
+      when(
+        () => mockSupabaseService.getFollowingVideos(
+          limit: any(named: 'limit'),
+          offset: any(named: 'offset'),
+        ),
+      ).thenAnswer((_) async => []);
 
-      when(() => mockSupabaseService.getTrendingVideos(
-            limit: any(named: 'limit'),
-            offset: any(named: 'offset'),
-          )).thenAnswer((_) async => []);
+      when(
+        () => mockSupabaseService.getTrendingVideos(
+          limit: any(named: 'limit'),
+          offset: any(named: 'offset'),
+        ),
+      ).thenAnswer((_) async => []);
 
-      when(() => mockSupabaseService.getDiscoveryVideos(
-            limit: any(named: 'limit'),
-            excludedVideoIds: any(named: 'excludedVideoIds'),
-          )).thenAnswer((_) async => []);
+      when(
+        () => mockSupabaseService.getDiscoveryVideos(
+          limit: any(named: 'limit'),
+          excludedVideoIds: any(named: 'excludedVideoIds'),
+        ),
+      ).thenAnswer((_) async => []);
 
       await expectLater(
         homeFeedService.getHomeFeedContinuation(
@@ -277,25 +322,39 @@ void main() {
     });
 
     test('calls source queries with weighted fetch amounts', () async {
-      when(() => mockSupabaseService.getPersonalizedVideos(
-            limit: any(named: 'limit'),
-            offset: any(named: 'offset'),
-          )).thenAnswer((_) async => []);
+      when(
+        () => mockSupabaseService.getPersonalizedVideos(
+          limit: any(named: 'limit'),
+          offset: any(named: 'offset'),
+        ),
+      ).thenAnswer((_) async => []);
 
-      when(() => mockSupabaseService.getFollowingVideos(
-            limit: any(named: 'limit'),
-            offset: any(named: 'offset'),
-          )).thenAnswer((_) async => []);
+      when(
+        () => mockSupabaseService.getFollowingVideos(
+          limit: any(named: 'limit'),
+          offset: any(named: 'offset'),
+        ),
+      ).thenAnswer((_) async => []);
 
-      when(() => mockSupabaseService.getTrendingVideos(
-            limit: any(named: 'limit'),
-            offset: any(named: 'offset'),
-          )).thenAnswer((_) async => []);
+      when(
+        () => mockSupabaseService.getTrendingVideos(
+          limit: any(named: 'limit'),
+          offset: any(named: 'offset'),
+        ),
+      ).thenAnswer((_) async => []);
 
-      when(() => mockSupabaseService.getDiscoveryVideos(
-            limit: any(named: 'limit'),
-            excludedVideoIds: any(named: 'excludedVideoIds'),
-          )).thenAnswer((_) async => []);
+      when(
+        () => mockSupabaseService.getDiscoveryVideos(
+          limit: any(named: 'limit'),
+          excludedVideoIds: any(named: 'excludedVideoIds'),
+        ),
+      ).thenAnswer((_) async => []);
+
+      when(
+        () => mockSupabaseService.getRandomDiscoveryVideos(
+          limit: any(named: 'limit'),
+        ),
+      ).thenAnswer((_) async => []);
 
       await homeFeedService.getHomeFeedContinuation(
         seenVideoIds: <String>{},
@@ -303,44 +362,57 @@ void main() {
         limit: 50,
       );
 
-      verify(() => mockSupabaseService.getPersonalizedVideos(
-            limit: 21,
-            offset: 0,
-          )).called(1);
-      verify(() => mockSupabaseService.getFollowingVideos(
-            limit: 16,
-            offset: 0,
-          )).called(1);
-      verify(() => mockSupabaseService.getTrendingVideos(
-            limit: 11,
-            offset: 0,
-          )).called(1);
-      verify(() => mockSupabaseService.getDiscoveryVideos(
-            limit: 6,
-            excludedVideoIds: any(named: 'excludedVideoIds'),
-          )).called(1);
+      verify(
+        () => mockSupabaseService.getPersonalizedVideos(limit: 21, offset: 0),
+      ).called(1);
+      verify(
+        () => mockSupabaseService.getFollowingVideos(limit: 16, offset: 0),
+      ).called(1);
+      verify(
+        () => mockSupabaseService.getTrendingVideos(limit: 11, offset: 0),
+      ).called(1);
+      verify(
+        () => mockSupabaseService.getDiscoveryVideos(
+          limit: 6,
+          excludedVideoIds: any(named: 'excludedVideoIds'),
+        ),
+      ).called(1);
     });
 
     test('returns empty list when all sources return empty', () async {
-      when(() => mockSupabaseService.getPersonalizedVideos(
-            limit: any(named: 'limit'),
-            offset: any(named: 'offset'),
-          )).thenAnswer((_) async => []);
+      when(
+        () => mockSupabaseService.getPersonalizedVideos(
+          limit: any(named: 'limit'),
+          offset: any(named: 'offset'),
+        ),
+      ).thenAnswer((_) async => []);
 
-      when(() => mockSupabaseService.getFollowingVideos(
-            limit: any(named: 'limit'),
-            offset: any(named: 'offset'),
-          )).thenAnswer((_) async => []);
+      when(
+        () => mockSupabaseService.getFollowingVideos(
+          limit: any(named: 'limit'),
+          offset: any(named: 'offset'),
+        ),
+      ).thenAnswer((_) async => []);
 
-      when(() => mockSupabaseService.getTrendingVideos(
-            limit: any(named: 'limit'),
-            offset: any(named: 'offset'),
-          )).thenAnswer((_) async => []);
+      when(
+        () => mockSupabaseService.getTrendingVideos(
+          limit: any(named: 'limit'),
+          offset: any(named: 'offset'),
+        ),
+      ).thenAnswer((_) async => []);
 
-      when(() => mockSupabaseService.getDiscoveryVideos(
-            limit: any(named: 'limit'),
-            excludedVideoIds: any(named: 'excludedVideoIds'),
-          )).thenAnswer((_) async => []);
+      when(
+        () => mockSupabaseService.getDiscoveryVideos(
+          limit: any(named: 'limit'),
+          excludedVideoIds: any(named: 'excludedVideoIds'),
+        ),
+      ).thenAnswer((_) async => []);
+
+      when(
+        () => mockSupabaseService.getRandomDiscoveryVideos(
+          limit: any(named: 'limit'),
+        ),
+      ).thenAnswer((_) async => []);
 
       final response = await homeFeedService.getHomeFeedContinuation(
         seenVideoIds: <String>{},
@@ -353,26 +425,86 @@ void main() {
       expect(response['hasMoreContent'], isFalse);
     });
 
-    test('returns videos even when some sources are empty', () async {
-      when(() => mockSupabaseService.getPersonalizedVideos(
+    test(
+      'falls back to random discovery on cold start when blended sources are empty',
+      () async {
+        when(
+          () => mockSupabaseService.getPersonalizedVideos(
             limit: any(named: 'limit'),
             offset: any(named: 'offset'),
-          )).thenAnswer((_) async => [videoFromPersonalized]);
+          ),
+        ).thenAnswer((_) async => []);
 
-      when(() => mockSupabaseService.getFollowingVideos(
+        when(
+          () => mockSupabaseService.getFollowingVideos(
             limit: any(named: 'limit'),
             offset: any(named: 'offset'),
-          )).thenAnswer((_) async => []); // Empty
+          ),
+        ).thenAnswer((_) async => []);
 
-      when(() => mockSupabaseService.getTrendingVideos(
+        when(
+          () => mockSupabaseService.getTrendingVideos(
             limit: any(named: 'limit'),
             offset: any(named: 'offset'),
-          )).thenAnswer((_) async => [videoFromTrending]); // Has data
+          ),
+        ).thenAnswer((_) async => []);
 
-      when(() => mockSupabaseService.getDiscoveryVideos(
+        when(
+          () => mockSupabaseService.getDiscoveryVideos(
             limit: any(named: 'limit'),
             excludedVideoIds: any(named: 'excludedVideoIds'),
-          )).thenAnswer((_) async => []);
+          ),
+        ).thenAnswer((_) async => []);
+
+        when(
+          () => mockSupabaseService.getRandomDiscoveryVideos(limit: 24),
+        ).thenAnswer((_) async => [videoFromDiscovery]);
+
+        final response = await homeFeedService.getHomeFeedContinuation(
+          seenVideoIds: <String>{},
+          cursor: const HomeFeedCursor.initial(),
+          limit: 24,
+        );
+        final result = List<SportVideo>.from(
+          response['videos'] as List<dynamic>,
+        );
+
+        expect(result.map((video) => video.id), ['d-1']);
+        expect(result.single.source, equals('discovery'));
+        verify(
+          () => mockSupabaseService.getRandomDiscoveryVideos(limit: 24),
+        ).called(1);
+      },
+    );
+
+    test('returns videos even when some sources are empty', () async {
+      when(
+        () => mockSupabaseService.getPersonalizedVideos(
+          limit: any(named: 'limit'),
+          offset: any(named: 'offset'),
+        ),
+      ).thenAnswer((_) async => [videoFromPersonalized]);
+
+      when(
+        () => mockSupabaseService.getFollowingVideos(
+          limit: any(named: 'limit'),
+          offset: any(named: 'offset'),
+        ),
+      ).thenAnswer((_) async => []); // Empty
+
+      when(
+        () => mockSupabaseService.getTrendingVideos(
+          limit: any(named: 'limit'),
+          offset: any(named: 'offset'),
+        ),
+      ).thenAnswer((_) async => [videoFromTrending]); // Has data
+
+      when(
+        () => mockSupabaseService.getDiscoveryVideos(
+          limit: any(named: 'limit'),
+          excludedVideoIds: any(named: 'excludedVideoIds'),
+        ),
+      ).thenAnswer((_) async => []);
 
       final response = await homeFeedService.getHomeFeedContinuation(
         seenVideoIds: <String>{},
@@ -382,70 +514,73 @@ void main() {
       final result = List<SportVideo>.from(response['videos'] as List<dynamic>);
 
       expect(result.length, equals(2));
-      expect(
-        result.map((video) => video.id),
-        containsAll(['p-1', 't-1']),
-      );
+      expect(result.map((video) => video.id), containsAll(['p-1', 't-1']));
     });
 
     test('continuation advances source offsets independently', () async {
-      when(() => mockSupabaseService.getPersonalizedVideos(
-            limit: any(named: 'limit'),
-            offset: any(named: 'offset'),
-          )).thenAnswer((_) async => []);
-      when(() => mockSupabaseService.getFollowingVideos(
-            limit: any(named: 'limit'),
-            offset: any(named: 'offset'),
-          )).thenAnswer((_) async => []);
-      when(() => mockSupabaseService.getTrendingVideos(limit: 6, offset: 0))
-          .thenAnswer(
-            (_) async => List.generate(
-              6,
-              (index) => makeVideo(
-                't-$index',
-                sourceUser: 'trend-$index',
-                bayesianScore: 90 - index.toDouble(),
-              ),
-            ),
-          );
-      when(() => mockSupabaseService.getTrendingVideos(limit: 6, offset: 6))
-          .thenAnswer(
-            (_) async => [
-              makeVideo('t-6', sourceUser: 'trend-6', bayesianScore: 84),
-              makeVideo('t-7', sourceUser: 'trend-7', bayesianScore: 83),
-              makeVideo('t-8', sourceUser: 'trend-8', bayesianScore: 82),
-            ],
-          );
+      when(
+        () => mockSupabaseService.getPersonalizedVideos(
+          limit: any(named: 'limit'),
+          offset: any(named: 'offset'),
+        ),
+      ).thenAnswer((_) async => []);
+      when(
+        () => mockSupabaseService.getFollowingVideos(
+          limit: any(named: 'limit'),
+          offset: any(named: 'offset'),
+        ),
+      ).thenAnswer((_) async => []);
+      when(
+        () => mockSupabaseService.getTrendingVideos(limit: 6, offset: 0),
+      ).thenAnswer(
+        (_) async => List.generate(
+          6,
+          (index) => makeVideo(
+            't-$index',
+            sourceUser: 'trend-$index',
+            bayesianScore: 90 - index.toDouble(),
+          ),
+        ),
+      );
+      when(
+        () => mockSupabaseService.getTrendingVideos(limit: 6, offset: 6),
+      ).thenAnswer(
+        (_) async => [
+          makeVideo('t-6', sourceUser: 'trend-6', bayesianScore: 84),
+          makeVideo('t-7', sourceUser: 'trend-7', bayesianScore: 83),
+          makeVideo('t-8', sourceUser: 'trend-8', bayesianScore: 82),
+        ],
+      );
 
       var discoveryCallCount = 0;
-      when(() => mockSupabaseService.getDiscoveryVideos(
-            limit: any(named: 'limit'),
-            excludedVideoIds: any(named: 'excludedVideoIds'),
-          )).thenAnswer((invocation) async {
-            discoveryCallCount++;
-            final excludedIds = invocation.namedArguments[#excludedVideoIds]
-                as Set<String>;
+      when(
+        () => mockSupabaseService.getDiscoveryVideos(
+          limit: any(named: 'limit'),
+          excludedVideoIds: any(named: 'excludedVideoIds'),
+        ),
+      ).thenAnswer((invocation) async {
+        discoveryCallCount++;
+        final excludedIds =
+            invocation.namedArguments[#excludedVideoIds] as Set<String>;
 
-            if (discoveryCallCount == 1) {
-              expect(
-                excludedIds,
-                containsAll(
-                  List.generate(6, (index) => 't-$index'),
-                ),
-              );
-              return [
-                makeVideo('t-6', sourceUser: 'discover-6'),
-                makeVideo('t-7', sourceUser: 'discover-7'),
-                makeVideo('t-8', sourceUser: 'discover-8'),
-              ];
-            }
+        if (discoveryCallCount == 1) {
+          expect(
+            excludedIds,
+            containsAll(List.generate(6, (index) => 't-$index')),
+          );
+          return [
+            makeVideo('t-6', sourceUser: 'discover-6'),
+            makeVideo('t-7', sourceUser: 'discover-7'),
+            makeVideo('t-8', sourceUser: 'discover-8'),
+          ];
+        }
 
-            expect(excludedIds, containsAll(['t-6', 't-7', 't-8']));
-            return [
-              makeVideo('old-1', sourceUser: 'old-1'),
-              makeVideo('old-2', sourceUser: 'old-2'),
-            ];
-          });
+        expect(excludedIds, containsAll(['t-6', 't-7', 't-8']));
+        return [
+          makeVideo('old-1', sourceUser: 'old-1'),
+          makeVideo('old-2', sourceUser: 'old-2'),
+        ];
+      });
 
       final result = await homeFeedService.getHomeFeedContinuation(
         seenVideoIds: <String>{},
@@ -475,34 +610,41 @@ void main() {
       expect(videos.length, equals(11));
       expect(nextCursor.trendingOffset, equals(9));
       expect(nextCursor.hasMoreTrending, isFalse);
-      verifyNever(() => mockSupabaseService.getTrendingVideos(
-            limit: 6,
-            offset: 9,
-          ));
+      verifyNever(
+        () => mockSupabaseService.getTrendingVideos(limit: 6, offset: 9),
+      );
     });
 
     test('continuation only exhausts after an empty blended batch', () async {
-      when(() => mockSupabaseService.getPersonalizedVideos(
-            limit: any(named: 'limit'),
-            offset: any(named: 'offset'),
-          )).thenAnswer((_) async => []);
-      when(() => mockSupabaseService.getFollowingVideos(
-            limit: any(named: 'limit'),
-            offset: any(named: 'offset'),
-          )).thenAnswer((_) async => []);
-      when(() => mockSupabaseService.getDiscoveryVideos(
-            limit: any(named: 'limit'),
-            excludedVideoIds: any(named: 'excludedVideoIds'),
-          )).thenAnswer((_) async => []);
-      when(() => mockSupabaseService.getTrendingVideos(limit: 6, offset: 0))
-          .thenAnswer(
-            (_) async => List.generate(
-              6,
-              (index) => makeVideo('t-$index', sourceUser: 'trend-$index'),
-            ),
-          );
-      when(() => mockSupabaseService.getTrendingVideos(limit: 6, offset: 6))
-          .thenAnswer((_) async => []);
+      when(
+        () => mockSupabaseService.getPersonalizedVideos(
+          limit: any(named: 'limit'),
+          offset: any(named: 'offset'),
+        ),
+      ).thenAnswer((_) async => []);
+      when(
+        () => mockSupabaseService.getFollowingVideos(
+          limit: any(named: 'limit'),
+          offset: any(named: 'offset'),
+        ),
+      ).thenAnswer((_) async => []);
+      when(
+        () => mockSupabaseService.getDiscoveryVideos(
+          limit: any(named: 'limit'),
+          excludedVideoIds: any(named: 'excludedVideoIds'),
+        ),
+      ).thenAnswer((_) async => []);
+      when(
+        () => mockSupabaseService.getTrendingVideos(limit: 6, offset: 0),
+      ).thenAnswer(
+        (_) async => List.generate(
+          6,
+          (index) => makeVideo('t-$index', sourceUser: 'trend-$index'),
+        ),
+      );
+      when(
+        () => mockSupabaseService.getTrendingVideos(limit: 6, offset: 6),
+      ).thenAnswer((_) async => []);
 
       final result = await homeFeedService.getHomeFeedContinuation(
         seenVideoIds: <String>{},
@@ -518,4 +660,3 @@ void main() {
     });
   });
 }
-

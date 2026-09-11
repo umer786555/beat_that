@@ -597,17 +597,22 @@ class SupabaseService {
   Future<FunctionResponse> _invokeAuthenticatedEdgeFunction(
     String functionName, {
     Object? body,
+    bool requireAuthentication = true,
   }) async {
     final session = client.auth.currentSession;
     final user = client.auth.currentUser;
-    if (session == null || user == null) {
+    if (requireAuthentication && (session == null || user == null)) {
       print('$functionName aborted: user not authenticated');
       throw Exception('User not authenticated');
     }
 
-    print(
-      '$functionName auth context: userId=${user.id}, hasAccessToken=${session.accessToken.isNotEmpty}',
-    );
+    if (session != null && user != null) {
+      print(
+        '$functionName auth context: userId=${user.id}, hasAccessToken=${session.accessToken.isNotEmpty}',
+      );
+    } else {
+      print('$functionName auth context: anonymous invocation');
+    }
 
     return client.functions.invoke(functionName, body: body);
   }
@@ -1288,26 +1293,24 @@ class SupabaseService {
 
   /// Submit a video report for moderation
   ///
-  /// Records the current user's report of a video (e.g., harassment, inappropriate content).
+  /// Records an authenticated or anonymous report of a video
+  /// (e.g., harassment, inappropriate content).
   /// The report is stored in the database and can be reviewed by moderators.
-  /// The current authenticated user is automatically recorded as the reporter.
+  /// When a user is signed in, their user id is stored as the reporter.
+  /// Anonymous reports leave the reporter field empty.
   ///
   /// Parameters:
   /// - [videoId]: The UUID of the video being reported
   /// - [reason]: The report reason/category (e.g., 'harassment', 'hateSpeech', etc.)
   ///
-  /// Returns: {success: true, reportId, message} on success
+  /// Returns: {success: true, message} on success
   /// Returns: {success: false, error} on failure
   Future<Map<String, dynamic>> submitVideoReport({
     required String videoId,
     required String reason,
   }) async {
     try {
-      // Get current authenticated user
       final reportedBy = getCurrentUserId();
-      if (reportedBy == null) {
-        return {'success': false, 'error': 'User not authenticated'};
-      }
 
       // Validate inputs
       if (videoId.trim().isEmpty) {
@@ -1321,28 +1324,23 @@ class SupabaseService {
         '[VIDEO_REPORT] Submitting report - videoId=$videoId, reason=$reason, reportedBy=$reportedBy',
       );
 
-      // Insert report into database
-      final response = await client.from('video_reports').insert({
+      final payload = <String, dynamic>{
         'video_id': videoId,
         'reason': reason,
-        'reported_by': reportedBy,
         'created_at': DateTime.now().toIso8601String(),
         'status': 'pending', // Reports start in pending status for review
-      }).select();
+      };
 
-      if (response.isEmpty) {
-        throw Exception('Database insert failed: empty response');
+      if (reportedBy != null) {
+        payload['reported_by'] = reportedBy;
       }
 
-      final reportId = response[0]['id'] as String?;
-      if (reportId == null || reportId.isEmpty) {
-        throw Exception('Database insert failed: missing report ID');
-      }
+      // Insert report into database
+      await client.from('video_reports').insert(payload);
 
-      print('✓ Video report submitted successfully - reportId=$reportId');
+      print('✓ Video report submitted successfully');
       return {
         'success': true,
-        'reportId': reportId,
         'message': 'Thank you for your report. We will review it shortly.',
       };
     } catch (e) {
@@ -1637,7 +1635,11 @@ class SupabaseService {
       return videoPathOrUrl;
     }
 
-    return _pathToUrl('my_videos', videoPathOrUrl);
+    // Feed rows store canonical storage paths. Return existing network URLs
+    // unchanged, but convert bucket paths here so playback logic has a single
+    // URL-resolution entry point. If my_videos becomes private again, this is
+    // the place to swap back to signed URL generation.
+    return _generatePublicUrl('my_videos', videoPathOrUrl);
   }
 
   Future<File> _compressImageForUpload(
@@ -2033,6 +2035,7 @@ class SupabaseService {
       final response = await _invokeAuthenticatedEdgeFunction(
         'increment-video-views',
         body: {'linked_video_id': linkedVideoId},
+        requireAuthentication: false,
       );
 
       final data = response.data as Map<String, dynamic>?;

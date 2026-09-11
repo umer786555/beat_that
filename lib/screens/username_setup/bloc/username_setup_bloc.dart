@@ -1,6 +1,8 @@
 import 'package:beat_that/service_locator.dart';
+import 'package:beat_that/services/auth_service.dart';
 import 'package:beat_that/services/preferences_service.dart';
 import 'package:beat_that/services/supabase_service.dart';
+import 'package:beat_that/constants/app_strings.dart';
 import 'package:bloc_presentation/bloc_presentation.dart';
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -15,6 +17,7 @@ class UsernameSetupBloc extends Bloc<UsernameSetupEvent, UsernameSetupState>
           UsernameSetupState,
           UsernameSetupPresentationEvent
         > {
+  final authService = locator<AuthService>();
   final preferencesService = locator<PreferencesService>();
   final supabaseService = locator<SupabaseService>();
 
@@ -27,7 +30,23 @@ class UsernameSetupBloc extends Bloc<UsernameSetupEvent, UsernameSetupState>
     Emitter<UsernameSetupState> emit,
   ) async {
     try {
+      final requiresLegalAcceptance =
+          !authService.hasAcceptedCurrentLegalVersion();
+
+      if (requiresLegalAcceptance && !event.hasAcceptedLegal) {
+        emitPresentation(
+          const UsernameSetupErrorEvent(
+            AppStrings.acceptTermsToCreateAccount,
+          ),
+        );
+        return;
+      }
+
       emit(UsernameSetupLoading());
+
+      if (requiresLegalAcceptance) {
+        await authService.recordLegalAcceptance();
+      }
 
       // Step 1: Save username to Supabase
       // Service handles auth validation internally
@@ -49,14 +68,10 @@ class UsernameSetupBloc extends Bloc<UsernameSetupEvent, UsernameSetupState>
       await preferencesService.updateUserProfileUsername(event.username);
 
 
-      print('✓ Username saved successfully: ${event.username}');
-      print('✓ Emitting UsernameSetupSuccess state');
       emit(UsernameSetupSuccess(event.username));
 
-      print('✓ Emitting UsernameSetupSuccessEvent presentation');
       emitPresentation(UsernameSetupSuccessEvent(event.username));
     } catch (e) {
-      print('✗ Error saving username: $e');
       final errorMessage = 'Failed to save username: ${e.toString()}';
       emit(UsernameSetupInitial());
       emitPresentation(UsernameSetupErrorEvent(errorMessage));

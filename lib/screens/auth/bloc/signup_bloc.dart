@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:beat_that/service_locator.dart';
@@ -36,6 +37,7 @@ class SignupBloc extends Bloc<SignupEvent, SignupState> {
     on<ConfirmPasswordVisibilityToggled>(_onConfirmPasswordVisibilityToggled);
     on<SignupSubmitted>(_onSignupSubmitted);
     on<GoogleSignupSubmitted>(_onGoogleSignupSubmitted);
+    on<AppleSignupSubmitted>(_onAppleSignupSubmitted);
   }
 
   /// Validate email format
@@ -58,6 +60,19 @@ class SignupBloc extends Bloc<SignupEvent, SignupState> {
   String _parseErrorMessage(Object error) {
     if (error is AuthException) {
       switch (error.code) {
+        case 'apple_canceled':
+          return AppStrings.appleSignInCanceled;
+        case 'apple_failed':
+          return AppStrings.appleSignInFailedPleaseTryAgain;
+        case 'apple_not_available':
+        case 'apple_platform_unsupported':
+          return AppStrings.appleSignInNotSupported;
+        case 'apple_id_token_missing':
+        case 'apple_invalidResponse':
+        case 'apple_notHandled':
+        case 'apple_notInteractive':
+        case 'apple_unknown':
+          return AppStrings.appleSignInFailedPleaseTryAgain;
         case 'google_canceled':
           return AppStrings.googleSignInCanceled;
         case 'google_interrupted':
@@ -103,6 +118,28 @@ class SignupBloc extends Bloc<SignupEvent, SignupState> {
       return AppStrings.googleSignInCanceled;
     }
     return AppStrings.signupFailedPleaseTryAgain;
+  }
+
+  bool _ensureLegalAccepted(bool hasAcceptedLegal, Emitter<SignupState> emit) {
+    if (hasAcceptedLegal) {
+      return true;
+    }
+
+    emit(
+      const SignupFailure(
+        error: AppStrings.acceptTermsToCreateAccount,
+      ),
+    );
+    return false;
+  }
+
+  Future<void> _recordLegalAcceptanceIfPossible() async {
+    try {
+      await authService.recordLegalAcceptance();
+    } catch (error, stackTrace) {
+      debugPrint('Failed to persist legal acceptance after social signup: $error');
+      debugPrintStack(stackTrace: stackTrace);
+    }
   }
 
   /// Handle email input change
@@ -155,6 +192,10 @@ class SignupBloc extends Bloc<SignupEvent, SignupState> {
     SignupSubmitted event,
     Emitter<SignupState> emit,
   ) async {
+    if (!_ensureLegalAccepted(event.hasAcceptedLegal, emit)) {
+      return;
+    }
+
     final email = _email.trim();
     final password = _password;
     final confirmPassword = _confirmPassword;
@@ -188,6 +229,7 @@ class SignupBloc extends Bloc<SignupEvent, SignupState> {
         userData: {
           'email': email,
           'created_at': DateTime.now().toIso8601String(),
+          ...authService.buildLegalAcceptanceMetadata(),
         },
       );
 
@@ -204,9 +246,33 @@ class SignupBloc extends Bloc<SignupEvent, SignupState> {
     GoogleSignupSubmitted event,
     Emitter<SignupState> emit,
   ) async {
+    if (!_ensureLegalAccepted(event.hasAcceptedLegal, emit)) {
+      return;
+    }
+
     try {
       emit(const SignupLoading());
       await authService.signInWithGoogle();
+      await _recordLegalAcceptanceIfPossible();
+      emit(const SignupAuthenticatedSuccess());
+    } catch (e) {
+      final errorMessage = _parseErrorMessage(e);
+      emit(SignupFailure(error: errorMessage));
+    }
+  }
+
+  Future<void> _onAppleSignupSubmitted(
+    AppleSignupSubmitted event,
+    Emitter<SignupState> emit,
+  ) async {
+    if (!_ensureLegalAccepted(event.hasAcceptedLegal, emit)) {
+      return;
+    }
+
+    try {
+      emit(const SignupLoading());
+      await authService.signInWithApple();
+      await _recordLegalAcceptanceIfPossible();
       emit(const SignupAuthenticatedSuccess());
     } catch (e) {
       final errorMessage = _parseErrorMessage(e);

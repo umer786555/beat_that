@@ -23,7 +23,7 @@ class SignupSuccess extends SignupState {
   const SignupSuccess();
 }
 
-/// State when Google signup/signin completes and the user should enter the app
+/// State when social signup/signin completes and the user should enter the app
 class SignupAuthenticatedSuccess extends SignupState {
   const SignupAuthenticatedSuccess();
 }

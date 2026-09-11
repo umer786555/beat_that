@@ -2,7 +2,6 @@ import 'dart:io' show Platform;
 
 import 'package:beat_that/constants/app_colors.dart';
 import 'package:beat_that/constants/app_strings.dart';
-import 'package:beat_that/screens/auth/widgets/auth_legal_consent_section.dart';
 import 'package:beat_that/widgets/custom_snackbar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -22,8 +21,6 @@ class AuthChoiceScreen extends StatefulWidget {
 }
 
 class _AuthChoiceScreenState extends State<AuthChoiceScreen> {
-  bool _hasAcceptedLegal = false;
-
   static const double _primaryActionHeight = 54;
   static const double _primaryActionRadius = 8;
   static const double _authIconSize = 28;
@@ -49,7 +46,6 @@ class _AuthChoiceScreenState extends State<AuthChoiceScreen> {
         },
         builder: (context, state) {
           final isLoading = state is LoginLoading;
-          final canContinue = !isLoading && _hasAcceptedLegal;
 
           return Scaffold(
             backgroundColor: AppColors.black,
@@ -131,20 +127,10 @@ class _AuthChoiceScreenState extends State<AuthChoiceScreen> {
                                   crossAxisAlignment:
                                       CrossAxisAlignment.stretch,
                                   children: [
-                                    AuthLegalConsentSection(
-                                      value: _hasAcceptedLegal,
-                                      enabled: !isLoading,
-                                      onChanged: (value) {
-                                        setState(() {
-                                          _hasAcceptedLegal = value;
-                                        });
-                                      },
-                                    ),
-                                    const SizedBox(height: 18),
                                     if (Platform.isIOS) ...[
                                       _buildAuthButton(
                                         isLoading: isLoading,
-                                        isEnabled: canContinue,
+                                        isEnabled: !isLoading,
                                         text: AppStrings.continueWithApple,
                                         backgroundColor: AppColors.white,
                                         foregroundColor: AppColors.black,
@@ -163,7 +149,7 @@ class _AuthChoiceScreenState extends State<AuthChoiceScreen> {
                                     ],
                                     _buildAuthButton(
                                       isLoading: isLoading,
-                                      isEnabled: canContinue,
+                                      isEnabled: !isLoading,
                                       text: AppStrings.continueWithGoogle,
                                       backgroundColor: AppColors.white,
                                       foregroundColor: const Color(0xFF1F1F1F),
@@ -183,7 +169,7 @@ class _AuthChoiceScreenState extends State<AuthChoiceScreen> {
                                     const SizedBox(height: 18),
                                     _buildAuthButton(
                                       isLoading: isLoading,
-                                      isEnabled: canContinue,
+                                      isEnabled: !isLoading,
                                       text: AppStrings.continueWithEmail,
                                       backgroundColor: AppColors.white
                                           .withValues(alpha: 0.08),
@@ -196,6 +182,47 @@ class _AuthChoiceScreenState extends State<AuthChoiceScreen> {
                                         HapticFeedback.lightImpact();
                                         context.goNamed('login');
                                       },
+                                    ),
+                                    const SizedBox(height: 20),
+                                    Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        const Text(
+                                          AppStrings.dontHaveAccount,
+                                          style: TextStyle(
+                                            color: AppColors.white,
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 4),
+                                        GestureDetector(
+                                          onTap: isLoading
+                                              ? null
+                                              : () {
+                                                  HapticFeedback.lightImpact();
+                                                  context.goNamed('signup');
+                                                },
+                                          behavior: HitTestBehavior.opaque,
+                                          child: Padding(
+                                            padding: const EdgeInsets.symmetric(
+                                              vertical: 8,
+                                            ),
+                                            child: Text(
+                                              AppStrings.signUp,
+                                              style: TextStyle(
+                                                color: isLoading
+                                                    ? AppColors.white
+                                                    : AppColors.cyan,
+                                                fontWeight: FontWeight.w700,
+                                                fontSize: 14,
+                                                letterSpacing: 0.3,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                     const SizedBox(height: 20),
                                   ],

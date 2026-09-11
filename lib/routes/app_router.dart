@@ -265,6 +265,8 @@ class _RouteExtraDecoder extends Converter<Object?, Object?> {
 
 /// Route paths for the application
 class AppRoutes {
+  static const String launchHome = '/';
+
   // Auth routes
   static const String auth = '/auth';
   static const String login = '/login';
@@ -300,13 +302,29 @@ class AppRoutes {
 class AppRouter {
   AppRouter();
 
-  /// List of public (authentication) routes that don't require login
-  static const List<String> _publicRoutes = [
+  /// Authentication-only routes that should bounce signed-in users back home.
+  static const List<String> _authRoutes = [
     AppRoutes.auth,
     AppRoutes.login,
     AppRoutes.signup,
     AppRoutes.forgotPassword,
   ];
+
+  /// Routes guests may access without authentication.
+  static const List<String> _guestAccessibleRoutes = [
+    AppRoutes.launchHome,
+    AppRoutes.home,
+    AppRoutes.homeVideoFeed,
+    ..._authRoutes,
+  ];
+
+  static bool _matchesRoute(String currentPath, String route) {
+    if (route == AppRoutes.launchHome) {
+      return currentPath == route;
+    }
+
+    return currentPath == route || currentPath.startsWith('$route/');
+  }
 
   GoRouter? _routerInstance;
 
@@ -340,17 +358,25 @@ class AppRouter {
         final currentPath = state.fullPath ?? '';
 
         // Determine if the current route is a public authentication route
-        final isPublicRoute = _publicRoutes.any(
-          (route) => currentPath.startsWith(route),
+        final isGuestAccessibleRoute = _guestAccessibleRoutes.any(
+          (route) => _matchesRoute(currentPath, route),
+        );
+        final isAuthRoute = _authRoutes.any(
+          (route) => _matchesRoute(currentPath, route),
         );
 
+        // Rule 0: Treat the root path as an alias for the shell-backed home route.
+        if (currentPath == AppRoutes.launchHome) {
+          return AppRoutes.home;
+        }
+
         // Rule 1: If not logged in and trying to access a protected route, redirect to login
-        if (!isLoggedIn && !isPublicRoute) {
+        if (!isLoggedIn && !isGuestAccessibleRoute) {
           return AppRoutes.auth;
         }
 
         // Rule 2: If logged in and on an auth route, redirect to home
-        if (isLoggedIn && isPublicRoute) {
+        if (isLoggedIn && isAuthRoute) {
           return AppRoutes.home;
         }
 
@@ -360,11 +386,25 @@ class AppRouter {
 
       /// Initial location when the app first loads
       /// The redirect logic above will adjust this based on authentication state
-      initialLocation: AppRoutes.home,
+      initialLocation: AppRoutes.launchHome,
 
       /// Define all routes for the application
       /// Using named routes for type-safe navigation with goNamed()
       routes: [
+        GoRoute(
+          path: AppRoutes.launchHome,
+          name: 'launch-home',
+          pageBuilder: (context, state) {
+            return NoTransitionPage(
+              key: state.pageKey,
+              child: BlocProvider(
+                create: (context) => HomeBloc()..add(const InitialEvent()),
+                child: const HomeScreen(),
+              ),
+            );
+          },
+        ),
+
         /// Public authentication routes (require NOT logged in)
         GoRoute(
           path: AppRoutes.auth,
@@ -580,15 +620,7 @@ class AppRouter {
         /// Home navigation shell with persistent bottom navigation bar using StatefulShellRoute
         StatefulShellRoute.indexedStack(
           builder: (context, state, navigationShell) {
-            return MultiBlocProvider(
-              providers: [
-                BlocProvider(
-                  create: (context) =>
-                      ProfileBloc()..add(const LoadProfileEvent()),
-                ),
-              ],
-              child: NavigationShell(navigationShell: navigationShell),
-            );
+            return NavigationShell(navigationShell: navigationShell);
           },
           branches: [
             /// Home Tab Branch
@@ -636,7 +668,11 @@ class AppRouter {
                   pageBuilder: (context, state) {
                     return NoTransitionPage(
                       key: state.pageKey,
-                      child: ProfileScreen(),
+                      child: BlocProvider(
+                        create: (context) =>
+                            ProfileBloc()..add(const LoadProfileEvent()),
+                        child: const ProfileScreen(),
+                      ),
                     );
                   },
                   routes: [

@@ -204,17 +204,18 @@ class HomeVideoFeedCubit extends Cubit<HomeVideoFeedState>
     final isNetworkUrl =
         videoSource.startsWith('http://') || videoSource.startsWith('https://');
 
-    late final VideoPlayerController controller;
-    if (isNetworkUrl) {
-      controller = VideoPlayerController.networkUrl(Uri.parse(videoSource));
-    } else {
-      final playbackUrl = await _supabaseService.resolveVideoPlaybackUrl(
-        videoSource,
-      );
-      controller = VideoPlayerController.networkUrl(Uri.parse(playbackUrl));
-    }
+    VideoPlayerController? controller;
 
     try {
+      if (isNetworkUrl) {
+        controller = VideoPlayerController.networkUrl(Uri.parse(videoSource));
+      } else {
+        final playbackUrl = await _supabaseService.resolveVideoPlaybackUrl(
+          videoSource,
+        );
+        controller = VideoPlayerController.networkUrl(Uri.parse(playbackUrl));
+      }
+
       await controller.initialize();
       await controller.setLooping(true);
 
@@ -227,7 +228,7 @@ class HomeVideoFeedCubit extends Cubit<HomeVideoFeedState>
 
       _bumpControllerGeneration();
     } catch (_) {
-      await controller.dispose();
+      await controller?.dispose();
       if (index == state.currentIndex) {
         emit(
           state.copyWith(errorMessage: 'Failed to load video. Tap to retry.'),

@@ -55,7 +55,9 @@ class HomeFeedService {
         limit: limit,
         seenVideoIds: mutableSeenIds,
       );
-      final batch = List<SportVideo>.from(batchResult['videos'] as List<dynamic>);
+      final batch = List<SportVideo>.from(
+        batchResult['videos'] as List<dynamic>,
+      );
       nextCursor = batchResult['nextCursor'] as HomeFeedCursor;
 
       if (batch.isEmpty) {
@@ -94,10 +96,7 @@ class HomeFeedService {
     required Set<String> seenVideoIds,
   }) async {
     if (!cursor.hasMoreContent) {
-      return {
-        'videos': const <SportVideo>[],
-        'nextCursor': cursor,
-      };
+      return {'videos': const <SportVideo>[], 'nextCursor': cursor};
     }
 
     final personalizedCount = _weightedSourceCount(limit, PERSONALIZED_WEIGHT);
@@ -144,12 +143,28 @@ class HomeFeedService {
       ...trendingVideos.map((video) => video.id),
     };
 
-    final discoveryVideos = cursor.hasMoreDiscovery
+    var discoveryVideos = cursor.hasMoreDiscovery
         ? await supabaseService.getDiscoveryVideos(
             limit: discoveryCount,
             excludedVideoIds: discoveryExcludedIds,
           )
         : <SportVideo>[];
+
+    final isColdStart =
+        seenVideoIds.isEmpty &&
+        cursor.personalizedOffset == 0 &&
+        cursor.followingOffset == 0 &&
+        cursor.trendingOffset == 0;
+
+    if (isColdStart &&
+        personalizedVideos.isEmpty &&
+        followingVideos.isEmpty &&
+        trendingVideos.isEmpty &&
+        discoveryVideos.isEmpty) {
+      discoveryVideos = await supabaseService.getRandomDiscoveryVideos(
+        limit: limit,
+      );
+    }
 
     print(
       '✓ Fetched: personalized=${personalizedVideos.length}, following=${followingVideos.length}, trending=${trendingVideos.length}, discovery=${discoveryVideos.length}',
@@ -164,8 +179,7 @@ class HomeFeedService {
     );
 
     final nextCursor = cursor.copyWith(
-      personalizedOffset:
-          cursor.personalizedOffset + personalizedVideos.length,
+      personalizedOffset: cursor.personalizedOffset + personalizedVideos.length,
       followingOffset: cursor.followingOffset + followingVideos.length,
       trendingOffset: cursor.trendingOffset + trendingVideos.length,
       hasMorePersonalized: _sourceHasMore(
@@ -190,10 +204,7 @@ class HomeFeedService {
       ),
     );
 
-    return {
-      'videos': blendedFeed,
-      'nextCursor': nextCursor,
-    };
+    return {'videos': blendedFeed, 'nextCursor': nextCursor};
   }
 
   int _weightedSourceCount(int limit, double weight) {
@@ -321,5 +332,4 @@ class HomeFeedService {
       );
     }).toList();
   }
-
 }

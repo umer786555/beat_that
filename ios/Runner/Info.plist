@@ -302,6 +302,8 @@
 		<!-- Required for video uploading -->
 		<key>NSPhotoLibraryUsageDescription</key>
 		<string>We need access to your photo library to upload videos</string>
+		<key>NSUserTrackingUsageDescription</key>
+		<string>This permission helps us show more relevant ads and measure ad performance.</string>
 		<key>UIStatusBarHidden</key>
 		<true />
 		<key>UIViewControllerBasedStatusBarAppearance</key>

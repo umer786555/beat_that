@@ -9,9 +9,13 @@ sealed class UsernameSetupEvent extends Equatable {
 
 final class SaveUsernameEvent extends UsernameSetupEvent {
   final String username;
+  final bool hasAcceptedLegal;
 
-  const SaveUsernameEvent(this.username);
+  const SaveUsernameEvent({
+    required this.username,
+    required this.hasAcceptedLegal,
+  });
 
   @override
-  List<Object> get props => [username];
+  List<Object> get props => [username, hasAcceptedLegal];
 }

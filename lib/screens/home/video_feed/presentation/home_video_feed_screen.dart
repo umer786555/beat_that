@@ -6,6 +6,7 @@ import 'package:beat_that/reporting/models/report_target.dart';
 import 'package:beat_that/reporting/presentation/show_content_report_bottom_sheet.dart';
 import 'package:beat_that/service_locator.dart';
 import 'package:beat_that/services/ad_mob_consent_service.dart';
+import 'package:beat_that/services/auth_service.dart';
 import 'package:beat_that/widgets/custom_snackbar.dart';
 import 'package:beat_that/widgets/video_rating_bottom_sheet.dart';
 import 'package:beat_that/widgets/custom_back_button.dart';
@@ -43,6 +44,7 @@ class _HomeVideoFeedScreenState extends State<HomeVideoFeedScreen> {
 
   late final PageController _pageController;
   late final AdMobConsentService _consentService;
+  late final AuthService _authService;
   bool _isChromeVisible = false;
   InterstitialAd? _interstitialAd;
   bool _isInterstitialLoading = false;
@@ -77,6 +79,7 @@ class _HomeVideoFeedScreenState extends State<HomeVideoFeedScreen> {
     super.initState();
     _pageController = PageController(initialPage: widget.initialIndex);
     _consentService = locator<AdMobConsentService>();
+    _authService = locator<AuthService>();
     _consentService.addListener(_handleConsentStateChanged);
     _lastVisitedIndex = widget.initialIndex;
 
@@ -204,6 +207,15 @@ class _HomeVideoFeedScreenState extends State<HomeVideoFeedScreen> {
     });
   }
 
+  bool _redirectGuestToAuth(BuildContext context) {
+    if (_authService.isLoggedIn()) {
+      return false;
+    }
+
+    context.pushNamed('auth');
+    return true;
+  }
+
   @override
   Widget build(BuildContext context) {
     return BlocProvider(
@@ -266,15 +278,25 @@ class _HomeVideoFeedScreenState extends State<HomeVideoFeedScreen> {
                                   ? state.currentUserRating
                                   : null,
                               onOpenRating: isCurrentVideo
-                                  ? () => _showRatingSheet(
-                                      context,
-                                      cubit: cubit,
-                                      onSubmitRating: cubit.submitRating,
-                                    )
+                                  ? () {
+                                      if (_redirectGuestToAuth(context)) {
+                                        return;
+                                      }
+
+                                      _showRatingSheet(
+                                        context,
+                                        cubit: cubit,
+                                        onSubmitRating: cubit.submitRating,
+                                      );
+                                    }
                                   : null,
                               onOpenCreatorProfile: userId.isEmpty
                                   ? null
                                   : () {
+                                      if (_redirectGuestToAuth(context)) {
+                                        return;
+                                      }
+
                                       HapticFeedback.mediumImpact();
                                       debugPrint(
                                         'Opening creator profile for userId: $userId',

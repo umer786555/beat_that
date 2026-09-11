@@ -41,6 +41,13 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
     try {
       await preferencesService.clearUserProfile();
 
+      final isLoggedIn = authService.isLoggedIn();
+
+      if (!isLoggedIn) {
+        add(const FetchFeedEvent(limit: _homeFeedPageSize, offset: 0));
+        return;
+      }
+
       // Fetch user profile from Supabase
       final userProfile = await supabaseService.fetchUserPersonalProfile();
 
@@ -51,12 +58,7 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
         emit(UserProfileLoaded(userProfile));
 
         // Automatically fetch initial feed after saving profile
-        add(
-          const FetchFeedEvent(
-            limit: _homeFeedPageSize,
-            offset: 0,
-          ),
-        );
+        add(const FetchFeedEvent(limit: _homeFeedPageSize, offset: 0));
       } else {
         print('✗ No user profile found');
         emit(const NoUserProfile());
@@ -177,12 +179,7 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
       _isPaginationRequestInFlight = false;
 
       // Fetch fresh feed from top
-      add(
-        const FetchFeedEvent(
-          limit: _homeFeedPageSize,
-          offset: 0,
-        ),
-      );
+      add(const FetchFeedEvent(limit: _homeFeedPageSize, offset: 0));
     } catch (e) {
       print('✗ RefreshFeedEvent Error: $e');
       emit(FeedError(message: 'Failed to refresh feed: $e'));
@@ -217,10 +214,7 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
 
       // Fetch next batch at current offset
       add(
-        FetchFeedEvent(
-          limit: _homeFeedPageSize,
-          offset: _allFeedVideos.length,
-        ),
+        FetchFeedEvent(limit: _homeFeedPageSize, offset: _allFeedVideos.length),
       );
     } catch (e) {
       _isPaginationRequestInFlight = false;
