@@ -65,8 +65,6 @@ void main() {
           '',
           limit: 20,
           offset: 0,
-          exactMatch: false,
-          startsWithOnly: false,
           sportId: sportId,
         ),
       ).thenAnswer((_) async => result);
@@ -92,8 +90,6 @@ void main() {
           '',
           limit: 20,
           offset: 0,
-          exactMatch: false,
-          startsWithOnly: false,
           sportId: sportId,
         ),
       ).called(2);
@@ -122,8 +118,6 @@ void main() {
         query,
         limit: 20,
         offset: 0,
-        exactMatch: false,
-        startsWithOnly: false,
         sportId: null,
       ),
     ).thenAnswer((_) async => emptyResult);
@@ -146,8 +140,6 @@ void main() {
         query,
         limit: 20,
         offset: 0,
-        exactMatch: false,
-        startsWithOnly: false,
         sportId: null,
       ),
     ).called(2);

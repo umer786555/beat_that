@@ -82,6 +82,8 @@ class LoginBloc extends Bloc<LoginEvent, LoginState> {
           return AppStrings.googleSignInCanceled;
         case 'google_interrupted':
           return AppStrings.googleSignInInterrupted;
+        case 'google_reauth_failed':
+          return AppStrings.googleSignInReauthFailed;
         case 'google_clientConfigurationError':
         case 'google_providerConfigurationError':
         case 'google_id_token_missing':
@@ -113,6 +115,9 @@ class LoginBloc extends Bloc<LoginEvent, LoginState> {
     } else if (errorText.contains('google_auth_unsupported') ||
         errorText.contains('google_platform_unsupported')) {
       return AppStrings.googleSignInNotSupported;
+    } else if (errorText.contains('google_reauth_failed') ||
+        errorText.contains('account reauth failed')) {
+      return AppStrings.googleSignInReauthFailed;
     } else if (errorText.contains('apple_not_available') ||
         errorText.contains('apple_platform_unsupported')) {
       return AppStrings.appleSignInNotSupported;

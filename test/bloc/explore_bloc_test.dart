@@ -27,8 +27,6 @@ void main() {
           '',
           limit: 20,
           offset: 0,
-          exactMatch: false,
-          startsWithOnly: false,
           sportId: 'tennis',
         ),
       ).thenAnswer(
@@ -52,7 +50,6 @@ void main() {
     build: () => ExploreBloc(),
     seed: () => const ExploreLoaded(
       query: '',
-      searchMode: ExploreSearchMode.soft,
       selectedSportId: 'tennis',
       videos: [],
       totalCount: 0,
@@ -63,7 +60,6 @@ void main() {
     expect: () => [
       const ExploreLoading(
         query: '',
-        searchMode: ExploreSearchMode.soft,
         selectedSportId: 'tennis',
       ),
       isA<ExploreLoaded>()
@@ -76,8 +72,6 @@ void main() {
           '',
           limit: 20,
           offset: 0,
-          exactMatch: false,
-          startsWithOnly: false,
           sportId: 'tennis',
         ),
       ).called(1);

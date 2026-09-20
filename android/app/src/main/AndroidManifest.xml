@@ -35,6 +35,9 @@
                 <data
                     android:scheme="com.theblackappcompany.beatthat"
                     android:host="login-callback" />
+                <data
+                    android:scheme="com.theblackappcompany.beatthat"
+                    android:host="email-upgrade-callback" />
             </intent-filter>
         </activity>
         <!-- Don't delete the meta-data below.

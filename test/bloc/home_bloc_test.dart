@@ -110,7 +110,7 @@ void main() {
     blocTest<HomeBloc, HomeState>(
       'loads the home feed for guests on InitialEvent',
       setUp: () {
-        when(() => mockAuthService.isLoggedIn()).thenReturn(false);
+        when(() => mockAuthService.hasFullAccountAccess()).thenReturn(false);
         when(() => mockPreferencesService.clearUserProfile()).thenAnswer(
           (_) async {},
         );

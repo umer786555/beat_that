@@ -40,32 +40,20 @@ class ConfirmPasswordChanged extends SignupEvent {
 
 /// Event triggered when signup form is submitted
 class SignupSubmitted extends SignupEvent {
-  final bool hasAcceptedLegal;
-
-  const SignupSubmitted({required this.hasAcceptedLegal});
+  const SignupSubmitted();
 
   @override
-  List<Object?> get props => [hasAcceptedLegal];
+  List<Object?> get props => [];
 }
 
 /// Event triggered when Google sign-in is submitted from the signup screen
 class GoogleSignupSubmitted extends SignupEvent {
-  final bool hasAcceptedLegal;
-
-  const GoogleSignupSubmitted({required this.hasAcceptedLegal});
-
-  @override
-  List<Object?> get props => [hasAcceptedLegal];
+  const GoogleSignupSubmitted();
 }
 
 /// Event triggered when Apple sign-in is submitted from the signup screen
 class AppleSignupSubmitted extends SignupEvent {
-  final bool hasAcceptedLegal;
-
-  const AppleSignupSubmitted({required this.hasAcceptedLegal});
-
-  @override
-  List<Object?> get props => [hasAcceptedLegal];
+  const AppleSignupSubmitted();
 }
 
 /// Event triggered when user wants to toggle password visibility

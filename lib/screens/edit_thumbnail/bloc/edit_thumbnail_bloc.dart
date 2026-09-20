@@ -6,6 +6,7 @@ import 'package:beat_that/models/sport.dart';
 import 'package:bloc_presentation/bloc_presentation.dart';
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter/material.dart';
 import 'package:video_thumbnail/video_thumbnail.dart';
 import 'dart:typed_data';
 import 'dart:math';
@@ -205,6 +206,15 @@ class EditThumbnailBloc extends Bloc<EditThumbnailEvent, EditThumbnailState>
       final thumbnailFile = File('${tempDir.path}/thumbnail.png');
       await thumbnailFile.writeAsBytes(selectedThumbnail!);
 
+      // Get user's device locale
+      String? countryCode;
+      try {
+        final platformLocale = WidgetsBinding.instance.platformDispatcher.locale;
+        countryCode = platformLocale.countryCode;
+      } catch (e) {
+        print('Warning: Could not retrieve platform locale: $e');
+      }
+
       // Call Supabase service to upload video and thumbnail WITH PROGRESS TRACKING
       final result = await supabaseService.uploadVideoWithThumbnail(
         videoFile: videoFile,
@@ -224,6 +234,7 @@ class EditThumbnailBloc extends Bloc<EditThumbnailEvent, EditThumbnailState>
                   .id
             : null,
         subcategoryName: selectedSubcategory,
+        countryCode: countryCode,
         // Progress callback for video upload
         onVideoProgress: (sent, total) {
           final progressPercent = (sent / total * 100).toStringAsFixed(0);

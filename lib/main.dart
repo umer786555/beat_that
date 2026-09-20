@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:app_links/app_links.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -44,6 +45,15 @@ void main() async {
   // Register all services with initialized dependencies
   setupServiceLocator(preferencesService);
 
+  try {
+    final authService = locator<AuthService>();
+    await authService.ensureAnonymousSession();
+    await authService.refreshCurrentUser();
+  } catch (error, stackTrace) {
+    debugPrint('Anonymous session bootstrap failed: $error');
+    debugPrintStack(stackTrace: stackTrace);
+  }
+
   if (_supportsMobileAds) {
     await MobileAds.instance.initialize();
   }
@@ -66,17 +76,21 @@ class MyApp extends StatefulWidget {
 /// - Uses debouncing to prevent excessive route refresh cycles
 class _MyAppState extends State<MyApp> {
   late final AppRouter _appRouter;
+  late final AppLinks _appLinks;
   late final ThemeBloc _themeBloc;
   // Shared above the router so any route can refresh counts after a
   // follow/unfollow action without reaching into ProfileBloc directly.
   late final FollowCountsCubit _followCountsCubit;
+  StreamSubscription<Uri>? _emailUpgradeLinkSubscription;
   DateTime? _lastRefreshTime;
+  String? _lastHandledEmailUpgradeUri;
 
   @override
   void initState() {
     super.initState();
     // Get AppRouter from service locator
     _appRouter = locator<AppRouter>();
+    _appLinks = AppLinks();
 
     // Create ThemeBloc with ThemeService from service locator
     _themeBloc = ThemeBloc(themeService: locator<ThemeService>());
@@ -86,11 +100,15 @@ class _MyAppState extends State<MyApp> {
     // current user's profile screen. This follows the bloc recommendation of
     // lifting shared state to a higher scope.
     _followCountsCubit = FollowCountsCubit();
-    _followCountsCubit.refresh();
+    if (locator<AuthService>().hasFullAccountAccess()) {
+      _followCountsCubit.refresh();
+    }
 
     if (_supportsMobileAds) {
       unawaited(locator<AdMobConsentService>().requestConsentInfoUpdate());
     }
+
+    unawaited(_startEmailUpgradeLinkObserver());
 
     // Get AuthService from service locator to listen to auth state changes
     final authService = locator<AuthService>();
@@ -99,7 +117,23 @@ class _MyAppState extends State<MyApp> {
     // When auth state changes (login, logout, session expired, etc.),
     // we need to call router.refresh() so GoRouter re-evaluates the redirect logic
     authService.onAuthStateChanged().listen(
-      (event) {
+      (event) async {
+        if (event.event == AuthChangeEvent.signedOut) {
+          authService.clearResolvedUser();
+        } else {
+          try {
+            await authService.refreshCurrentUser();
+          } on AuthException catch (error, stackTrace) {
+            debugPrint('Auth user refresh failed: ${error.message}');
+            debugPrintStack(stackTrace: stackTrace);
+          }
+        }
+
+        if (authService.requiresEmailUpgradePasswordSetup()) {
+          _appRouter.router.goNamed('reset-password');
+          return;
+        }
+
         if (event.event == AuthChangeEvent.passwordRecovery) {
           _appRouter.router.goNamed('reset-password');
           return;
@@ -112,7 +146,7 @@ class _MyAppState extends State<MyApp> {
             now.difference(_lastRefreshTime!).inMilliseconds > 500) {
           _lastRefreshTime = now;
 
-          if (authService.isLoggedIn()) {
+          if (authService.hasFullAccountAccess()) {
             _followCountsCubit.refresh();
           } else {
             _followCountsCubit.reset();
@@ -128,6 +162,59 @@ class _MyAppState extends State<MyApp> {
         debugPrint('Auth state stream error: $error');
       },
     );
+  }
+
+  @override
+  void dispose() {
+    _emailUpgradeLinkSubscription?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _startEmailUpgradeLinkObserver() async {
+    try {
+      final initialUri = await _appLinks.getInitialLink();
+      if (initialUri != null) {
+        await _handleEmailUpgradeLink(initialUri);
+      }
+    } catch (error, stackTrace) {
+      debugPrint('Initial email upgrade link handling failed: $error');
+      debugPrintStack(stackTrace: stackTrace);
+    }
+
+    _emailUpgradeLinkSubscription = _appLinks.uriLinkStream.listen(
+      (uri) {
+        unawaited(_handleEmailUpgradeLink(uri));
+      },
+      onError: (Object error, StackTrace stackTrace) {
+        debugPrint('Email upgrade link stream failed: $error');
+        debugPrintStack(stackTrace: stackTrace);
+      },
+    );
+  }
+
+  Future<void> _handleEmailUpgradeLink(Uri uri) async {
+    final authService = locator<AuthService>();
+    if (!authService.isEmailUpgradeCallbackUri(uri)) {
+      return;
+    }
+
+    final normalizedUri = uri.toString();
+    if (_lastHandledEmailUpgradeUri == normalizedUri) {
+      return;
+    }
+    _lastHandledEmailUpgradeUri = normalizedUri;
+
+    try {
+      await authService.verifyEmailUpgradeCallback(uri);
+      if (!mounted) {
+        return;
+      }
+
+      _appRouter.router.goNamed('reset-password');
+    } catch (error, stackTrace) {
+      debugPrint('Email upgrade link handling failed: $error');
+      debugPrintStack(stackTrace: stackTrace);
+    }
   }
 
   @override

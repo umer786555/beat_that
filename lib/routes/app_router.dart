@@ -30,7 +30,6 @@ import 'package:beat_that/screens/settings/bloc/settings_bloc.dart';
 import 'package:beat_that/screens/settings/blocked_users_screen.dart';
 import 'package:beat_that/screens/settings/settings_screen.dart';
 import 'package:beat_that/screens/creator_profile/creator_profile_screen.dart';
-import 'package:beat_that/screens/auth/auth_choice_screen.dart';
 import 'package:beat_that/screens/auth/forgot_password_screen.dart';
 import 'package:beat_that/screens/auth/login_screen.dart';
 import 'package:beat_that/screens/auth/reset_password_screen.dart';
@@ -315,6 +314,7 @@ class AppRouter {
     AppRoutes.launchHome,
     AppRoutes.home,
     AppRoutes.homeVideoFeed,
+    AppRoutes.resetPassword,
     ..._authRoutes,
   ];
 
@@ -351,7 +351,9 @@ class AppRouter {
       /// - '/path': Redirect to a different route
       redirect: (BuildContext context, GoRouterState state) {
         final authService = locator<AuthService>();
-        final isLoggedIn = authService.isLoggedIn();
+        final hasFullAccountAccess = authService.hasFullAccountAccess();
+        final requiresEmailUpgradePasswordSetup = authService
+            .requiresEmailUpgradePasswordSetup();
 
         // Use fullPath as the source of truth during transitions (name may be null)
         // fullPath corresponds to the route path, not the name
@@ -365,22 +367,29 @@ class AppRouter {
           (route) => _matchesRoute(currentPath, route),
         );
 
-        // Rule 0: Treat the root path as an alias for the shell-backed home route.
+        // Rule 0: Users who verified their email but still need a password
+        // must complete password setup before resuming normal navigation.
+        if (requiresEmailUpgradePasswordSetup &&
+            !_matchesRoute(currentPath, AppRoutes.resetPassword)) {
+          return AppRoutes.resetPassword;
+        }
+
+        // Rule 1: Treat the root path as an alias for the shell-backed home route.
         if (currentPath == AppRoutes.launchHome) {
           return AppRoutes.home;
         }
 
-        // Rule 1: If not logged in and trying to access a protected route, redirect to login
-        if (!isLoggedIn && !isGuestAccessibleRoute) {
+        // Rule 2: Anonymous users keep guest-level navigation and auth access.
+        if (!hasFullAccountAccess && !isGuestAccessibleRoute) {
           return AppRoutes.auth;
         }
 
-        // Rule 2: If logged in and on an auth route, redirect to home
-        if (isLoggedIn && isAuthRoute) {
+        // Rule 3: Permanent accounts should not land back on auth screens.
+        if (hasFullAccountAccess && isAuthRoute) {
           return AppRoutes.home;
         }
 
-        // Rule 3: Allow all other navigations
+        // Rule 4: Allow all other navigations
         return null;
       },
 
@@ -412,7 +421,7 @@ class AppRouter {
           pageBuilder: (context, state) {
             return NoTransitionPage(
               key: state.pageKey,
-              child: const AuthChoiceScreen(),
+              child: const SignupScreen(showBackButton: false),
             );
           },
         ),
@@ -662,208 +671,38 @@ class AppRouter {
             /// Profile Tab Branch
             StatefulShellBranch(
               routes: [
-                GoRoute(
-                  path: '/profile',
-                  name: 'profile',
-                  pageBuilder: (context, state) {
-                    return NoTransitionPage(
-                      key: state.pageKey,
-                      child: BlocProvider(
-                        create: (context) =>
-                            ProfileBloc()..add(const LoadProfileEvent()),
-                        child: const ProfileScreen(),
-                      ),
+                ShellRoute(
+                  builder: (context, state, child) {
+                    return BlocProvider(
+                      create: (context) =>
+                          ProfileBloc()..add(const LoadProfileEvent()),
+                      child: child,
                     );
                   },
                   routes: [
                     GoRoute(
-                      path: 'settings',
-                      name: 'settings',
+                      path: '/profile',
+                      name: 'profile',
                       pageBuilder: (context, state) {
-                        return CustomTransitionPage(
+                        return NoTransitionPage(
                           key: state.pageKey,
-                          child: BlocProvider(
-                            create: (context) => SettingsBloc(),
-                            child: const SettingsScreen(),
-                          ),
-                          transitionsBuilder:
-                              (context, animation, secondaryAnimation, child) {
-                                const begin = Offset(1.0, 0.0);
-                                const end = Offset.zero;
-                                final tween = Tween(begin: begin, end: end);
-                                final curvedAnimation = CurvedAnimation(
-                                  parent: animation,
-                                  curve: Curves.easeInOut,
-                                );
-                                return SlideTransition(
-                                  position: tween.animate(curvedAnimation),
-                                  child: child,
-                                );
-                              },
-                        );
-                      },
-                    ),
-                    GoRoute(
-                      path: 'blocked-users',
-                      name: 'blocked-users',
-                      pageBuilder: (context, state) {
-                        return CustomTransitionPage(
-                          key: state.pageKey,
-                          child: const BlockedUsersScreen(),
-                          transitionsBuilder:
-                              (context, animation, secondaryAnimation, child) {
-                                const begin = Offset(1.0, 0.0);
-                                const end = Offset.zero;
-                                final tween = Tween(begin: begin, end: end);
-                                final curvedAnimation = CurvedAnimation(
-                                  parent: animation,
-                                  curve: Curves.easeInOut,
-                                );
-                                return SlideTransition(
-                                  position: tween.animate(curvedAnimation),
-                                  child: child,
-                                );
-                              },
-                        );
-                      },
-                    ),
-
-                    /// Edit Uploaded Video Child Route
-                    GoRoute(
-                      path: 'edit-uploaded-video',
-                      name: 'edit-uploaded-video',
-                      pageBuilder: (context, state) {
-                        final extra = state.extra as PlayUploadedVideoExtra;
-                        return CustomTransitionPage(
-                          key: state.pageKey,
-                          child: PlayUploadedVideoScreen(
-                            videoPath: extra.videoPath,
-                            shouldShowEditButtons: extra.shouldShowEditButtons,
-                            sport: extra.sport,
-                            selectedSubcategory: extra.selectedSubcategory,
-                          ),
-                          transitionsBuilder:
-                              (context, animation, secondaryAnimation, child) {
-                                const begin = Offset(0.0, 1.0);
-                                const end = Offset.zero;
-                                final tween = Tween(begin: begin, end: end);
-                                final curvedAnimation = CurvedAnimation(
-                                  parent: animation,
-                                  curve: Curves.easeInOut,
-                                );
-                                return SlideTransition(
-                                  position: tween.animate(curvedAnimation),
-                                  child: child,
-                                );
-                              },
-                        );
-                      },
-                    ),
-
-                    /// Edit Thumbnail Child Route
-                    GoRoute(
-                      path: 'edit-thumbnail',
-                      name: 'edit-thumbnail',
-                      pageBuilder: (context, state) {
-                        final extra = state.extra as EditThumbnailExtra;
-                        return CustomTransitionPage(
-                          key: state.pageKey,
-                          child: EditThumbnailScreen(
-                            videoPath: extra.videoPath,
-                            videoDuration: extra.videoDuration,
-                            sport: extra.sport,
-                            selectedSubcategory: extra.selectedSubcategory,
-                          ),
-                          transitionsBuilder:
-                              (context, animation, secondaryAnimation, child) {
-                                const begin = Offset(0.0, 1.0);
-                                const end = Offset.zero;
-                                final tween = Tween(begin: begin, end: end);
-                                final curvedAnimation = CurvedAnimation(
-                                  parent: animation,
-                                  curve: Curves.easeInOut,
-                                );
-                                return SlideTransition(
-                                  position: tween.animate(curvedAnimation),
-                                  child: child,
-                                );
-                              },
-                        );
-                      },
-                    ),
-
-                    GoRoute(
-                      path: 'rejected-video-guidance',
-                      name: 'rejected-video-guidance',
-                      pageBuilder: (context, state) {
-                        final extra = state.extra as RejectedVideoGuidanceExtra;
-                        return CustomTransitionPage(
-                          key: state.pageKey,
-                          child: RejectedVideoGuidanceScreen(
-                            videoTitle: extra.videoTitle,
-                          ),
-                          transitionsBuilder:
-                              (context, animation, secondaryAnimation, child) {
-                                const begin = Offset(1.0, 0.0);
-                                const end = Offset.zero;
-                                final tween = Tween(begin: begin, end: end);
-                                final curvedAnimation = CurvedAnimation(
-                                  parent: animation,
-                                  curve: Curves.easeInOut,
-                                );
-                                return SlideTransition(
-                                  position: tween.animate(curvedAnimation),
-                                  child: child,
-                                );
-                              },
-                        );
-                      },
-                    ),
-
-                    /// Sports Hub Child Route
-                    GoRoute(
-                      path: 'sports-hub',
-                      name: 'sports-hub',
-                      pageBuilder: (context, state) {
-                        return CustomTransitionPage(
-                          key: state.pageKey,
-                          child: const SportsHubScreen(),
-                          transitionsBuilder:
-                              (context, animation, secondaryAnimation, child) {
-                                const begin = Offset(0.0, 1.0);
-                                const end = Offset.zero;
-                                final tween = Tween(begin: begin, end: end);
-                                final curvedAnimation = CurvedAnimation(
-                                  parent: animation,
-                                  curve: Curves.easeInOut,
-                                );
-                                return SlideTransition(
-                                  position: tween.animate(curvedAnimation),
-                                  child: child,
-                                );
-                              },
+                          child: const ProfileScreen(),
                         );
                       },
                       routes: [
-                        /// Sport Details Child Route
                         GoRoute(
-                          path: 'sport-details',
-                          name: 'sport-details',
+                          path: 'settings',
+                          name: 'settings',
                           pageBuilder: (context, state) {
-                            final sportDetailsExtra =
-                                state.extra as SportDetailsExtra;
-                            final sport = sportDetailsExtra.sport;
                             return CustomTransitionPage(
                               key: state.pageKey,
-                              child: SportDetailsScreen(sport: sport),
+                              child: BlocProvider(
+                                create: (context) => SettingsBloc(),
+                                child: const SettingsScreen(),
+                              ),
                               transitionsBuilder:
-                                  (
-                                    context,
-                                    animation,
-                                    secondaryAnimation,
-                                    child,
-                                  ) {
-                                    const begin = Offset(0.0, 1.0);
+                                  (context, animation, secondaryAnimation, child) {
+                                    const begin = Offset(1.0, 0.0);
                                     const end = Offset.zero;
                                     final tween = Tween(begin: begin, end: end);
                                     final curvedAnimation = CurvedAnimation(
@@ -879,23 +718,14 @@ class AppRouter {
                           },
                         ),
                         GoRoute(
-                          path: 'connections',
-                          name: 'profile-connections',
+                          path: 'blocked-users',
+                          name: 'blocked-users',
                           pageBuilder: (context, state) {
-                            final extra =
-                                state.extra as ProfileConnectionsExtra;
                             return CustomTransitionPage(
                               key: state.pageKey,
-                              child: ProfileConnectionsScreen(
-                                connectionType: extra.connectionType,
-                              ),
+                              child: const BlockedUsersScreen(),
                               transitionsBuilder:
-                                  (
-                                    context,
-                                    animation,
-                                    secondaryAnimation,
-                                    child,
-                                  ) {
+                                  (context, animation, secondaryAnimation, child) {
                                     const begin = Offset(1.0, 0.0);
                                     const end = Offset.zero;
                                     final tween = Tween(begin: begin, end: end);
@@ -910,6 +740,192 @@ class AppRouter {
                                   },
                             );
                           },
+                        ),
+
+                        /// Edit Uploaded Video Child Route
+                        GoRoute(
+                          path: 'edit-uploaded-video',
+                          name: 'edit-uploaded-video',
+                          pageBuilder: (context, state) {
+                            final extra = state.extra as PlayUploadedVideoExtra;
+                            return CustomTransitionPage(
+                              key: state.pageKey,
+                              child: PlayUploadedVideoScreen(
+                                videoPath: extra.videoPath,
+                                shouldShowEditButtons: extra.shouldShowEditButtons,
+                                sport: extra.sport,
+                                selectedSubcategory: extra.selectedSubcategory,
+                              ),
+                              transitionsBuilder:
+                                  (context, animation, secondaryAnimation, child) {
+                                    const begin = Offset(0.0, 1.0);
+                                    const end = Offset.zero;
+                                    final tween = Tween(begin: begin, end: end);
+                                    final curvedAnimation = CurvedAnimation(
+                                      parent: animation,
+                                      curve: Curves.easeInOut,
+                                    );
+                                    return SlideTransition(
+                                      position: tween.animate(curvedAnimation),
+                                      child: child,
+                                    );
+                                  },
+                            );
+                          },
+                        ),
+
+                        /// Edit Thumbnail Child Route
+                        GoRoute(
+                          path: 'edit-thumbnail',
+                          name: 'edit-thumbnail',
+                          pageBuilder: (context, state) {
+                            final extra = state.extra as EditThumbnailExtra;
+                            return CustomTransitionPage(
+                              key: state.pageKey,
+                              child: EditThumbnailScreen(
+                                videoPath: extra.videoPath,
+                                videoDuration: extra.videoDuration,
+                                sport: extra.sport,
+                                selectedSubcategory: extra.selectedSubcategory,
+                              ),
+                              transitionsBuilder:
+                                  (context, animation, secondaryAnimation, child) {
+                                    const begin = Offset(0.0, 1.0);
+                                    const end = Offset.zero;
+                                    final tween = Tween(begin: begin, end: end);
+                                    final curvedAnimation = CurvedAnimation(
+                                      parent: animation,
+                                      curve: Curves.easeInOut,
+                                    );
+                                    return SlideTransition(
+                                      position: tween.animate(curvedAnimation),
+                                      child: child,
+                                    );
+                                  },
+                            );
+                          },
+                        ),
+
+                        GoRoute(
+                          path: 'rejected-video-guidance',
+                          name: 'rejected-video-guidance',
+                          pageBuilder: (context, state) {
+                            final extra = state.extra as RejectedVideoGuidanceExtra;
+                            return CustomTransitionPage(
+                              key: state.pageKey,
+                              child: RejectedVideoGuidanceScreen(
+                                videoTitle: extra.videoTitle,
+                              ),
+                              transitionsBuilder:
+                                  (context, animation, secondaryAnimation, child) {
+                                    const begin = Offset(1.0, 0.0);
+                                    const end = Offset.zero;
+                                    final tween = Tween(begin: begin, end: end);
+                                    final curvedAnimation = CurvedAnimation(
+                                      parent: animation,
+                                      curve: Curves.easeInOut,
+                                    );
+                                    return SlideTransition(
+                                      position: tween.animate(curvedAnimation),
+                                      child: child,
+                                    );
+                                  },
+                            );
+                          },
+                        ),
+
+                        /// Sports Hub Child Route
+                        GoRoute(
+                          path: 'sports-hub',
+                          name: 'sports-hub',
+                          pageBuilder: (context, state) {
+                            return CustomTransitionPage(
+                              key: state.pageKey,
+                              child: const SportsHubScreen(),
+                              transitionsBuilder:
+                                  (context, animation, secondaryAnimation, child) {
+                                    const begin = Offset(0.0, 1.0);
+                                    const end = Offset.zero;
+                                    final tween = Tween(begin: begin, end: end);
+                                    final curvedAnimation = CurvedAnimation(
+                                      parent: animation,
+                                      curve: Curves.easeInOut,
+                                    );
+                                    return SlideTransition(
+                                      position: tween.animate(curvedAnimation),
+                                      child: child,
+                                    );
+                                  },
+                            );
+                          },
+                          routes: [
+                            /// Sport Details Child Route
+                            GoRoute(
+                              path: 'sport-details',
+                              name: 'sport-details',
+                              pageBuilder: (context, state) {
+                                final sportDetailsExtra =
+                                    state.extra as SportDetailsExtra;
+                                final sport = sportDetailsExtra.sport;
+                                return CustomTransitionPage(
+                                  key: state.pageKey,
+                                  child: SportDetailsScreen(sport: sport),
+                                  transitionsBuilder:
+                                      (
+                                        context,
+                                        animation,
+                                        secondaryAnimation,
+                                        child,
+                                      ) {
+                                        const begin = Offset(0.0, 1.0);
+                                        const end = Offset.zero;
+                                        final tween = Tween(begin: begin, end: end);
+                                        final curvedAnimation = CurvedAnimation(
+                                          parent: animation,
+                                          curve: Curves.easeInOut,
+                                        );
+                                        return SlideTransition(
+                                          position: tween.animate(curvedAnimation),
+                                          child: child,
+                                        );
+                                      },
+                                );
+                              },
+                            ),
+                            GoRoute(
+                              path: 'connections',
+                              name: 'profile-connections',
+                              pageBuilder: (context, state) {
+                                final extra =
+                                    state.extra as ProfileConnectionsExtra;
+                                return CustomTransitionPage(
+                                  key: state.pageKey,
+                                  child: ProfileConnectionsScreen(
+                                    connectionType: extra.connectionType,
+                                  ),
+                                  transitionsBuilder:
+                                      (
+                                        context,
+                                        animation,
+                                        secondaryAnimation,
+                                        child,
+                                      ) {
+                                        const begin = Offset(1.0, 0.0);
+                                        const end = Offset.zero;
+                                        final tween = Tween(begin: begin, end: end);
+                                        final curvedAnimation = CurvedAnimation(
+                                          parent: animation,
+                                          curve: Curves.easeInOut,
+                                        );
+                                        return SlideTransition(
+                                          position: tween.animate(curvedAnimation),
+                                          child: child,
+                                        );
+                                      },
+                                );
+                              },
+                            ),
+                          ],
                         ),
                       ],
                     ),

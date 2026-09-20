@@ -102,9 +102,11 @@ class ExploreVideoFeedCubit extends Cubit<ExploreVideoFeedState>
     await _activateIndex(currentIndex);
   }
 
+  String? reportTargetIdForIndex(int index) => _ratingTargetIdForIndex(index);
+
   Future<bool> submitRating(int rating) async {
-    final videoId = _videoIdForIndex(state.currentIndex);
-    if (videoId == null || videoId.isEmpty) {
+    final ratingTargetId = _ratingTargetIdForIndex(state.currentIndex);
+    if (ratingTargetId == null || ratingTargetId.isEmpty) {
       emitPresentation(
         ExploreVideoFeedRatingErrorEvent(
           'This video cannot be rated right now.',
@@ -116,7 +118,7 @@ class ExploreVideoFeedCubit extends Cubit<ExploreVideoFeedState>
     emit(state.copyWith(isSubmittingRating: true));
 
     final result = await _supabaseService.rateVideo(
-      videoId: videoId,
+      videoId: ratingTargetId,
       rating: rating,
     );
 
@@ -249,19 +251,21 @@ class ExploreVideoFeedCubit extends Cubit<ExploreVideoFeedState>
   }
 
   Future<void> _loadUserRatingForIndex(int index) async {
-    final videoId = _videoIdForIndex(index);
-    if (videoId == null || videoId.isEmpty) {
+    final ratingTargetId = _ratingTargetIdForIndex(index);
+    if (ratingTargetId == null || ratingTargetId.isEmpty) {
       emit(state.copyWith(currentUserRating: null));
       return;
     }
 
-    final userRating = await _supabaseService.getUserRating(videoId: videoId);
+    final userRating = await _supabaseService.getUserRating(
+      videoId: ratingTargetId,
+    );
     final currentUserRating = userRating?.rating;
 
     emit(state.copyWith(currentUserRating: currentUserRating));
   }
 
-  String? _videoIdForIndex(int index) {
+  String? _ratingTargetIdForIndex(int index) {
     if (index < 0 || index >= state.videos.length) {
       return null;
     }

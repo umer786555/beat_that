@@ -7,6 +7,7 @@ import 'package:beat_that/service_locator.dart';
 import 'package:beat_that/services/home_feed_service.dart';
 import 'package:beat_that/services/home_video_feed_session_store.dart';
 import 'package:beat_that/services/supabase_service.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:video_player/video_player.dart';
 
@@ -109,11 +110,11 @@ class HomeVideoFeedCubit extends Cubit<HomeVideoFeedState>
     await _activateIndex(currentIndex);
   }
 
-  String? reportVideoIdForIndex(int index) => _videoIdForIndex(index);
+  String? reportTargetIdForIndex(int index) => _ratingTargetIdForIndex(index);
 
   Future<bool> submitRating(int rating) async {
-    final videoId = _videoIdForIndex(state.currentIndex);
-    if (videoId == null || videoId.isEmpty) {
+    final ratingTargetId = _ratingTargetIdForIndex(state.currentIndex);
+    if (ratingTargetId == null || ratingTargetId.isEmpty) {
       emitPresentation(
         HomeVideoFeedRatingErrorEvent('This video cannot be rated right now.'),
       );
@@ -123,7 +124,7 @@ class HomeVideoFeedCubit extends Cubit<HomeVideoFeedState>
     emit(state.copyWith(isSubmittingRating: true));
 
     final result = await _supabaseService.rateVideo(
-      videoId: videoId,
+      videoId: ratingTargetId,
       rating: rating,
     );
 
@@ -238,30 +239,32 @@ class HomeVideoFeedCubit extends Cubit<HomeVideoFeedState>
   }
 
   Future<void> _loadUserRatingForIndex(int index) async {
-    final videoId = _videoIdForIndex(index);
-    if (videoId == null || videoId.isEmpty) {
+    final ratingTargetId = _ratingTargetIdForIndex(index);
+    if (ratingTargetId == null || ratingTargetId.isEmpty) {
       emit(state.copyWith(currentUserRating: null));
       return;
     }
 
-    final userRating = await _supabaseService.getUserRating(videoId: videoId);
+    final userRating = await _supabaseService.getUserRating(
+      videoId: ratingTargetId,
+    );
     final currentUserRating = userRating?.rating;
 
     emit(state.copyWith(currentUserRating: currentUserRating));
   }
 
-  String? _videoIdForIndex(int index) {
+  String? _ratingTargetIdForIndex(int index) {
     if (index < 0 || index >= state.videos.length) {
       return null;
     }
 
-    final videoId = state.videos[index].ratingTargetId;
+    final ratingTargetId = state.videos[index].ratingTargetId;
 
-    if (videoId == null || videoId.isEmpty) {
-      print('[HOME_FEED_RATING] ❌ videoId is null or empty!');
+    if (ratingTargetId == null || ratingTargetId.isEmpty) {
+      debugPrint('[HOME_FEED_RATING] ratingTargetId is null or empty.');
     }
 
-    return videoId;
+    return ratingTargetId;
   }
 
   Future<void> _loadMoreIfNeeded(int index) async {
@@ -414,8 +417,8 @@ class HomeVideoFeedCubit extends Cubit<HomeVideoFeedState>
   Future<void> _incrementViewCount(int index) async {
     final linkedVideoId = _linkedVideoIdForIndex(index);
     if (linkedVideoId == null || linkedVideoId.isEmpty) {
-      print(
-        '⚠️ HomeVideoFeedCubit: Skipping view count update because linked video id is missing for index $index',
+      debugPrint(
+        'HomeVideoFeedCubit: Skipping view count update because linked video id is missing for index $index',
       );
       return;
     }
@@ -426,18 +429,18 @@ class HomeVideoFeedCubit extends Cubit<HomeVideoFeedState>
       );
 
       if (result['success'] == true) {
-        print(
-          '✅ HomeVideoFeedCubit: View count updated for linkedVideoId=$linkedVideoId',
+        debugPrint(
+          'HomeVideoFeedCubit: View count updated for linkedVideoId=$linkedVideoId',
         );
         return;
       }
 
-      print(
-        '⚠️ HomeVideoFeedCubit: View count update failed for linkedVideoId=$linkedVideoId. Error: ${result['error']}',
+      debugPrint(
+        'HomeVideoFeedCubit: View count update failed for linkedVideoId=$linkedVideoId. Error: ${result['error']}',
       );
     } catch (e) {
-      print(
-        '⚠️ HomeVideoFeedCubit: View count update threw unexpectedly for linkedVideoId=$linkedVideoId. Error: $e',
+      debugPrint(
+        'HomeVideoFeedCubit: View count update threw unexpectedly for linkedVideoId=$linkedVideoId. Error: $e',
       );
     }
   }

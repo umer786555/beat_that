@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:beat_that/service_locator.dart';
@@ -77,6 +76,8 @@ class SignupBloc extends Bloc<SignupEvent, SignupState> {
           return AppStrings.googleSignInCanceled;
         case 'google_interrupted':
           return AppStrings.googleSignInInterrupted;
+        case 'google_reauth_failed':
+          return AppStrings.googleSignInReauthFailed;
         case 'google_clientConfigurationError':
         case 'google_providerConfigurationError':
         case 'google_id_token_missing':
@@ -114,32 +115,13 @@ class SignupBloc extends Bloc<SignupEvent, SignupState> {
     } else if (errorText.contains('google_auth_unsupported') ||
         errorText.contains('google_platform_unsupported')) {
       return AppStrings.googleSignInNotSupported;
+    } else if (errorText.contains('google_reauth_failed') ||
+        errorText.contains('account reauth failed')) {
+      return AppStrings.googleSignInReauthFailed;
     } else if (errorText.toLowerCase().contains('canceled')) {
       return AppStrings.googleSignInCanceled;
     }
     return AppStrings.signupFailedPleaseTryAgain;
-  }
-
-  bool _ensureLegalAccepted(bool hasAcceptedLegal, Emitter<SignupState> emit) {
-    if (hasAcceptedLegal) {
-      return true;
-    }
-
-    emit(
-      const SignupFailure(
-        error: AppStrings.acceptTermsToCreateAccount,
-      ),
-    );
-    return false;
-  }
-
-  Future<void> _recordLegalAcceptanceIfPossible() async {
-    try {
-      await authService.recordLegalAcceptance();
-    } catch (error, stackTrace) {
-      debugPrint('Failed to persist legal acceptance after social signup: $error');
-      debugPrintStack(stackTrace: stackTrace);
-    }
   }
 
   /// Handle email input change
@@ -192,10 +174,6 @@ class SignupBloc extends Bloc<SignupEvent, SignupState> {
     SignupSubmitted event,
     Emitter<SignupState> emit,
   ) async {
-    if (!_ensureLegalAccepted(event.hasAcceptedLegal, emit)) {
-      return;
-    }
-
     final email = _email.trim();
     final password = _password;
     final confirmPassword = _confirmPassword;
@@ -204,6 +182,32 @@ class SignupBloc extends Bloc<SignupEvent, SignupState> {
     if (!_isValidEmail(email)) {
       emit(SignupFailure(error: AppStrings.pleaseEnterAValidEmail));
       return;
+    }
+
+    if (authService.isAnonymousUser()) {
+      try {
+        emit(const SignupLoading());
+
+        /// Let Supabase handle the full verification flow:
+        /// 1. Email template uses {{ .ConfirmationURL }}
+        /// 2. Supabase verifies token server-side
+        /// 3. Supabase redirects to deep link automatically
+        await authService.linkEmailToAnonymousUser(
+          email: email,
+          userData: {
+            'email': email,
+            'created_at': DateTime.now().toIso8601String(),
+            ...authService.buildLegalAcceptanceMetadata(),
+          },
+        );
+
+        emit(const SignupEmailUpgradeSuccess());
+        return;
+      } catch (e) {
+        final errorMessage = _parseErrorMessage(e);
+        emit(SignupFailure(error: errorMessage));
+        return;
+      }
     }
 
     // Validate password
@@ -246,14 +250,9 @@ class SignupBloc extends Bloc<SignupEvent, SignupState> {
     GoogleSignupSubmitted event,
     Emitter<SignupState> emit,
   ) async {
-    if (!_ensureLegalAccepted(event.hasAcceptedLegal, emit)) {
-      return;
-    }
-
     try {
       emit(const SignupLoading());
       await authService.signInWithGoogle();
-      await _recordLegalAcceptanceIfPossible();
       emit(const SignupAuthenticatedSuccess());
     } catch (e) {
       final errorMessage = _parseErrorMessage(e);
@@ -265,14 +264,9 @@ class SignupBloc extends Bloc<SignupEvent, SignupState> {
     AppleSignupSubmitted event,
     Emitter<SignupState> emit,
   ) async {
-    if (!_ensureLegalAccepted(event.hasAcceptedLegal, emit)) {
-      return;
-    }
-
     try {
       emit(const SignupLoading());
       await authService.signInWithApple();
-      await _recordLegalAcceptanceIfPossible();
       emit(const SignupAuthenticatedSuccess());
     } catch (e) {
       final errorMessage = _parseErrorMessage(e);

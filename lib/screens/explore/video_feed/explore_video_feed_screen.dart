@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:beat_that/constants/ad_mob_ids.dart';
 import 'package:beat_that/constants/app_colors.dart';
 import 'package:beat_that/models/sport_video.dart';
+import 'package:beat_that/reporting/models/report_target.dart';
+import 'package:beat_that/reporting/presentation/show_content_report_bottom_sheet.dart';
 import 'package:beat_that/routes/app_router.dart';
 import 'package:beat_that/screens/explore/video_feed/explore_video_feed_cubit.dart';
 import 'package:beat_that/screens/explore/video_feed/explore_video_feed_presentation_event.dart';
@@ -10,6 +12,7 @@ import 'package:beat_that/screens/explore/video_feed/explore_video_feed_state.da
 import 'package:beat_that/service_locator.dart';
 import 'package:beat_that/services/ad_mob_consent_service.dart';
 import 'package:beat_that/widgets/custom_snackbar.dart';
+import 'package:beat_that/widgets/video_feed_chrome.dart';
 import 'package:beat_that/widgets/video_overlay_action_button.dart';
 import 'package:beat_that/widgets/video_rating_bottom_sheet.dart';
 import 'package:bloc_presentation/bloc_presentation.dart';
@@ -33,11 +36,12 @@ class ExploreVideoFeedScreen extends StatefulWidget {
 }
 
 class _ExploreVideoFeedScreenState extends State<ExploreVideoFeedScreen> {
-  static const int _firstInterstitialThreshold = 3;
-  static const int _subsequentInterstitialInterval = 3;
+  static const int _firstInterstitialThreshold = 8;
+  static const int _subsequentInterstitialInterval = 10;
 
   late final PageController _pageController;
   late final AdMobConsentService _consentService;
+  bool _isChromeVisible = false;
   InterstitialAd? _interstitialAd;
   bool _isInterstitialLoading = false;
   bool _isShowingInterstitial = false;
@@ -154,10 +158,26 @@ class _ExploreVideoFeedScreenState extends State<ExploreVideoFeedScreen> {
     ExploreVideoFeedCubit cubit,
     int index,
   ) async {
-    HapticFeedback.lightImpact();
+    _hideChrome();
     await cubit.onPageChanged(index);
     _trackForwardProgress(index);
     await _maybeShowInterstitial();
+  }
+
+  void _toggleChromeVisibility() {
+    setState(() {
+      _isChromeVisible = !_isChromeVisible;
+    });
+  }
+
+  void _hideChrome() {
+    if (!_isChromeVisible) {
+      return;
+    }
+
+    setState(() {
+      _isChromeVisible = false;
+    });
   }
 
   void _trackForwardProgress(int index) {
@@ -217,12 +237,17 @@ class _ExploreVideoFeedScreenState extends State<ExploreVideoFeedScreen> {
                 final cubit = context.read<ExploreVideoFeedCubit>();
                 final onTogglePlayback = cubit.togglePlayback;
                 final onRetryActiveVideo = cubit.retryActiveVideo;
+                final reportTargetId = cubit.reportTargetIdForIndex(
+                  state.currentIndex,
+                );
 
                 return _ExploreVideoFeedView(
                   state: state,
                   pageController: _pageController,
+                  isChromeVisible: _isChromeVisible,
                   controllerFor: cubit.controllerFor,
                   onPageChanged: (index) => _handlePageChanged(cubit, index),
+                  onToggleChrome: _toggleChromeVisibility,
                   onTogglePlayback: onTogglePlayback,
                   onOpenRating: () => _showRatingSheet(
                     context,
@@ -231,6 +256,12 @@ class _ExploreVideoFeedScreenState extends State<ExploreVideoFeedScreen> {
                   ),
                   onRetryActiveVideo: onRetryActiveVideo,
                   onBack: context.pop,
+                    onReport: reportTargetId == null || reportTargetId.isEmpty
+                      ? null
+                      : () => _showReportSheet(
+                          context,
+                      videoId: reportTargetId,
+                        ),
                 );
               },
             ),
@@ -272,28 +303,49 @@ class _ExploreVideoFeedScreenState extends State<ExploreVideoFeedScreen> {
       },
     );
   }
+
+  Future<void> _showReportSheet(
+    BuildContext context, {
+    required String videoId,
+  }) async {
+    final message = await showContentReportBottomSheet(
+      context,
+      target: ReportTarget.video(videoId),
+    );
+    if (!context.mounted || message == null) {
+      return;
+    }
+
+    showSuccessSnackBar(context, message: message);
+  }
 }
 
 class _ExploreVideoFeedView extends StatelessWidget {
   const _ExploreVideoFeedView({
     required this.state,
     required this.pageController,
+    required this.isChromeVisible,
     required this.controllerFor,
     required this.onPageChanged,
+    required this.onToggleChrome,
     required this.onTogglePlayback,
     required this.onOpenRating,
     required this.onRetryActiveVideo,
     required this.onBack,
+    required this.onReport,
   });
 
   final ExploreVideoFeedState state;
   final PageController pageController;
+  final bool isChromeVisible;
   final VideoPlayerController? Function(int index) controllerFor;
   final Future<void> Function(int index) onPageChanged;
+  final VoidCallback onToggleChrome;
   final Future<void> Function(int index) onTogglePlayback;
   final VoidCallback onOpenRating;
   final Future<void> Function() onRetryActiveVideo;
   final VoidCallback onBack;
+  final VoidCallback? onReport;
 
   @override
   Widget build(BuildContext context) {
@@ -307,10 +359,7 @@ class _ExploreVideoFeedView extends StatelessWidget {
               controller: pageController,
               scrollDirection: Axis.vertical,
               itemCount: state.videos.length,
-              onPageChanged: (index) {
-                HapticFeedback.lightImpact();
-                onPageChanged(index);
-              },
+              onPageChanged: onPageChanged,
               itemBuilder: (context, index) {
                 final video = state.videos[index];
                 final controller = controllerFor(index);
@@ -325,6 +374,8 @@ class _ExploreVideoFeedView extends StatelessWidget {
                   errorMessage: errorMessage,
                   isLoadingMore:
                       state.isLoadingMore && index == state.videos.length - 1,
+                  showChrome: isCurrentVideo && isChromeVisible,
+                  onToggleChrome: onToggleChrome,
                   onTogglePlayback: () => onTogglePlayback(index),
                   currentUserRating: isCurrentVideo
                       ? state.currentUserRating
@@ -334,17 +385,10 @@ class _ExploreVideoFeedView extends StatelessWidget {
                 );
               },
             ),
-            SafeArea(
-              child: Align(
-                alignment: Alignment.topLeft,
-                child: IconButton(
-                  icon: const Icon(
-                    Icons.arrow_back_ios_new,
-                    color: Colors.white,
-                  ),
-                  onPressed: onBack,
-                ),
-              ),
+            VideoFeedChrome(
+              isVisible: isChromeVisible,
+              onBackPressed: onBack,
+              onReportPressed: onReport,
             ),
           ],
         ),
@@ -361,6 +405,8 @@ class _VideoFeedPage extends StatelessWidget {
     required this.isCurrentVideo,
     required this.errorMessage,
     required this.isLoadingMore,
+    required this.showChrome,
+    required this.onToggleChrome,
     required this.onTogglePlayback,
     required this.currentUserRating,
     this.onOpenRating,
@@ -372,6 +418,8 @@ class _VideoFeedPage extends StatelessWidget {
   final bool isCurrentVideo;
   final String? errorMessage;
   final bool isLoadingMore;
+  final bool showChrome;
+  final VoidCallback onToggleChrome;
   final VoidCallback onTogglePlayback;
   final int? currentUserRating;
   final VoidCallback? onOpenRating;
@@ -388,7 +436,7 @@ class _VideoFeedPage extends StatelessWidget {
     final canRateVideo = video.ratingTargetId != null;
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTap: isCurrentVideo ? onTogglePlayback : null,
+      onTap: isCurrentVideo ? onToggleChrome : null,
       child: Stack(
         fit: StackFit.expand,
         children: [
@@ -418,19 +466,20 @@ class _VideoFeedPage extends StatelessWidget {
             )
           else
             const _VideoPlaceholder(),
-          DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  Colors.black.withValues(alpha: 0.18),
-                  Colors.black.withValues(alpha: 0.10),
-                  Colors.black.withValues(alpha: 0.70),
-                ],
+          if (showChrome)
+            DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Colors.black.withValues(alpha: 0.18),
+                    Colors.black.withValues(alpha: 0.10),
+                    Colors.black.withValues(alpha: 0.70),
+                  ],
+                ),
               ),
             ),
-          ),
           if (controller == null && errorMessage != null && onRetry != null)
             Center(
               child: Column(
@@ -462,7 +511,8 @@ class _VideoFeedPage extends StatelessWidget {
               child: ValueListenableBuilder<VideoPlayerValue>(
                 valueListenable: controller!,
                 builder: (context, value, child) {
-                  if (!value.isInitialized ||
+                  if (!showChrome ||
+                      !value.isInitialized ||
                       value.isPlaying ||
                       !isCurrentVideo) {
                     return const SizedBox.shrink();
@@ -483,122 +533,123 @@ class _VideoFeedPage extends StatelessWidget {
                 },
               ),
             ),
-          Positioned(
-            left: 16,
-            right: 16,
-            bottom: 0,
-            child: SafeArea(
-              top: false,
-              minimum: const EdgeInsets.only(bottom: 24),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Expanded(
-                    child: Padding(
-                      padding: EdgeInsets.only(right: canRateVideo ? 16 : 0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          GestureDetector(
-                            onTap: userId.isEmpty
-                                ? null
-                                : () {
-                                    HapticFeedback.mediumImpact();
-                                    context.pushNamed(
-                                      'creator-profile',
-                                      extra: CreatorProfileExtra(
-                                        userId: userId,
-                                      ),
-                                    );
-                                  },
-                            child: Text(
-                              '@$username',
+          if (showChrome)
+            Positioned(
+              left: 16,
+              right: 16,
+              bottom: 0,
+              child: SafeArea(
+                top: false,
+                minimum: const EdgeInsets.only(bottom: 24),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Expanded(
+                      child: Padding(
+                        padding: EdgeInsets.only(right: canRateVideo ? 16 : 0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            GestureDetector(
+                              onTap: userId.isEmpty
+                                  ? null
+                                  : () {
+                                      HapticFeedback.mediumImpact();
+                                      context.pushNamed(
+                                        'creator-profile',
+                                        extra: CreatorProfileExtra(
+                                          userId: userId,
+                                        ),
+                                      );
+                                    },
+                              child: Text(
+                                '@$username',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            Text(
+                              title,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
                               style: const TextStyle(
                                 color: Colors.white,
-                                fontSize: 16,
+                                fontSize: 18,
                                 fontWeight: FontWeight.w700,
                               ),
                             ),
-                          ),
-                          const SizedBox(height: 10),
-                          Text(
-                            title,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 18,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          if (description.isNotEmpty) ...[
-                            const SizedBox(height: 8),
-                            Text(
-                              description,
-                              maxLines: 3,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                color: Colors.white.withValues(alpha: 0.86),
-                                fontSize: 14,
-                                height: 1.3,
-                              ),
-                            ),
-                          ],
-                          const SizedBox(height: 12),
-                          Row(
-                            children: [
-                              _VideoInfoChip(
-                                icon: Icons.visibility_outlined,
-                                label: _formatViewCount(viewCount),
-                              ),
-                              const SizedBox(width: 8),
-                              _VideoInfoChip(
-                                icon: Icons.star_rounded,
-                                label: rating.toStringAsFixed(1),
-                                iconColor: Colors.amber,
+                            if (description.isNotEmpty) ...[
+                              const SizedBox(height: 8),
+                              Text(
+                                description,
+                                maxLines: 3,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: Colors.white.withValues(alpha: 0.86),
+                                  fontSize: 14,
+                                  height: 1.3,
+                                ),
                               ),
                             ],
-                          ),
-                          if (isLoadingMore) ...[
-                            const SizedBox(height: 18),
+                            const SizedBox(height: 12),
                             Row(
-                              children: const [
-                                SizedBox(
-                                  width: 18,
-                                  height: 18,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    valueColor: AlwaysStoppedAnimation<Color>(
-                                      AppColors.green,
-                                    ),
-                                  ),
+                              children: [
+                                _VideoInfoChip(
+                                  icon: Icons.visibility_outlined,
+                                  label: _formatViewCount(viewCount),
                                 ),
-                                SizedBox(width: 10),
-                                Text(
-                                  'Loading more videos',
-                                  style: TextStyle(color: Colors.white),
+                                const SizedBox(width: 8),
+                                _VideoInfoChip(
+                                  icon: Icons.star_rounded,
+                                  label: rating.toStringAsFixed(1),
+                                  iconColor: Colors.amber,
                                 ),
                               ],
                             ),
+                            if (isLoadingMore) ...[
+                              const SizedBox(height: 18),
+                              Row(
+                                children: const [
+                                  SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      valueColor: AlwaysStoppedAnimation<Color>(
+                                        AppColors.green,
+                                      ),
+                                    ),
+                                  ),
+                                  SizedBox(width: 10),
+                                  Text(
+                                    'Loading more videos',
+                                    style: TextStyle(color: Colors.white),
+                                  ),
+                                ],
+                              ),
+                            ],
                           ],
-                        ],
+                        ),
                       ),
                     ),
-                  ),
-                  if (canRateVideo)
-                    VideoOverlayActionButton(
-                      icon: Icons.star_rounded,
-                      label: currentUserRating == null
-                          ? 'Rate'
-                          : '${currentUserRating!}/10',
-                      accentColor: Colors.amber,
-                      onTap: onOpenRating,
-                    ),
-                ],
+                    if (canRateVideo)
+                      VideoOverlayActionButton(
+                        icon: Icons.star_rounded,
+                        label: currentUserRating == null
+                            ? 'Rate'
+                            : '${currentUserRating!}/10',
+                        accentColor: Colors.amber,
+                        onTap: onOpenRating,
+                      ),
+                  ],
+                ),
               ),
             ),
-          ),
         ],
       ),
     );

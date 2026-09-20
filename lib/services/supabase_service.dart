@@ -133,6 +133,7 @@ class SupabaseService {
     String? sportId,
     int? subcategoryId,
     String? subcategoryName,
+    String? countryCode,
     Function(int, int)? onVideoProgress,
   }) async {
     final userId = getCurrentUserId();
@@ -208,6 +209,7 @@ class SupabaseService {
               sportId: sportId,
               subcategoryId: subcategoryId,
               subcategoryName: subcategoryName,
+              countryCode: countryCode,
             ),
           )
           .select();

@@ -61,9 +61,14 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
     });
 
     try {
-      await locator<AuthService>().updateUser(
-        UserAttributes(password: password),
-      );
+      final authService = locator<AuthService>();
+      if (authService.requiresEmailUpgradePasswordSetup()) {
+        await authService.completePendingEmailUpgrade(password: password);
+      } else {
+        await authService.updateUser(
+          UserAttributes(password: password),
+        );
+      }
 
       if (!mounted) {
         return;
@@ -80,6 +85,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
       }
 
       final errorText = error.toString();
+      debugPrint('Reset password failed: $errorText');
       final message = errorText.contains('Network')
           ? AppStrings.networkErrorPleaseCheckYourConnection
           : AppStrings.resetPasswordFailedPleaseTryAgain;

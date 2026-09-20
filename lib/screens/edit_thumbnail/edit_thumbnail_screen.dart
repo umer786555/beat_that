@@ -53,8 +53,8 @@ class EditThumbnailScreen extends StatelessWidget {
                   showSuccessSnackBar(context, message: event.message);
                   // Trigger ProfileBloc to refresh videos
                   context.read<ProfileBloc>().add(const RefreshVideosEvent());
-                  // Pop the screen after showing snack bar
-                  if (context.mounted) context.pop();
+                  // Explicitly return to the profile root on successful upload.
+                  if (context.mounted) context.goNamed('profile');
                   
               }
             },

@@ -28,6 +28,11 @@ class SignupAuthenticatedSuccess extends SignupState {
   const SignupAuthenticatedSuccess();
 }
 
+/// State when an anonymous account has been upgraded with an email link.
+class SignupEmailUpgradeSuccess extends SignupState {
+  const SignupEmailUpgradeSuccess();
+}
+
 /// State when signup fails
 class SignupFailure extends SignupState {
   final String error;

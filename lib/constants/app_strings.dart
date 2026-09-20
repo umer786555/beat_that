@@ -17,7 +17,7 @@ class AppStrings {
   static const String authChoiceHint =
       'Google is the fastest way in. You can always use email instead.';
   static const String authLegalConsentLabel =
-      'I agree to the Terms and conditions and Privacy policy.';
+      'I accept the Terms and conditions and Privacy policy.';
   static const String authLegalConsentHint =
       'Required before creating an account.';
   static const String orContinueWith = 'or continue with';
@@ -41,14 +41,23 @@ class AppStrings {
 
   // Signup Screen
   static const String createAccount = 'Create Account';
+  static const String createAccountWithEmail = 'Create account with email';
   static const String joinBeatThatToday = 'Join Beat That today';
+  static const String chooseHowToCreateAccount =
+      'Choose the fastest way to create your account.';
+  static const String saveYourAccount = 'Save your account';
+  static const String addAnEmailToKeepThisAccount =
+      'Choose how you want to save this account for later.';
+  static const String verifyEmailBeforePassword =
+      'Add your email first. After you confirm it, you can create a password for this account.';
+  static const String continueWithOneTap = 'Continue with one tap';
+  static const String orCreateWithEmail = 'OR CREATE WITH EMAIL';
+  static const String sendConfirmationEmail = 'Send confirmation email';
   static const String alreadyHaveAccount = 'Already have an account? ';
-    static const String createYourUsername = 'Create Your Username';
-    static const String chooseAUniqueUsernameToGetStarted =
-            'Choose a unique username to get started';
-    static const String enterYourUsername = 'Enter your username';
-    static const String username = 'Username';
-    static const String continueAction = 'Continue';
+  static const String chooseYourUsername = 'Choose Your Username';
+  static const String enterYourUsername = 'Enter your username';
+  static const String username = 'Username';
+  static const String continueAction = 'Continue';
 
   // Form Fields - Email
   static const String email = 'Email';
@@ -106,6 +115,8 @@ class AppStrings {
   static const String googleSignInCanceled = 'Google sign-in was canceled.';
   static const String googleSignInInterrupted =
       'Google sign-in was interrupted. Try again.';
+  static const String googleSignInReauthFailed =
+      'Google couldn\'t verify the selected account. Try a different Google account.';
   static const String googleSignInNotConfigured =
       'Google sign-in isn\'t available right now.';
   static const String googleSignInNotSupported =
@@ -122,6 +133,8 @@ class AppStrings {
   // Success Messages
   static const String accountCreatedSuccessfullyPleaseCheckYourEmailToConfirm =
       'Account created successfully! Please check your email to confirm.';
+  static const String accountEmailAddedCheckYourInbox =
+      'Check your email to confirm this address. After that, use Forgot password to set a password.';
 
   // Profile Screen
   static const String failedToLoadProfile = 'Failed to load profile';

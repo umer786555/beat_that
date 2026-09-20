@@ -30,23 +30,9 @@ class UsernameSetupBloc extends Bloc<UsernameSetupEvent, UsernameSetupState>
     Emitter<UsernameSetupState> emit,
   ) async {
     try {
-      final requiresLegalAcceptance =
-          !authService.hasAcceptedCurrentLegalVersion();
 
-      if (requiresLegalAcceptance && !event.hasAcceptedLegal) {
-        emitPresentation(
-          const UsernameSetupErrorEvent(
-            AppStrings.acceptTermsToCreateAccount,
-          ),
-        );
-        return;
-      }
 
       emit(UsernameSetupLoading());
-
-      if (requiresLegalAcceptance) {
-        await authService.recordLegalAcceptance();
-      }
 
       // Step 1: Save username to Supabase
       // Service handles auth validation internally

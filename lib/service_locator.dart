@@ -59,7 +59,9 @@ void setupServiceLocator(PreferencesService preferencesService) {
     );
 
     // Register AuthService
-    locator.registerSingleton<AuthService>(AuthService());
+    locator.registerSingleton<AuthService>(
+      AuthService(preferencesService: locator<PreferencesService>()),
+    );
 
     locator.registerSingleton<AdMobConsentService>(AdMobConsentService());
 

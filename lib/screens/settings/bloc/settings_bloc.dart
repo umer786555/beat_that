@@ -60,7 +60,7 @@ class SettingsBloc extends Bloc<SettingsEvent, SettingsState> {
 
       await _preferencesService.clearUserProfile();
       await _preferencesService.clearEngagement();
-      await _authService.logout();
+      await _authService.logout(revokeGoogleAccess: true);
 
       emit(
         state.copyWith(status: SettingsStatus.deletedAccount, clearError: true),

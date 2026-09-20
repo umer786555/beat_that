@@ -6,6 +6,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:beat_that/constants/app_strings.dart';
 import 'package:beat_that/constants/app_colors.dart';
+import 'package:beat_that/service_locator.dart';
+import 'package:beat_that/services/auth_service.dart';
 import 'package:beat_that/screens/auth/widgets/auth_legal_consent_section.dart';
 import 'package:beat_that/widgets/custom_snackbar.dart';
 import 'package:beat_that/widgets/auth_button_styles.dart';
@@ -16,14 +18,17 @@ import 'bloc/signup_state.dart';
 
 /// Signup screen for new users to create an account
 class SignupScreen extends StatefulWidget {
-  const SignupScreen({super.key});
+  final bool showBackButton;
+
+  const SignupScreen({super.key, this.showBackButton = true});
 
   @override
   State<SignupScreen> createState() => _SignupScreenState();
 }
 
 class _SignupScreenState extends State<SignupScreen> {
-  bool _hasAcceptedLegal = false;
+  bool _showEmailForm = false;
+  late final bool _isAnonymousUpgrade;
 
   static const double _primaryActionHeight = 54;
   static const double _primaryActionRadius = 8;
@@ -35,6 +40,29 @@ class _SignupScreenState extends State<SignupScreen> {
     letterSpacing: 0.2,
     height: 1,
   );
+
+  @override
+  void initState() {
+    super.initState();
+    _isAnonymousUpgrade = locator<AuthService>().isAnonymousUser();
+  }
+
+  void _handleBackPressed() {
+    if (_showEmailForm) {
+      FocusScope.of(context).unfocus();
+      setState(() {
+        _showEmailForm = false;
+      });
+      return;
+    }
+
+    if (!widget.showBackButton) {
+      return;
+    }
+
+    HapticFeedback.lightImpact();
+    context.goNamed('auth');
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -59,6 +87,11 @@ class _SignupScreenState extends State<SignupScreen> {
             if (context.mounted) {
               context.goNamed('home');
             }
+          } else if (state is SignupEmailUpgradeSuccess) {
+            showSuccessSnackBar(
+              context,
+              message: AppStrings.accountEmailAddedCheckYourInbox,
+            );
           } else if (state is SignupFailure) {
             // Show error snack bar
             showErrorSnackBar(context, message: state.error);
@@ -81,15 +114,13 @@ class _SignupScreenState extends State<SignupScreen> {
               backgroundColor: AppColors.black,
               foregroundColor: AppColors.white,
               centerTitle: true,
-              leading: IconButton(
-                icon: const Icon(Icons.arrow_back_ios_new),
-                onPressed: isLoading
-                    ? null
-                    : () {
-                        HapticFeedback.lightImpact();
-                        context.goNamed('auth');
-                      },
-              ),
+              automaticallyImplyLeading: false,
+              leading: (widget.showBackButton || _showEmailForm)
+                  ? IconButton(
+                      icon: const Icon(Icons.arrow_back_ios_new),
+                      onPressed: isLoading ? null : _handleBackPressed,
+                    )
+                  : null,
               title: Text(
                 AppStrings.signUp,
                 style: Theme.of(context).textTheme.titleLarge?.copyWith(
@@ -130,7 +161,13 @@ class _SignupScreenState extends State<SignupScreen> {
                     ),
                     const SizedBox(height: 12),
                     Text(
-                      AppStrings.joinBeatThatToday,
+                      _showEmailForm
+                          ? (_isAnonymousUpgrade
+                                ? AppStrings.verifyEmailBeforePassword
+                                : AppStrings.joinBeatThatToday)
+                          : (_isAnonymousUpgrade
+                                ? AppStrings.saveYourAccount
+                                : AppStrings.chooseHowToCreateAccount),
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 15,
@@ -140,180 +177,189 @@ class _SignupScreenState extends State<SignupScreen> {
                       ),
                     ),
                     const SizedBox(height: 40),
-
-                    // Email field
-                    TextFormField(
-                      cursorColor: AppColors.cyan,
-                      onChanged: (value) {
-                        HapticFeedback.lightImpact();
-                        context.read<SignupBloc>().add(
-                          EmailChanged(email: value),
-                        );
-                      },
-                      enabled: !isLoading,
-                      keyboardType: TextInputType.emailAddress,
-                      initialValue: email,
-                      //style: getAuthTextFormFieldStyle(),
-                      decoration: InputDecoration(
-                        hintText: AppStrings.enterYourEmail,
-                        labelText: AppStrings.email,
-                        prefixIcon: Icon(Icons.email_outlined, size: 20),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Password field
-                    TextFormField(
-                      cursorColor: AppColors.cyan,
-                      onChanged: (value) {
-                        HapticFeedback.lightImpact();
-                        context.read<SignupBloc>().add(
-                          PasswordChanged(password: value),
-                        );
-                      },
-                      enabled: !isLoading,
-                      obscureText: obscurePassword,
-                      initialValue: password,
-                      //style: getAuthTextFormFieldStyle(),
-                      decoration: InputDecoration(
-                        hintText: AppStrings.createAPassword,
-                        labelText: AppStrings.password,
-                        prefixIcon: Icon(Icons.lock_outline, size: 20),
-                        suffixIcon: IconButton(
-                          icon: Icon(
-                            obscurePassword
-                                ? Icons.visibility_off_outlined
-                                : Icons.visibility_outlined,
-                            color: AppColors.electricMagenta,
-                            size: 20,
-                          ),
-                          onPressed: isLoading
-                              ? null
-                              : () {
-                                  HapticFeedback.selectionClick();
-                                  context.read<SignupBloc>().add(
-                                    const PasswordVisibilityToggled(),
-                                  );
-                                },
+                    if (!_showEmailForm) ...[
+                      const SizedBox(height: 28),
+                      if (Platform.isIOS) ...[
+                        _buildSocialAuthButton(
+                          isLoading: isLoading,
+                          isEnabled: !isLoading,
+                          text: AppStrings.continueWithApple,
+                          backgroundColor: AppColors.white,
+                          foregroundColor: AppColors.black,
+                          borderColor: AppColors.white.withValues(alpha: 0.14),
+                          image: _buildAppleIcon(),
+                          onPressed: () {
+                            HapticFeedback.mediumImpact();
+                            context.read<SignupBloc>().add(
+                              const AppleSignupSubmitted(),
+                            );
+                          },
                         ),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Confirm Password field
-                    TextFormField(
-                      cursorColor: AppColors.cyan,
-                      onChanged: (value) {
-                        HapticFeedback.lightImpact();
-                        context.read<SignupBloc>().add(
-                          ConfirmPasswordChanged(confirmPassword: value),
-                        );
-                      },
-                      enabled: !isLoading,
-                      obscureText: obscureConfirmPassword,
-                      initialValue: confirmPassword,
-                      //style: getAuthTextFormFieldStyle(),
-                      decoration: InputDecoration(
-                        hintText: AppStrings.confirmYourPassword,
-                        labelText: AppStrings.confirmPassword,
-                        prefixIcon: Icon(Icons.lock_outline, size: 20),
-                        suffixIcon: IconButton(
-                          icon: Icon(
-                            obscureConfirmPassword
-                                ? Icons.visibility_off_outlined
-                                : Icons.visibility_outlined,
-                            size: 20,
-                          ),
-                          onPressed: isLoading
-                              ? null
-                              : () {
-                                  HapticFeedback.selectionClick();
-                                  context.read<SignupBloc>().add(
-                                    const ConfirmPasswordVisibilityToggled(),
-                                  );
-                                },
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-
-                    AuthLegalConsentSection(
-                      value: _hasAcceptedLegal,
-                      enabled: !isLoading,
-                      onChanged: (value) {
-                        setState(() {
-                          _hasAcceptedLegal = value;
-                        });
-                      },
-                    ),
-                    const SizedBox(height: 24),
-                    if (Platform.isIOS) ...[
+                        const SizedBox(height: 14),
+                      ],
                       _buildSocialAuthButton(
                         isLoading: isLoading,
-                        isEnabled: _hasAcceptedLegal,
-                        text: AppStrings.continueWithApple,
+                        isEnabled: !isLoading,
+                        text: AppStrings.continueWithGoogle,
                         backgroundColor: AppColors.white,
-                        foregroundColor: AppColors.black,
+                        foregroundColor: const Color(0xFF1F1F1F),
                         borderColor: AppColors.white.withValues(alpha: 0.14),
-                        image: _buildAppleIcon(),
+                        image: _buildGoogleIcon(),
                         onPressed: () {
                           HapticFeedback.mediumImpact();
                           context.read<SignupBloc>().add(
-                            AppleSignupSubmitted(
-                              hasAcceptedLegal: _hasAcceptedLegal,
-                            ),
+                            const GoogleSignupSubmitted(),
                           );
                         },
                       ),
-                      const SizedBox(height: 14),
-                    ],
-                    _buildSocialAuthButton(
-                      isLoading: isLoading,
-                      isEnabled: _hasAcceptedLegal,
-                      text: AppStrings.continueWithGoogle,
-                      backgroundColor: AppColors.white,
-                      foregroundColor: const Color(0xFF1F1F1F),
-                      borderColor: AppColors.white.withValues(alpha: 0.14),
-                      image: _buildGoogleIcon(),
-                      onPressed: () {
-                        HapticFeedback.mediumImpact();
-                        context.read<SignupBloc>().add(
-                          GoogleSignupSubmitted(
-                            hasAcceptedLegal: _hasAcceptedLegal,
+                      const SizedBox(height: 18),
+                      _buildDivider(label: 'OR'),
+                      const SizedBox(height: 18),
+                      _buildSocialAuthButton(
+                        isLoading: isLoading,
+                        isEnabled: !isLoading,
+                        text: AppStrings.continueWithEmail,
+                        backgroundColor: AppColors.white.withValues(
+                          alpha: 0.08,
+                        ),
+                        foregroundColor: AppColors.white,
+                        borderColor: AppColors.white.withValues(alpha: 0.16),
+                        image: _buildEmailIcon(),
+                        onPressed: () {
+                          HapticFeedback.lightImpact();
+                          setState(() {
+                            _showEmailForm = true;
+                          });
+                        },
+                      ),
+                      const SizedBox(height: 24),
+                    ] else ...[
+                      TextFormField(
+                        cursorColor: AppColors.cyan,
+                        onChanged: (value) {
+                          HapticFeedback.lightImpact();
+                          context.read<SignupBloc>().add(
+                            EmailChanged(email: value),
+                          );
+                        },
+                        enabled: !isLoading,
+                        keyboardType: TextInputType.emailAddress,
+                        initialValue: email,
+                        decoration: InputDecoration(
+                          hintText: AppStrings.enterYourEmail,
+                          labelText: AppStrings.email,
+                          prefixIcon: const Icon(
+                            Icons.email_outlined,
+                            size: 20,
                           ),
-                        );
-                      },
-                    ),
-                    const SizedBox(height: 18),
-                    _buildDivider(),
-                    const SizedBox(height: 18),
-
-                    // Signup button
-                    ElevatedButton(
-                      onPressed: isLoading || !_hasAcceptedLegal
-                          ? null
-                          : () {
-                              HapticFeedback.mediumImpact();
-                              context.read<SignupBloc>().add(
-                                SignupSubmitted(
-                                  hasAcceptedLegal: _hasAcceptedLegal,
-                                ),
-                              );
-                            },
-                      style: getAuthElevatedButtonStyle(),
-                      child: isLoading
-                          ? getAuthLoadingSpinner()
-                          : const Text(
-                              AppStrings.createAccount,
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.w700,
-                                letterSpacing: 0.5,
-                                color: AppColors.white,
-                              ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      if (!_isAnonymousUpgrade) ...[
+                        TextFormField(
+                          cursorColor: AppColors.cyan,
+                          onChanged: (value) {
+                            HapticFeedback.lightImpact();
+                            context.read<SignupBloc>().add(
+                              PasswordChanged(password: value),
+                            );
+                          },
+                          enabled: !isLoading,
+                          obscureText: obscurePassword,
+                          initialValue: password,
+                          decoration: InputDecoration(
+                            hintText: AppStrings.createAPassword,
+                            labelText: AppStrings.password,
+                            prefixIcon: const Icon(
+                              Icons.lock_outline,
+                              size: 20,
                             ),
-                    ),
-                    const SizedBox(height: 24),
+                            suffixIcon: IconButton(
+                              icon: Icon(
+                                obscurePassword
+                                    ? Icons.visibility_off_outlined
+                                    : Icons.visibility_outlined,
+                                color: AppColors.electricMagenta,
+                                size: 20,
+                              ),
+                              onPressed: isLoading
+                                  ? null
+                                  : () {
+                                      HapticFeedback.selectionClick();
+                                      context.read<SignupBloc>().add(
+                                        const PasswordVisibilityToggled(),
+                                      );
+                                    },
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        TextFormField(
+                          cursorColor: AppColors.cyan,
+                          onChanged: (value) {
+                            HapticFeedback.lightImpact();
+                            context.read<SignupBloc>().add(
+                              ConfirmPasswordChanged(confirmPassword: value),
+                            );
+                          },
+                          enabled: !isLoading,
+                          obscureText: obscureConfirmPassword,
+                          initialValue: confirmPassword,
+                          decoration: InputDecoration(
+                            hintText: AppStrings.confirmYourPassword,
+                            labelText: AppStrings.confirmPassword,
+                            prefixIcon: const Icon(
+                              Icons.lock_outline,
+                              size: 20,
+                            ),
+                            suffixIcon: IconButton(
+                              icon: Icon(
+                                obscureConfirmPassword
+                                    ? Icons.visibility_off_outlined
+                                    : Icons.visibility_outlined,
+                                size: 20,
+                              ),
+                              onPressed: isLoading
+                                  ? null
+                                  : () {
+                                      HapticFeedback.selectionClick();
+                                      context.read<SignupBloc>().add(
+                                        const ConfirmPasswordVisibilityToggled(),
+                                      );
+                                    },
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                      ] else ...[
+                        const SizedBox(height: 8),
+                      ],
+                      ElevatedButton(
+                        onPressed: isLoading
+                            ? null
+                            : () {
+                                HapticFeedback.mediumImpact();
+                                context.read<SignupBloc>().add(
+                                  const SignupSubmitted(),
+                                );
+                              },
+                        style: getAuthElevatedButtonStyle(),
+                        child: isLoading
+                            ? getAuthLoadingSpinner()
+                            : Text(
+                                _isAnonymousUpgrade
+                                    ? AppStrings.sendConfirmationEmail
+                                    : AppStrings.createAccountWithEmail,
+                                style: const TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 0.5,
+                                  color: AppColors.white,
+                                ),
+                              ),
+                      ),
+                      const SizedBox(height: 24),
+                    ],
                     // Login link
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -351,6 +397,11 @@ class _SignupScreenState extends State<SignupScreen> {
                           ),
                         ),
                       ],
+                    ),
+                    const SizedBox(height: 32),
+                    // Legal consent section at the bottom
+                    AuthLegalConsentSection(
+                      enabled: !isLoading,
                     ),
                   ],
                 ),
@@ -459,7 +510,17 @@ class _SignupScreenState extends State<SignupScreen> {
     );
   }
 
-  Widget _buildDivider() {
+  Widget _buildEmailIcon() {
+    return _buildIconFrame(
+      child: Icon(
+        Icons.email_outlined,
+        size: _authIconSize - 1,
+        color: AppColors.white.withValues(alpha: 0.92),
+      ),
+    );
+  }
+
+  Widget _buildDivider({required String label}) {
     return Row(
       children: [
         Expanded(
@@ -471,7 +532,7 @@ class _SignupScreenState extends State<SignupScreen> {
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 14),
           child: Text(
-            'OR',
+            label,
             style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w700,

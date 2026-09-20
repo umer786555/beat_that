@@ -8,8 +8,8 @@ import 'package:beat_that/service_locator.dart';
 import 'package:beat_that/services/ad_mob_consent_service.dart';
 import 'package:beat_that/services/auth_service.dart';
 import 'package:beat_that/widgets/custom_snackbar.dart';
+import 'package:beat_that/widgets/video_feed_chrome.dart';
 import 'package:beat_that/widgets/video_rating_bottom_sheet.dart';
-import 'package:beat_that/widgets/custom_back_button.dart';
 import 'package:bloc_presentation/bloc_presentation.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -22,7 +22,6 @@ import '../state/home_video_feed_cubit.dart';
 import '../state/home_video_feed_state.dart';
 import 'events/home_video_feed_presentation_event.dart';
 import 'widgets/home_video_feed_page.dart';
-import 'widgets/home_video_feed_controls.dart';
 
 class HomeVideoFeedScreen extends StatefulWidget {
   const HomeVideoFeedScreen({
@@ -39,8 +38,8 @@ class HomeVideoFeedScreen extends StatefulWidget {
 }
 
 class _HomeVideoFeedScreenState extends State<HomeVideoFeedScreen> {
-  static const int _firstInterstitialThreshold = 3;
-  static const int _subsequentInterstitialInterval = 3;
+  static const int _firstInterstitialThreshold = 8;
+  static const int _subsequentInterstitialInterval = 10;
 
   late final PageController _pageController;
   late final AdMobConsentService _consentService;
@@ -208,7 +207,7 @@ class _HomeVideoFeedScreenState extends State<HomeVideoFeedScreen> {
   }
 
   bool _redirectGuestToAuth(BuildContext context) {
-    if (_authService.isLoggedIn()) {
+    if (_authService.hasFullAccountAccess()) {
       return false;
     }
 
@@ -314,19 +313,19 @@ class _HomeVideoFeedScreenState extends State<HomeVideoFeedScreen> {
                             );
                           },
                         ),
-                        _HomeVideoFeedChrome(
+                        VideoFeedChrome(
                           isVisible: _isChromeVisible,
                           onBackPressed: () => context.pop(),
                           onReportPressed: () async {
-                            final videoId =
-                                cubit.reportVideoIdForIndex(
+                            final reportTargetId =
+                                cubit.reportTargetIdForIndex(
                                   state.currentIndex,
                                 ) ??
                                 '';
 
                             final message = await showContentReportBottomSheet(
                               context,
-                              target: ReportTarget.video(videoId),
+                              target: ReportTarget.video(reportTargetId),
                             );
                             if (!context.mounted || message == null) {
                               return;
@@ -377,42 +376,6 @@ class _HomeVideoFeedScreenState extends State<HomeVideoFeedScreen> {
               ),
         );
       },
-    );
-  }
-}
-
-class _HomeVideoFeedChrome extends StatelessWidget {
-  const _HomeVideoFeedChrome({
-    required this.isVisible,
-    required this.onBackPressed,
-    required this.onReportPressed,
-  });
-
-  final bool isVisible;
-  final VoidCallback onBackPressed;
-  final VoidCallback onReportPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    if (!isVisible) {
-      return const SizedBox.shrink();
-    }
-
-    return Stack(
-      children: [
-        SafeArea(
-          child: Align(
-            alignment: Alignment.topLeft,
-            child: CustomBackButton(onPressed: onBackPressed),
-          ),
-        ),
-        SafeArea(
-          child: Align(
-            alignment: Alignment.topRight,
-            child: HomeVideoFeedDropdownMenu(onReportPressed: onReportPressed),
-          ),
-        ),
-      ],
     );
   }
 }

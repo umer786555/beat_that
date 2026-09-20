@@ -4,10 +4,7 @@ import 'package:bloc_presentation/bloc_presentation.dart';
 import 'package:go_router/go_router.dart';
 import 'package:beat_that/constants/app_colors.dart';
 import 'package:beat_that/constants/app_strings.dart';
-import 'package:beat_that/service_locator.dart';
-import 'package:beat_that/screens/auth/widgets/auth_legal_consent_section.dart';
 import 'package:beat_that/screens/username_setup/bloc/username_setup_bloc.dart';
-import 'package:beat_that/services/auth_service.dart';
 import 'package:beat_that/widgets/custom_snackbar.dart';
 import 'package:beat_that/widgets/auth_button_styles.dart';
 
@@ -21,15 +18,11 @@ class UsernameSetupScreen extends StatefulWidget {
 
 class _UsernameSetupScreenState extends State<UsernameSetupScreen> {
   late final TextEditingController _usernameController;
-  late final bool _requiresLegalAcceptance;
-  bool _hasAcceptedLegal = false;
 
   @override
   void initState() {
     super.initState();
     _usernameController = TextEditingController();
-    _requiresLegalAcceptance =
-        !locator<AuthService>().hasAcceptedCurrentLegalVersion();
   }
 
   @override
@@ -48,10 +41,7 @@ class _UsernameSetupScreenState extends State<UsernameSetupScreen> {
     }
 
     context.read<UsernameSetupBloc>().add(
-      SaveUsernameEvent(
-        username: username,
-        hasAcceptedLegal: !_requiresLegalAcceptance || _hasAcceptedLegal,
-      ),
+      SaveUsernameEvent(username: username),
     );
   }
 
@@ -92,7 +82,7 @@ class _UsernameSetupScreenState extends State<UsernameSetupScreen> {
                           ),
                           const SizedBox(height: 32),
                           const Text(
-                            AppStrings.createYourUsername,
+                            AppStrings.chooseYourUsername,
                             style: TextStyle(
                               fontSize: 24,
                               fontWeight: FontWeight.bold,
@@ -100,23 +90,14 @@ class _UsernameSetupScreenState extends State<UsernameSetupScreen> {
                             ),
                             textAlign: TextAlign.center,
                           ),
-                          const SizedBox(height: 12),
-                          const Text(
-                            AppStrings.chooseAUniqueUsernameToGetStarted,
-                            style: TextStyle(
-                              fontSize: 16,
-                              color: AppColors.white,
-                              fontWeight: FontWeight.w400,
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
+
                           const SizedBox(height: 40),
                           TextField(
                             cursorColor: AppColors.cyan,
                             controller: _usernameController,
                             enabled: !isLoading,
 
-                           // style: getAuthTextFormFieldStyle(),
+                            // style: getAuthTextFormFieldStyle(),
                             decoration: InputDecoration(
                               hintText: AppStrings.enterYourUsername,
                               labelText: AppStrings.username,
@@ -127,23 +108,10 @@ class _UsernameSetupScreenState extends State<UsernameSetupScreen> {
                               ),
                             ),
                           ),
-                          if (_requiresLegalAcceptance) ...[
-                            const SizedBox(height: 24),
-                            AuthLegalConsentSection(
-                              value: _hasAcceptedLegal,
-                              enabled: !isLoading,
-                              onChanged: (value) {
-                                setState(() {
-                                  _hasAcceptedLegal = value;
-                                });
-                              },
-                            ),
-                          ],
+
                           const SizedBox(height: 24),
                           ElevatedButton(
-                            onPressed: isLoading ||
-                                    (_requiresLegalAcceptance &&
-                                        !_hasAcceptedLegal)
+                            onPressed: isLoading
                                 ? null
                                 : () => _handleContinue(context),
                             style: getAuthElevatedButtonStyle(),

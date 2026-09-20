@@ -19,7 +19,6 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
   final supabaseService = locator<SupabaseService>();
   final homeFeedService = locator<HomeFeedService>();
   final authService = locator<AuthService>();
-
   // Track pagination state
   List<SportVideo> _allFeedVideos = [];
   final Set<String> _seenFeedVideoIds = <String>{};
@@ -41,9 +40,9 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
     try {
       await preferencesService.clearUserProfile();
 
-      final isLoggedIn = authService.isLoggedIn();
+      final hasFullAccountAccess = authService.hasFullAccountAccess();
 
-      if (!isLoggedIn) {
+      if (!hasFullAccountAccess) {
         add(const FetchFeedEvent(limit: _homeFeedPageSize, offset: 0));
         return;
       }

@@ -45,6 +45,9 @@ class MyVideo {
   /// Whether the video has been approved by moderation
   final bool? approved;
 
+  /// Country code where the video was created
+  final String? countryCode;
+
   const MyVideo({
     required this.id,
     required this.createdAt,
@@ -61,6 +64,7 @@ class MyVideo {
     this.sportId,
     this.subcategoryName,
     this.approved,
+    this.countryCode,
   });
 
   /// Create MyVideo from JSON response
@@ -81,6 +85,7 @@ class MyVideo {
       sportId: json['sport_id'] as String?,
       subcategoryName: json['subcategory_name'] as String?,
       approved: json['approved'] as bool?,
+      countryCode: json['country_code'] as String?,
     );
   }
 
@@ -102,6 +107,7 @@ class MyVideo {
       'sport_id': sportId,
       'subcategory_name': subcategoryName,
       'approved': approved,
+      'country_code': countryCode,
     };
   }
 
@@ -115,6 +121,7 @@ class MyVideo {
     String? sportId,
     int? subcategoryId,
     String? subcategoryName,
+    String? countryCode,
     String dataType = 'user_profile_video',
   }) {
     return {
@@ -126,6 +133,7 @@ class MyVideo {
       'sport_id': sportId,
       'subcategory_id': subcategoryId,
       'subcategory_name': subcategoryName,
+      'country_code': countryCode,
       'view_count': 0,
       'data_type': dataType,
     };
@@ -148,6 +156,7 @@ class MyVideo {
     String? sportId,
     String? subcategoryName,
     bool? approved,
+    String? countryCode,
   }) {
     return MyVideo(
       id: id ?? this.id,
@@ -165,7 +174,7 @@ class MyVideo {
       sportId: sportId ?? this.sportId,
       subcategoryName: subcategoryName ?? this.subcategoryName,
       approved: approved ?? this.approved,
-
+      countryCode: countryCode ?? this.countryCode,
     );
   }
 
@@ -173,6 +182,6 @@ class MyVideo {
   String toString() {
     return 'MyVideo(id: $id, title: $title, userId: $userId, videoPath: $videoPath, '
       'thumbnailPath: $thumbnailPath, thumbnailUrl: $thumbnailUrl, viewCount: $viewCount, likeCount: $likeCount, '
-        'approved: $approved)';
+        'approved: $approved, countryCode: $countryCode)';
   }
 }

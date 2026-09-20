@@ -74,13 +74,7 @@ class SubcategoryGridItem extends StatelessWidget {
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Tap to record or upload a clip',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: AppColors.greyDark,
-                      ),
-                    ),
+                   
                   ],
                 ),
               ),
