@@ -37,12 +37,15 @@ class HomeVideoFeedScreen extends StatefulWidget {
   State<HomeVideoFeedScreen> createState() => _HomeVideoFeedScreenState();
 }
 
-class _HomeVideoFeedScreenState extends State<HomeVideoFeedScreen> {
+class _HomeVideoFeedScreenState extends State<HomeVideoFeedScreen>
+    with RouteAware {
   static const int _firstInterstitialThreshold = 8;
   static const int _subsequentInterstitialInterval = 10;
 
+  late final HomeVideoFeedCubit _cubit;
   late final PageController _pageController;
   late final AdMobConsentService _consentService;
+  late final RouteObserver<PageRoute<dynamic>> _routeObserver;
   late final AuthService _authService;
   bool _isChromeVisible = false;
   InterstitialAd? _interstitialAd;
@@ -76,7 +79,12 @@ class _HomeVideoFeedScreenState extends State<HomeVideoFeedScreen> {
   @override
   void initState() {
     super.initState();
+    _cubit = HomeVideoFeedCubit(
+      sessionId: widget.sessionId,
+      initialIndex: widget.initialIndex,
+    )..initialize();
     _pageController = PageController(initialPage: widget.initialIndex);
+    _routeObserver = locator<RouteObserver<PageRoute<dynamic>>>();
     _consentService = locator<AdMobConsentService>();
     _authService = locator<AuthService>();
     _consentService.addListener(_handleConsentStateChanged);
@@ -88,12 +96,29 @@ class _HomeVideoFeedScreenState extends State<HomeVideoFeedScreen> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final route = ModalRoute.of(context);
+    if (route is PageRoute<dynamic>) {
+      _routeObserver.subscribe(this, route);
+    }
+  }
+
+  @override
   void dispose() {
+    _routeObserver.unsubscribe(this);
     _consentService.removeListener(_handleConsentStateChanged);
     _disposeInterstitialAd();
     _pageController.dispose();
+    unawaited(_cubit.close());
     super.dispose();
   }
+
+  @override
+  void didPushNext() => _cubit.onRouteCovered();
+
+  @override
+  void didPopNext() => _cubit.onRouteUncovered();
 
   void _handleConsentStateChanged() {
     if (!_consentService.canRequestAds) {
@@ -127,8 +152,10 @@ class _HomeVideoFeedScreenState extends State<HomeVideoFeedScreen> {
           _isInterstitialLoading = false;
           _interstitialAd = ad;
           ad.fullScreenContentCallback = FullScreenContentCallback(
+            onAdShowedFullScreenContent: (_) => _cubit.onAdShown(),
             onAdDismissedFullScreenContent: (ad) {
               _isShowingInterstitial = false;
+              _cubit.onAdClosed();
               ad.dispose();
               if (identical(_interstitialAd, ad)) {
                 _interstitialAd = null;
@@ -137,6 +164,7 @@ class _HomeVideoFeedScreenState extends State<HomeVideoFeedScreen> {
             },
             onAdFailedToShowFullScreenContent: (ad, error) {
               _isShowingInterstitial = false;
+              _cubit.onAdClosed();
               ad.dispose();
               if (identical(_interstitialAd, ad)) {
                 _interstitialAd = null;
@@ -217,11 +245,8 @@ class _HomeVideoFeedScreenState extends State<HomeVideoFeedScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return BlocProvider(
-      create: (_) => HomeVideoFeedCubit(
-        sessionId: widget.sessionId,
-        initialIndex: widget.initialIndex,
-      )..initialize(),
+    return BlocProvider.value(
+      value: _cubit,
       child:
           BlocPresentationListener<
             HomeVideoFeedCubit,
@@ -253,7 +278,6 @@ class _HomeVideoFeedScreenState extends State<HomeVideoFeedScreen> {
                               _handlePageChanged(cubit, index),
                           itemBuilder: (context, index) {
                             final video = state.videos[index];
-                            final controller = cubit.controllerFor(index);
                             final isCurrentVideo = index == state.currentIndex;
                             final errorMessage = isCurrentVideo
                                 ? state.errorMessage
@@ -263,7 +287,7 @@ class _HomeVideoFeedScreenState extends State<HomeVideoFeedScreen> {
                             return HomeVideoFeedPage(
                               key: ValueKey(video.id),
                               video: video,
-                              controller: controller,
+                              slot: cubit.slotFor(index),
                               isCurrentVideo: isCurrentVideo,
                               errorMessage: errorMessage,
                               isLoadingMore:

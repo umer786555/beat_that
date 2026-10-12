@@ -431,6 +431,9 @@ class AppRouter {
       /// The redirect logic above will adjust this based on authentication state
       initialLocation: AppRoutes.launchHome,
 
+      /// Lets the video feeds pause while another page covers them
+      observers: [locator<RouteObserver<PageRoute<dynamic>>>()],
+
       /// Define all routes for the application
       /// Using named routes for type-safe navigation with goNamed()
       routes: [

@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:get_it/get_it.dart';
 import 'package:beat_that/services/auth_service.dart';
 import 'package:beat_that/services/ad_mob_consent_service.dart';
@@ -118,6 +118,11 @@ void setupServiceLocator(PreferencesService preferencesService) {
         createPlayer: () => locator<PlaybackPlayer>(),
         resolveSource: locator<VideoSourceResolver>().resolve,
       ),
+    );
+
+    // Root route observer, so the feeds can pause while a page covers them.
+    locator.registerSingleton<RouteObserver<PageRoute<dynamic>>>(
+      RouteObserver<PageRoute<dynamic>>(),
     );
   } catch (e, stackTrace) {
     debugPrintStack(

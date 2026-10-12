@@ -13,7 +13,6 @@ class ExploreVideoFeedState extends Equatable {
   final String? randomAfterId;
   final bool randomHasWrapped;
   final bool isLoadingMore;
-  final int controllerGeneration;
   final String? errorMessage;
   final int? currentUserRating;
   final bool isSubmittingRating;
@@ -28,7 +27,6 @@ class ExploreVideoFeedState extends Equatable {
     this.randomAfterId,
     this.randomHasWrapped = false,
     this.isLoadingMore = false,
-    this.controllerGeneration = 0,
     this.errorMessage,
     this.currentUserRating,
     this.isSubmittingRating = false,
@@ -44,7 +42,6 @@ class ExploreVideoFeedState extends Equatable {
     Object? randomAfterId = _sentinel,
     bool? randomHasWrapped,
     bool? isLoadingMore,
-    int? controllerGeneration,
     String? errorMessage,
     Object? currentUserRating = _sentinel,
     bool? isSubmittingRating,
@@ -55,16 +52,15 @@ class ExploreVideoFeedState extends Equatable {
       currentIndex: currentIndex ?? this.currentIndex,
       nextOffset: nextOffset ?? this.nextOffset,
       hasMoreContent: hasMoreContent ?? this.hasMoreContent,
-        isRandomFeed: isRandomFeed ?? this.isRandomFeed,
-        randomSeed: identical(randomSeed, _sentinel)
+      isRandomFeed: isRandomFeed ?? this.isRandomFeed,
+      randomSeed: identical(randomSeed, _sentinel)
           ? this.randomSeed
           : randomSeed as String?,
-        randomAfterId: identical(randomAfterId, _sentinel)
+      randomAfterId: identical(randomAfterId, _sentinel)
           ? this.randomAfterId
           : randomAfterId as String?,
-        randomHasWrapped: randomHasWrapped ?? this.randomHasWrapped,
+      randomHasWrapped: randomHasWrapped ?? this.randomHasWrapped,
       isLoadingMore: isLoadingMore ?? this.isLoadingMore,
-      controllerGeneration: controllerGeneration ?? this.controllerGeneration,
       errorMessage: clearErrorMessage
           ? null
           : (errorMessage ?? this.errorMessage),
@@ -86,7 +82,6 @@ class ExploreVideoFeedState extends Equatable {
     randomAfterId,
     randomHasWrapped,
     isLoadingMore,
-    controllerGeneration,
     errorMessage,
     currentUserRating,
     isSubmittingRating,

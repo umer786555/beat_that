@@ -11,7 +11,9 @@ import 'package:beat_that/screens/explore/video_feed/explore_video_feed_presenta
 import 'package:beat_that/screens/explore/video_feed/explore_video_feed_state.dart';
 import 'package:beat_that/service_locator.dart';
 import 'package:beat_that/services/ad_mob_consent_service.dart';
+import 'package:beat_that/services/video_playback/video_slot.dart';
 import 'package:beat_that/widgets/custom_snackbar.dart';
+import 'package:beat_that/widgets/pooled_video_surface.dart';
 import 'package:beat_that/widgets/video_feed_chrome.dart';
 import 'package:beat_that/widgets/video_overlay_action_button.dart';
 import 'package:beat_that/widgets/video_rating_bottom_sheet.dart';
@@ -22,7 +24,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
-import 'package:video_player/video_player.dart';
 
 import 'explore_video_feed_route_extra.dart';
 
@@ -35,12 +36,15 @@ class ExploreVideoFeedScreen extends StatefulWidget {
   State<ExploreVideoFeedScreen> createState() => _ExploreVideoFeedScreenState();
 }
 
-class _ExploreVideoFeedScreenState extends State<ExploreVideoFeedScreen> {
+class _ExploreVideoFeedScreenState extends State<ExploreVideoFeedScreen>
+    with RouteAware {
   static const int _firstInterstitialThreshold = 8;
   static const int _subsequentInterstitialInterval = 10;
 
+  late final ExploreVideoFeedCubit _cubit;
   late final PageController _pageController;
   late final AdMobConsentService _consentService;
+  late final RouteObserver<PageRoute<dynamic>> _routeObserver;
   bool _isChromeVisible = false;
   InterstitialAd? _interstitialAd;
   bool _isInterstitialLoading = false;
@@ -73,7 +77,20 @@ class _ExploreVideoFeedScreenState extends State<ExploreVideoFeedScreen> {
   @override
   void initState() {
     super.initState();
+    _cubit = ExploreVideoFeedCubit(
+      initialVideos: widget.extra.videos,
+      initialIndex: widget.extra.initialIndex,
+      query: widget.extra.query,
+      selectedSportId: widget.extra.selectedSportId,
+      nextOffset: widget.extra.nextOffset,
+      hasMoreContent: widget.extra.hasMoreContent,
+      isRandomFeed: widget.extra.isRandomFeed,
+      randomSeed: widget.extra.randomSeed,
+      randomAfterId: widget.extra.randomAfterId,
+      randomHasWrapped: widget.extra.randomHasWrapped,
+    )..initialize();
     _pageController = PageController(initialPage: widget.extra.initialIndex);
+    _routeObserver = locator<RouteObserver<PageRoute<dynamic>>>();
     _consentService = locator<AdMobConsentService>();
     _consentService.addListener(_handleConsentStateChanged);
     _lastVisitedIndex = widget.extra.initialIndex;
@@ -84,12 +101,29 @@ class _ExploreVideoFeedScreenState extends State<ExploreVideoFeedScreen> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final route = ModalRoute.of(context);
+    if (route is PageRoute<dynamic>) {
+      _routeObserver.subscribe(this, route);
+    }
+  }
+
+  @override
   void dispose() {
+    _routeObserver.unsubscribe(this);
     _consentService.removeListener(_handleConsentStateChanged);
     _disposeInterstitialAd();
     _pageController.dispose();
+    unawaited(_cubit.close());
     super.dispose();
   }
+
+  @override
+  void didPushNext() => _cubit.onRouteCovered();
+
+  @override
+  void didPopNext() => _cubit.onRouteUncovered();
 
   void _handleConsentStateChanged() {
     if (!_consentService.canRequestAds) {
@@ -123,8 +157,10 @@ class _ExploreVideoFeedScreenState extends State<ExploreVideoFeedScreen> {
           _isInterstitialLoading = false;
           _interstitialAd = ad;
           ad.fullScreenContentCallback = FullScreenContentCallback(
+            onAdShowedFullScreenContent: (_) => _cubit.onAdShown(),
             onAdDismissedFullScreenContent: (ad) {
               _isShowingInterstitial = false;
+              _cubit.onAdClosed();
               ad.dispose();
               if (identical(_interstitialAd, ad)) {
                 _interstitialAd = null;
@@ -133,6 +169,7 @@ class _ExploreVideoFeedScreenState extends State<ExploreVideoFeedScreen> {
             },
             onAdFailedToShowFullScreenContent: (ad, error) {
               _isShowingInterstitial = false;
+              _cubit.onAdClosed();
               ad.dispose();
               if (identical(_interstitialAd, ad)) {
                 _interstitialAd = null;
@@ -210,19 +247,8 @@ class _ExploreVideoFeedScreenState extends State<ExploreVideoFeedScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return BlocProvider(
-      create: (_) => ExploreVideoFeedCubit(
-        initialVideos: widget.extra.videos,
-        initialIndex: widget.extra.initialIndex,
-        query: widget.extra.query,
-        selectedSportId: widget.extra.selectedSportId,
-        nextOffset: widget.extra.nextOffset,
-        hasMoreContent: widget.extra.hasMoreContent,
-        isRandomFeed: widget.extra.isRandomFeed,
-        randomSeed: widget.extra.randomSeed,
-        randomAfterId: widget.extra.randomAfterId,
-        randomHasWrapped: widget.extra.randomHasWrapped,
-      )..initialize(),
+    return BlocProvider.value(
+      value: _cubit,
       child:
           BlocPresentationListener<
             ExploreVideoFeedCubit,
@@ -249,7 +275,7 @@ class _ExploreVideoFeedScreenState extends State<ExploreVideoFeedScreen> {
                   state: state,
                   pageController: _pageController,
                   isChromeVisible: _isChromeVisible,
-                  controllerFor: cubit.controllerFor,
+                  slotFor: cubit.slotFor,
                   onPageChanged: (index) => _handlePageChanged(cubit, index),
                   onToggleChrome: _toggleChromeVisibility,
                   onTogglePlayback: onTogglePlayback,
@@ -260,12 +286,10 @@ class _ExploreVideoFeedScreenState extends State<ExploreVideoFeedScreen> {
                   ),
                   onRetryActiveVideo: onRetryActiveVideo,
                   onBack: context.pop,
-                    onReport: reportTargetId == null || reportTargetId.isEmpty
+                  onReport: reportTargetId == null || reportTargetId.isEmpty
                       ? null
-                      : () => _showReportSheet(
-                          context,
-                      videoId: reportTargetId,
-                        ),
+                      : () =>
+                            _showReportSheet(context, videoId: reportTargetId),
                 );
               },
             ),
@@ -329,7 +353,7 @@ class _ExploreVideoFeedView extends StatelessWidget {
     required this.state,
     required this.pageController,
     required this.isChromeVisible,
-    required this.controllerFor,
+    required this.slotFor,
     required this.onPageChanged,
     required this.onToggleChrome,
     required this.onTogglePlayback,
@@ -342,12 +366,12 @@ class _ExploreVideoFeedView extends StatelessWidget {
   final ExploreVideoFeedState state;
   final PageController pageController;
   final bool isChromeVisible;
-  final VideoPlayerController? Function(int index) controllerFor;
+  final ValueListenable<VideoSlot> Function(int index) slotFor;
   final Future<void> Function(int index) onPageChanged;
   final VoidCallback onToggleChrome;
-  final Future<void> Function(int index) onTogglePlayback;
+  final void Function(int index) onTogglePlayback;
   final VoidCallback onOpenRating;
-  final Future<void> Function() onRetryActiveVideo;
+  final VoidCallback onRetryActiveVideo;
   final VoidCallback onBack;
   final VoidCallback? onReport;
 
@@ -366,14 +390,13 @@ class _ExploreVideoFeedView extends StatelessWidget {
               onPageChanged: onPageChanged,
               itemBuilder: (context, index) {
                 final video = state.videos[index];
-                final controller = controllerFor(index);
                 final isCurrentVideo = index == state.currentIndex;
                 final errorMessage = isCurrentVideo ? state.errorMessage : null;
 
                 return _VideoFeedPage(
                   key: ValueKey(video.id),
                   video: video,
-                  controller: controller,
+                  slot: slotFor(index),
                   isCurrentVideo: isCurrentVideo,
                   errorMessage: errorMessage,
                   isLoadingMore:
@@ -405,7 +428,7 @@ class _VideoFeedPage extends StatelessWidget {
   const _VideoFeedPage({
     super.key,
     required this.video,
-    required this.controller,
+    required this.slot,
     required this.isCurrentVideo,
     required this.errorMessage,
     required this.isLoadingMore,
@@ -418,7 +441,7 @@ class _VideoFeedPage extends StatelessWidget {
   });
 
   final SportVideo video;
-  final VideoPlayerController? controller;
+  final ValueListenable<VideoSlot> slot;
   final bool isCurrentVideo;
   final String? errorMessage;
   final bool isLoadingMore;
@@ -444,32 +467,14 @@ class _VideoFeedPage extends StatelessWidget {
       child: Stack(
         fit: StackFit.expand,
         children: [
-          if (controller != null)
-            ValueListenableBuilder<VideoPlayerValue>(
-              valueListenable: controller!,
-              builder: (context, value, child) {
-                if (value.isInitialized) {
-                  return ColoredBox(
-                    color: Colors.black,
-                    child: SizedBox.expand(
-                      child: FittedBox(
-                        fit: BoxFit.cover,
-                        clipBehavior: Clip.hardEdge,
-                        child: SizedBox(
-                          width: value.size.width,
-                          height: value.size.height,
-                          child: VideoPlayer(controller!),
-                        ),
-                      ),
-                    ),
-                  );
-                }
-
-                return const _VideoPlaceholder();
-              },
-            )
-          else
-            const _VideoPlaceholder(),
+          ValueListenableBuilder<VideoSlot>(
+            valueListenable: slot,
+            builder: (context, slot, child) => PooledVideoSurface(
+              slot: slot,
+              thumbnailUrl: video.thumbnailUrl,
+              showLoadingIndicator: isCurrentVideo,
+            ),
+          ),
           if (showChrome)
             DecoratedBox(
               decoration: BoxDecoration(
@@ -484,59 +489,65 @@ class _VideoFeedPage extends StatelessWidget {
                 ),
               ),
             ),
-          if (controller == null && errorMessage != null && onRetry != null)
-            Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 32),
-                    child: Text(
-                      errorMessage!,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
+          ValueListenableBuilder<VideoSlot>(
+            valueListenable: slot,
+            builder: (context, slot, child) {
+              final overlayMessage = videoErrorOverlayMessage(
+                slot: slot,
+                errorMessage: errorMessage,
+                isCurrentVideo: isCurrentVideo,
+              );
+              if (overlayMessage != null && onRetry != null) {
+                return Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 32),
+                        child: Text(
+                          overlayMessage,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
                       ),
-                    ),
+                      const SizedBox(height: 16),
+                      ElevatedButton.icon(
+                        onPressed: onRetry,
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('Retry'),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 16),
-                  ElevatedButton.icon(
-                    onPressed: onRetry,
-                    icon: const Icon(Icons.refresh),
-                    label: const Text('Retry'),
-                  ),
-                ],
-              ),
-            )
-          else if (controller != null)
-            Center(
-              child: ValueListenableBuilder<VideoPlayerValue>(
-                valueListenable: controller!,
-                builder: (context, value, child) {
-                  if (!showChrome ||
-                      !value.isInitialized ||
-                      value.isPlaying ||
-                      !isCurrentVideo) {
-                    return const SizedBox.shrink();
-                  }
+                );
+              }
 
-                  return Container(
-                    decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.45),
-                      shape: BoxShape.circle,
-                    ),
-                    padding: const EdgeInsets.all(20),
-                    child: const Icon(
-                      Icons.play_arrow,
-                      color: Colors.white,
-                      size: 48,
-                    ),
-                  );
-                },
-              ),
-            ),
+              if (!showChrome ||
+                  slot.status != VideoSlotStatus.ready ||
+                  slot.isPlaying ||
+                  !isCurrentVideo) {
+                return const SizedBox.shrink();
+              }
+
+              return Center(
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.45),
+                    shape: BoxShape.circle,
+                  ),
+                  padding: const EdgeInsets.all(20),
+                  child: const Icon(
+                    Icons.play_arrow,
+                    color: Colors.white,
+                    size: 48,
+                  ),
+                ),
+              );
+            },
+          ),
           if (showChrome)
             Positioned(
               left: 16,
@@ -667,29 +678,6 @@ class _VideoFeedPage extends StatelessWidget {
       return '${(count / 1000).toStringAsFixed(1)}K';
     }
     return count.toString();
-  }
-}
-
-class _VideoPlaceholder extends StatelessWidget {
-  const _VideoPlaceholder();
-
-  @override
-  Widget build(BuildContext context) {
-    return ColoredBox(
-      color: Colors.black,
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          Container(color: Colors.black),
-          Container(color: Colors.black.withValues(alpha: 0.25)),
-          const Center(
-            child: CircularProgressIndicator(
-              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-            ),
-          ),
-        ],
-      ),
-    );
   }
 }
 
