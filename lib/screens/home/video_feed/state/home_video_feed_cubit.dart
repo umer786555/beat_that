@@ -1,17 +1,15 @@
 import 'dart:async';
 
+import 'package:beat_that/bloc/pooled_feed_playback.dart';
 import 'package:beat_that/models/home_feed_cursor.dart';
 import 'package:bloc_presentation/bloc_presentation.dart';
 import 'package:beat_that/models/sport_video.dart';
 import 'package:beat_that/service_locator.dart';
 import 'package:beat_that/services/home_feed_service.dart';
-import 'package:beat_that/services/preferences_service.dart';
 import 'package:beat_that/services/home_video_feed_session_store.dart';
 import 'package:beat_that/services/supabase_service.dart';
-import 'package:beat_that/services/video_engagement_tracker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:video_player/video_player.dart';
 
 import '../presentation/events/home_video_feed_presentation_event.dart';
 import 'home_video_feed_state.dart';
@@ -21,21 +19,16 @@ class HomeVideoFeedCubit extends Cubit<HomeVideoFeedState>
         BlocPresentationMixin<
           HomeVideoFeedState,
           HomeVideoFeedPresentationEvent
-        > {
-  static const Duration _viewCountThreshold = Duration(seconds: 8);
-  static const Duration _replayResetThreshold = Duration(milliseconds: 600);
-
+        >,
+        PooledFeedPlayback<HomeVideoFeedState> {
   HomeVideoFeedCubit({required this.sessionId, required int initialIndex})
     : _homeFeedService = locator<HomeFeedService>(),
-      _preferencesService = locator<PreferencesService>(),
       _supabaseService = locator<SupabaseService>(),
       _sessionStore = locator<HomeVideoFeedSessionStore>(),
       _seenVideoIds = _requireSession(sessionId).seenVideoIds,
       super(
         HomeVideoFeedState(
-          videos: List<SportVideo>.from(
-            _requireSession(sessionId).videos,
-          ),
+          videos: List<SportVideo>.from(_requireSession(sessionId).videos),
           currentIndex: initialIndex,
           nextCursor: _requireSession(sessionId).nextCursor,
           hasMoreContent: _requireSession(sessionId).hasMoreContent,
@@ -55,23 +48,20 @@ class HomeVideoFeedCubit extends Cubit<HomeVideoFeedState>
 
   final String sessionId;
   final HomeFeedService _homeFeedService;
-  final PreferencesService _preferencesService;
   final SupabaseService _supabaseService;
   final HomeVideoFeedSessionStore _sessionStore;
   final Set<String> _seenVideoIds;
-  late final VideoEngagementTracker _engagementTracker = VideoEngagementTracker(
-    _preferencesService,
-  );
-  final Map<int, VideoPlayerController> _controllers = {};
-  final Map<int, Future<void>> _controllerInitializers = {};
-  final Map<int, void Function()> _controllerListeners = {};
-  final Set<int> _viewThresholdReachedIndexes = {};
 
-  VideoPlayerController? controllerFor(int index) => _controllers[index];
+  @override
+  List<SportVideo> get feedVideos => state.videos;
+
+  @override
+  int get feedCurrentIndex => state.currentIndex;
 
   Future<void> initialize() async {
-    _engagementTracker.startVideo(_subcategoryIdForIndex(state.currentIndex));
-    await _activateIndex(state.currentIndex);
+    startPlayback();
+    engagementTracker.startVideo(_subcategoryIdForIndex(state.currentIndex));
+    _activateCurrentVideo();
     await _loadUserRatingForIndex(state.currentIndex);
     await _loadMoreIfNeeded(state.currentIndex);
   }
@@ -81,7 +71,7 @@ class HomeVideoFeedCubit extends Cubit<HomeVideoFeedState>
       return;
     }
 
-    _engagementTracker.startVideo(_subcategoryIdForIndex(index));
+    engagementTracker.startVideo(_subcategoryIdForIndex(index));
     _sessionStore.updateCurrentIndex(sessionId, index);
     emit(
       state.copyWith(
@@ -91,33 +81,19 @@ class HomeVideoFeedCubit extends Cubit<HomeVideoFeedState>
       ),
     );
 
-    await _activateIndex(index);
+    _activateCurrentVideo();
     await _loadUserRatingForIndex(index);
     await _loadMoreIfNeeded(index);
   }
 
-  Future<void> togglePlayback(int index) async {
-    final controller = _controllers[index];
-    if (controller == null || !controller.value.isInitialized) {
+  void retryActiveVideo() {
+    final videoPath = state.videos[state.currentIndex].videoPath;
+    if (videoPath.isEmpty) {
       return;
     }
 
-    if (controller.value.isPlaying) {
-      await controller.pause();
-    } else {
-      await _pauseAllExcept(index);
-      await controller.play();
-      _trackViewProgress(index);
-    }
-
-    _bumpControllerGeneration();
-  }
-
-  Future<void> retryActiveVideo() async {
-    final currentIndex = state.currentIndex;
-    await _disposeControllerAt(currentIndex);
     emit(state.copyWith(clearErrorMessage: true));
-    await _activateIndex(currentIndex);
+    retryPlayback(videoPath);
   }
 
   String? reportTargetIdForIndex(int index) => _ratingTargetIdForIndex(index);
@@ -139,7 +115,7 @@ class HomeVideoFeedCubit extends Cubit<HomeVideoFeedState>
     );
 
     if (result['success'] == true) {
-      _engagementTracker.onRated(rating);
+      engagementTracker.onRated(rating);
       emit(
         state.copyWith(currentUserRating: rating, isSubmittingRating: false),
       );
@@ -160,92 +136,14 @@ class HomeVideoFeedCubit extends Cubit<HomeVideoFeedState>
     return false;
   }
 
-  Future<void> _activateIndex(int index) async {
-    await _ensureController(index, autoplay: true);
+  void _activateCurrentVideo() {
+    activatePlayback();
 
-    await _disposeStaleControllers(index);
-
-    await _pauseAllExcept(index);
-    _bumpControllerGeneration();
-  }
-
-  Future<void> _ensureController(int index, {bool autoplay = false}) async {
-    if (index < 0 || index >= state.videos.length) {
-      return;
-    }
-
-    final existingController = _controllers[index];
-    if (existingController != null) {
-      if (autoplay) {
-        await existingController.play();
-        _trackViewProgress(index);
-      }
-      return;
-    }
-
-    final existingInitializer = _controllerInitializers[index];
-    if (existingInitializer != null) {
-      await existingInitializer;
-      final initializedController = _controllers[index];
-      if (autoplay && initializedController != null) {
-        await initializedController.play();
-        _trackViewProgress(index);
-        _bumpControllerGeneration();
-      }
-      return;
-    }
-
-    final initializer = _initializeController(index, autoplay: autoplay);
-    _controllerInitializers[index] = initializer;
-
-    try {
-      await initializer;
-    } finally {
-      _controllerInitializers.remove(index);
-    }
-  }
-
-  Future<void> _initializeController(int index, {bool autoplay = false}) async {
-    final video = state.videos[index];
-    final videoSource = video.videoPath;
-    if (videoSource.isEmpty) {
+    final index = state.currentIndex;
+    if (index >= 0 &&
+        index < state.videos.length &&
+        state.videos[index].videoPath.isEmpty) {
       emit(state.copyWith(errorMessage: 'This video is unavailable.'));
-      return;
-    }
-
-    final isNetworkUrl =
-        videoSource.startsWith('http://') || videoSource.startsWith('https://');
-
-    VideoPlayerController? controller;
-
-    try {
-      if (isNetworkUrl) {
-        controller = VideoPlayerController.networkUrl(Uri.parse(videoSource));
-      } else {
-        final playbackUrl = await _supabaseService.resolveVideoPlaybackUrl(
-          videoSource,
-        );
-        controller = VideoPlayerController.networkUrl(Uri.parse(playbackUrl));
-      }
-
-      await controller.initialize();
-      await controller.setLooping(true);
-
-      _controllers[index] = controller;
-      _attachViewTrackingListener(index, controller);
-      if (autoplay && index == state.currentIndex) {
-        await controller.play();
-        _trackViewProgress(index);
-      }
-
-      _bumpControllerGeneration();
-    } catch (_) {
-      await controller?.dispose();
-      if (index == state.currentIndex) {
-        emit(
-          state.copyWith(errorMessage: 'Failed to load video. Tap to retry.'),
-        );
-      }
     }
   }
 
@@ -295,6 +193,7 @@ class HomeVideoFeedCubit extends Cubit<HomeVideoFeedState>
         cursor: state.nextCursor,
         limit: _continuationPageSize,
       );
+      if (isClosed) return;
 
       final newVideos = List<SportVideo>.from(
         result['videos'] as List<dynamic>,
@@ -322,7 +221,11 @@ class HomeVideoFeedCubit extends Cubit<HomeVideoFeedState>
         nextCursor: nextCursor,
         hasMoreContent: hasMoreContent,
       );
+
+      // Fill the preload window with the newly appended videos.
+      updatePlaybackWindow();
     } catch (_) {
+      if (isClosed) return;
       emit(
         state.copyWith(
           isLoadingMore: false,
@@ -332,98 +235,9 @@ class HomeVideoFeedCubit extends Cubit<HomeVideoFeedState>
     }
   }
 
-  Future<void> _pauseAllExcept(int activeIndex) async {
-    for (final entry in _controllers.entries) {
-      if (entry.key == activeIndex) {
-        continue;
-      }
-
-      if (entry.value.value.isPlaying) {
-        await entry.value.pause();
-      }
-    }
-  }
-
-  Future<void> _disposeStaleControllers(int activeIndex) async {
-    final staleIndexes = _controllers.keys
-        .where((index) => index != activeIndex && index != activeIndex + 1)
-        .toList();
-
-    for (final index in staleIndexes) {
-      await _disposeControllerAt(index);
-    }
-  }
-
-  Future<void> _disposeControllerAt(int index) async {
-    _detachViewTrackingListener(index);
-    final controller = _controllers.remove(index);
-    if (controller != null) {
-      await controller.dispose();
-      _bumpControllerGeneration();
-    }
-  }
-
-  void _attachViewTrackingListener(
-    int index,
-    VideoPlayerController controller,
-  ) {
-    if (_controllerListeners.containsKey(index)) {
-      return;
-    }
-
-    void listener() {
-      _trackViewProgress(index);
-    }
-
-    _controllerListeners[index] = listener;
-    controller.addListener(listener);
-  }
-
-  void _detachViewTrackingListener(int index) {
-    final listener = _controllerListeners.remove(index);
-    final controller = _controllers[index];
-    if (listener != null && controller != null) {
-      controller.removeListener(listener);
-    }
-
-    _viewThresholdReachedIndexes.remove(index);
-  }
-
-  void _trackViewProgress(int index) {
-    if (index != state.currentIndex) {
-      return;
-    }
-
-    final controller = _controllers[index];
-    if (controller == null) {
-      return;
-    }
-
-    final value = controller.value;
-    if (!value.isInitialized) {
-      return;
-    }
-
-    _engagementTracker.onPlaybackProgress(value);
-
-    if (value.position <= _replayResetThreshold) {
-      _viewThresholdReachedIndexes.remove(index);
-    }
-
-    if (!value.isPlaying) {
-      return;
-    }
-
-    if (_viewThresholdReachedIndexes.contains(index)) {
-      return;
-    }
-
-    if (value.position < _viewCountThreshold) {
-      return;
-    }
-
-    _viewThresholdReachedIndexes.add(index);
-    unawaited(_incrementViewCount(index));
+  @override
+  void onViewThresholdReached() {
+    unawaited(_incrementViewCount(state.currentIndex));
   }
 
   Future<void> _incrementViewCount(int index) async {
@@ -474,26 +288,9 @@ class HomeVideoFeedCubit extends Cubit<HomeVideoFeedState>
     return state.videos[index].subcategoryId;
   }
 
-  void _bumpControllerGeneration() {
-    emit(state.copyWith(controllerGeneration: state.controllerGeneration + 1));
-  }
-
   @override
   Future<void> close() async {
-    _engagementTracker.stop();
-    for (final entry in _controllerListeners.entries) {
-      final controller = _controllers[entry.key];
-      if (controller != null) {
-        controller.removeListener(entry.value);
-      }
-    }
-    _controllerListeners.clear();
-    _viewThresholdReachedIndexes.clear();
-    for (final controller in _controllers.values) {
-      await controller.dispose();
-    }
-    _controllers.clear();
-    _controllerInitializers.clear();
+    await stopPlayback();
     return super.close();
   }
 }

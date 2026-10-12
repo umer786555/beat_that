@@ -2,17 +2,19 @@ import 'dart:async';
 import 'package:beat_that/constants/app_colors.dart';
 import 'package:beat_that/constants/app_strings.dart';
 import 'package:beat_that/constants/upload_limits.dart';
+import 'package:beat_that/models/playback_progress.dart';
 import 'package:beat_that/models/category.dart';
 import 'package:beat_that/widgets/error_screen.dart';
 import 'package:beat_that/widgets/loading_screen.dart';
 import 'package:beat_that/widgets/custom_back_button.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:video_player/video_player.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+import 'package:media_kit_video/media_kit_video.dart';
 import 'package:beat_that/screens/play_uploaded_video.dart/bloc/play_uploaded_video_bloc.dart';
 import 'package:beat_that/routes/app_router.dart';
+import 'package:beat_that/services/video_playback/playback_player.dart';
 
 /// Screen for playing uploaded videos
 ///
@@ -60,22 +62,15 @@ class _PlayUploadedVideoScreenState extends State<PlayUploadedVideoScreen> {
     super.dispose();
   }
 
-  Widget _buildCoverVideoPlayer(
-    VideoPlayerController videoController, {
-    VoidCallback? onTap,
-  }) {
+  Widget _buildCoverVideoPlayer(PlaybackPlayer player, {VoidCallback? onTap}) {
     return Center(
       child: GestureDetector(
         onTap: onTap,
         child: SizedBox.expand(
-          child: FittedBox(
+          child: Video(
+            controller: player.videoController!,
             fit: BoxFit.cover,
-            clipBehavior: Clip.hardEdge,
-            child: SizedBox(
-              width: videoController.value.size.width,
-              height: videoController.value.size.height,
-              child: VideoPlayer(videoController),
-            ),
+            controls: NoVideoControls,
           ),
         ),
       ),
@@ -109,7 +104,7 @@ class _PlayUploadedVideoScreenState extends State<PlayUploadedVideoScreen> {
         },
         builder: (context, state) {
           final bloc = context.read<PlayUploadedVideoBloc>();
-          final videoController = bloc.videoController;
+          final player = bloc.player;
 
           // In view mode: full-screen with overlaid controls (like Instagram)
           // In edit mode: normal scaffold with appbar and FAB
@@ -154,8 +149,7 @@ class _PlayUploadedVideoScreenState extends State<PlayUploadedVideoScreen> {
                   ),
               ],
             ),
-            floatingActionButton:
-                videoController != null && loadedDuration != null
+            floatingActionButton: player != null && loadedDuration != null
                 ? _buildEditFab(
                     context,
                     bloc,
@@ -228,14 +222,14 @@ class _PlayUploadedVideoScreenState extends State<PlayUploadedVideoScreen> {
     }
 
     final bloc = context.read<PlayUploadedVideoBloc>();
-    final videoController = bloc.videoController;
+    final player = bloc.player;
 
-    if (videoController == null) {
+    if (player == null) {
       return const Center(child: Text('Failed to load video'));
     }
 
     // In edit mode: show layout with slider below
-    return _buildEditModeLayout(context, state, videoController, bloc);
+    return _buildEditModeLayout(context, state, player, bloc);
   }
 
   /// Full-screen video layout (like Instagram/TikTok)
@@ -265,8 +259,8 @@ class _PlayUploadedVideoScreenState extends State<PlayUploadedVideoScreen> {
       );
     }
 
-    final videoController = bloc.videoController;
-    if (videoController == null) {
+    final player = bloc.player;
+    if (player == null) {
       return Scaffold(body: const Center(child: Text('Failed to load video')));
     }
 
@@ -277,7 +271,7 @@ class _PlayUploadedVideoScreenState extends State<PlayUploadedVideoScreen> {
           children: [
             // Full-screen video player
             _buildCoverVideoPlayer(
-              videoController,
+              player,
               onTap: state is PlayUploadedVideoPlaying
                   ? () => _showControlsTemporarily()
                   : null,
@@ -383,11 +377,15 @@ class _PlayUploadedVideoScreenState extends State<PlayUploadedVideoScreen> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       // Progress slider
-                      ValueListenableBuilder<VideoPlayerValue>(
-                        valueListenable: videoController,
-                        builder: (context, value, child) {
+                      StreamBuilder<PlaybackProgress>(
+                        stream: player.progress,
+                        initialData: bloc.progress,
+                        builder: (context, snapshot) {
+                          final value = snapshot.requireData;
                           return Slider(
-                            value: value.position.inMilliseconds.toDouble(),
+                            value: value.position.inMilliseconds
+                                .clamp(0, value.duration.inMilliseconds)
+                                .toDouble(),
                             min: 0.0,
                             max: value.duration.inMilliseconds.toDouble(),
                             activeColor: AppColors.electricMagenta,
@@ -398,20 +396,22 @@ class _PlayUploadedVideoScreenState extends State<PlayUploadedVideoScreen> {
                             overlayColor: WidgetStateProperty.all(
                               Colors.transparent,
                             ),
-                            onChanged: (newValue) {
-                              videoController.seekTo(
+                            onChanged: (newValue) => bloc.add(
+                              SeekVideoEvent(
                                 Duration(milliseconds: newValue.toInt()),
-                              );
-                            },
+                              ),
+                            ),
                           );
                         },
                       ),
                       // Time display
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 4),
-                        child: ValueListenableBuilder<VideoPlayerValue>(
-                          valueListenable: videoController,
-                          builder: (context, value, child) {
+                        child: StreamBuilder<PlaybackProgress>(
+                          stream: player.progress,
+                          initialData: bloc.progress,
+                          builder: (context, snapshot) {
+                            final value = snapshot.requireData;
                             return Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
@@ -449,7 +449,7 @@ class _PlayUploadedVideoScreenState extends State<PlayUploadedVideoScreen> {
   Widget _buildEditModeLayout(
     BuildContext context,
     PlayUploadedVideoState state,
-    VideoPlayerController videoController,
+    PlaybackPlayer player,
     PlayUploadedVideoBloc bloc,
   ) {
     return Container(
@@ -458,7 +458,7 @@ class _PlayUploadedVideoScreenState extends State<PlayUploadedVideoScreen> {
         children: [
           // Full-screen video player
           _buildCoverVideoPlayer(
-            videoController,
+            player,
             onTap: state is PlayUploadedVideoPlaying
                 ? () => _showControlsTemporarily()
                 : null,
@@ -529,11 +529,15 @@ class _PlayUploadedVideoScreenState extends State<PlayUploadedVideoScreen> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     // Progress slider
-                    ValueListenableBuilder<VideoPlayerValue>(
-                      valueListenable: videoController,
-                      builder: (context, value, child) {
+                    StreamBuilder<PlaybackProgress>(
+                      stream: player.progress,
+                      initialData: bloc.progress,
+                      builder: (context, snapshot) {
+                        final value = snapshot.requireData;
                         return Slider(
-                          value: value.position.inMilliseconds.toDouble(),
+                          value: value.position.inMilliseconds
+                              .clamp(0, value.duration.inMilliseconds)
+                              .toDouble(),
                           min: 0.0,
                           max: value.duration.inMilliseconds.toDouble(),
                           activeColor: AppColors.electricMagenta,
@@ -544,20 +548,22 @@ class _PlayUploadedVideoScreenState extends State<PlayUploadedVideoScreen> {
                           overlayColor: WidgetStateProperty.all(
                             Colors.transparent,
                           ),
-                          onChanged: (newValue) {
-                            videoController.seekTo(
+                          onChanged: (newValue) => bloc.add(
+                            SeekVideoEvent(
                               Duration(milliseconds: newValue.toInt()),
-                            );
-                          },
+                            ),
+                          ),
                         );
                       },
                     ),
                     // Time display
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 4),
-                      child: ValueListenableBuilder<VideoPlayerValue>(
-                        valueListenable: videoController,
-                        builder: (context, value, child) {
+                      child: StreamBuilder<PlaybackProgress>(
+                        stream: player.progress,
+                        initialData: bloc.progress,
+                        builder: (context, snapshot) {
+                          final value = snapshot.requireData;
                           return Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [

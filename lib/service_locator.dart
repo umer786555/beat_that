@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:get_it/get_it.dart';
 import 'package:beat_that/services/auth_service.dart';
 import 'package:beat_that/services/ad_mob_consent_service.dart';
@@ -12,6 +12,10 @@ import 'package:beat_that/services/home_feed_service.dart';
 import 'package:beat_that/services/home_video_feed_session_store.dart';
 import 'package:beat_that/services/onboarding_service.dart';
 import 'package:beat_that/services/explore_feed_progress_store.dart';
+import 'package:beat_that/services/video_playback/media_kit_playback_player.dart';
+import 'package:beat_that/services/video_playback/playback_player.dart';
+import 'package:beat_that/services/video_playback/video_player_pool.dart';
+import 'package:beat_that/services/video_playback/video_source_resolver.dart';
 import 'package:beat_that/routes/app_router.dart';
 
 /// Service Locator instance for dependency injection
@@ -98,6 +102,27 @@ void setupServiceLocator(PreferencesService preferencesService) {
 
     locator.registerSingleton<OnboardingService>(
       OnboardingService(preferencesService: locator<PreferencesService>()),
+    );
+
+    // A new native player per call; the pool and play-video own their players.
+    locator.registerFactory<PlaybackPlayer>(MediaKitPlaybackPlayer.new);
+
+    // Register VideoSourceResolver (depends on SupabaseService)
+    locator.registerSingleton<VideoSourceResolver>(
+      VideoSourceResolver(supabaseService: locator<SupabaseService>()),
+    );
+
+    // App-scoped so the feeds share one capped set of players.
+    locator.registerSingleton<VideoPlayerPool>(
+      VideoPlayerPool(
+        createPlayer: () => locator<PlaybackPlayer>(),
+        resolveSource: locator<VideoSourceResolver>().resolve,
+      ),
+    );
+
+    // Root route observer, so the feeds can pause while a page covers them.
+    locator.registerSingleton<RouteObserver<PageRoute<dynamic>>>(
+      RouteObserver<PageRoute<dynamic>>(),
     );
   } catch (e, stackTrace) {
     debugPrintStack(

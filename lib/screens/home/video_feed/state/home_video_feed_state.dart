@@ -10,7 +10,6 @@ class HomeVideoFeedState extends Equatable {
   final HomeFeedCursor nextCursor;
   final bool hasMoreContent;
   final bool isLoadingMore;
-  final int controllerGeneration;
   final String? errorMessage;
   final int? currentUserRating;
   final bool isSubmittingRating;
@@ -21,7 +20,6 @@ class HomeVideoFeedState extends Equatable {
     required this.nextCursor,
     required this.hasMoreContent,
     this.isLoadingMore = false,
-    this.controllerGeneration = 0,
     this.errorMessage,
     this.currentUserRating,
     this.isSubmittingRating = false,
@@ -33,7 +31,6 @@ class HomeVideoFeedState extends Equatable {
     HomeFeedCursor? nextCursor,
     bool? hasMoreContent,
     bool? isLoadingMore,
-    int? controllerGeneration,
     String? errorMessage,
     Object? currentUserRating = _sentinel,
     bool? isSubmittingRating,
@@ -45,7 +42,6 @@ class HomeVideoFeedState extends Equatable {
       nextCursor: nextCursor ?? this.nextCursor,
       hasMoreContent: hasMoreContent ?? this.hasMoreContent,
       isLoadingMore: isLoadingMore ?? this.isLoadingMore,
-      controllerGeneration: controllerGeneration ?? this.controllerGeneration,
       errorMessage: clearErrorMessage
           ? null
           : (errorMessage ?? this.errorMessage),
@@ -63,7 +59,6 @@ class HomeVideoFeedState extends Equatable {
     nextCursor,
     hasMoreContent,
     isLoadingMore,
-    controllerGeneration,
     errorMessage,
     currentUserRating,
     isSubmittingRating,

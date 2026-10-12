@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
+import 'package:media_kit/media_kit.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:beat_that/bloc/follow_counts_cubit.dart';
 import 'package:beat_that/services/auth_service.dart';
@@ -16,6 +17,7 @@ import 'package:beat_that/service_locator.dart';
 import 'package:beat_that/bloc/theme_bloc.dart';
 import 'package:beat_that/constants/app_themes.dart';
 import 'package:beat_that/services/app_onboarding.dart';
+import 'package:beat_that/services/video_playback/video_player_pool.dart';
 
 bool get _supportsMobileAds =>
     !kIsWeb &&
@@ -24,6 +26,7 @@ bool get _supportsMobileAds =>
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  MediaKit.ensureInitialized();
 
   // In main.dartßå
   // if (kDebugMode) {
@@ -81,6 +84,9 @@ class _MyAppState extends State<MyApp> {
   // Shared above the router so any route can refresh counts after a
   // follow/unfollow action without reaching into ProfileBloc directly.
   late final FollowCountsCubit _followCountsCubit;
+  // Holds feed playback while the app is hidden; foregrounding lets the pool
+  // decide what plays, so a user-paused video stays paused.
+  late final AppLifecycleListener _videoLifecycleListener;
   StreamSubscription<Uri>? _emailUpgradeLinkSubscription;
   DateTime? _lastRefreshTime;
   String? _lastHandledEmailUpgradeUri;
@@ -103,6 +109,12 @@ class _MyAppState extends State<MyApp> {
     if (locator<AuthService>().hasFullAccountAccess()) {
       _followCountsCubit.refresh();
     }
+
+    final videoPlayerPool = locator<VideoPlayerPool>();
+    _videoLifecycleListener = AppLifecycleListener(
+      onHide: () => videoPlayerPool.addPauseReason(PauseReason.background),
+      onShow: () => videoPlayerPool.removePauseReason(PauseReason.background),
+    );
 
     if (_supportsMobileAds) {
       unawaited(locator<AdMobConsentService>().requestConsentInfoUpdate());
@@ -166,6 +178,7 @@ class _MyAppState extends State<MyApp> {
 
   @override
   void dispose() {
+    _videoLifecycleListener.dispose();
     _emailUpgradeLinkSubscription?.cancel();
     super.dispose();
   }

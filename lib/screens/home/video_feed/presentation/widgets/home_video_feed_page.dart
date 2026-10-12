@@ -1,16 +1,18 @@
 import 'package:beat_that/constants/app_colors.dart';
 import 'package:beat_that/models/sport_video.dart';
+import 'package:beat_that/services/video_playback/video_slot.dart';
 import 'package:beat_that/widgets/interactive_button.dart';
+import 'package:beat_that/widgets/pooled_video_surface.dart';
 import 'package:beat_that/widgets/video_overlay_action_button.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:video_player/video_player.dart';
 import '../home_video_feed_utils.dart';
 
 class HomeVideoFeedPage extends StatelessWidget {
   const HomeVideoFeedPage({
     super.key,
     required this.video,
-    required this.controller,
+    required this.slot,
     required this.isCurrentVideo,
     required this.errorMessage,
     required this.isLoadingMore,
@@ -24,7 +26,7 @@ class HomeVideoFeedPage extends StatelessWidget {
   });
 
   final SportVideo video;
-  final VideoPlayerController? controller;
+  final ValueListenable<VideoSlot> slot;
   final bool isCurrentVideo;
   final String? errorMessage;
   final bool isLoadingMore;
@@ -47,123 +49,52 @@ class HomeVideoFeedPage extends StatelessWidget {
     return GestureDetector(
       behavior: HitTestBehavior.deferToChild,
       onTap: isCurrentVideo ? onToggleChrome : null,
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          _VideoPlayerSurface(controller: controller),
-          _VideoFeedOverlayLayer(
-            controller: controller,
-            video: video,
-            errorMessage: errorMessage,
-            isCurrentVideo: isCurrentVideo,
-            showChrome: showChrome,
-            username: username,
-            title: title,
-            description: description,
-            viewCount: viewCount,
-            rating: rating,
-            isLoadingMore: isLoadingMore,
-            currentUserRating: currentUserRating,
-            onTogglePlayback: onTogglePlayback,
-            onOpenRating: onOpenRating,
-            onRetry: onRetry,
-            onOpenCreatorProfile: onOpenCreatorProfile,
-          ),
-        ],
+      child: ValueListenableBuilder<VideoSlot>(
+        valueListenable: slot,
+        builder: (context, slot, child) {
+          return Stack(
+            fit: StackFit.expand,
+            children: [
+              PooledVideoSurface(
+                slot: slot,
+                thumbnailUrl: video.thumbnailUrl,
+                showLoadingIndicator: isCurrentVideo,
+              ),
+              _VideoFeedOverlayChrome(
+                slot: slot,
+                showChrome: showChrome,
+                overlayMessage: videoErrorOverlayMessage(
+                  slot: slot,
+                  errorMessage: errorMessage,
+                  isCurrentVideo: isCurrentVideo,
+                ),
+                isCurrentVideo: isCurrentVideo,
+                username: username,
+                title: title,
+                description: description,
+                viewCount: viewCount,
+                rating: rating,
+                isLoadingMore: isLoadingMore,
+                canRateVideo: video.ratingTargetId != null,
+                currentUserRating: currentUserRating,
+                onTogglePlayback: onTogglePlayback,
+                onOpenRating: onOpenRating,
+                onRetry: onRetry,
+                onOpenCreatorProfile: onOpenCreatorProfile,
+              ),
+            ],
+          );
+        },
       ),
-    );
-  }
-}
-
-class _VideoFeedOverlayLayer extends StatelessWidget {
-  const _VideoFeedOverlayLayer({
-    required this.controller,
-    required this.video,
-    required this.errorMessage,
-    required this.isCurrentVideo,
-    required this.showChrome,
-    required this.username,
-    required this.title,
-    required this.description,
-    required this.viewCount,
-    required this.rating,
-    required this.isLoadingMore,
-    required this.currentUserRating,
-    required this.onTogglePlayback,
-    required this.onOpenRating,
-    required this.onRetry,
-    required this.onOpenCreatorProfile,
-  });
-
-  final VideoPlayerController? controller;
-  final SportVideo video;
-  final String? errorMessage;
-  final bool isCurrentVideo;
-  final bool showChrome;
-  final String username;
-  final String title;
-  final String description;
-  final int viewCount;
-  final double rating;
-  final bool isLoadingMore;
-  final int? currentUserRating;
-  final VoidCallback onTogglePlayback;
-  final VoidCallback? onOpenRating;
-  final VoidCallback? onRetry;
-  final VoidCallback? onOpenCreatorProfile;
-
-  @override
-  Widget build(BuildContext context) {
-    if (controller == null) {
-      return _VideoFeedOverlayChrome(
-        showChrome: showChrome,
-        errorMessage: errorMessage,
-        isCurrentVideo: isCurrentVideo,
-        username: username,
-        title: title,
-        description: description,
-        viewCount: viewCount,
-        rating: rating,
-        isLoadingMore: isLoadingMore,
-        canRateVideo: video.ratingTargetId != null,
-        currentUserRating: currentUserRating,
-        onTogglePlayback: onTogglePlayback,
-        onOpenRating: onOpenRating,
-        onRetry: onRetry,
-        onOpenCreatorProfile: onOpenCreatorProfile,
-      );
-    }
-
-    return ValueListenableBuilder<VideoPlayerValue>(
-      valueListenable: controller!,
-      builder: (context, value, child) {
-        return _VideoFeedOverlayChrome(
-          showChrome: showChrome,
-          errorMessage: errorMessage,
-          isCurrentVideo: isCurrentVideo,
-          username: username,
-          title: title,
-          description: description,
-          viewCount: viewCount,
-          rating: rating,
-          isLoadingMore: isLoadingMore,
-          canRateVideo: video.ratingTargetId != null,
-          currentUserRating: currentUserRating,
-          onTogglePlayback: onTogglePlayback,
-          onOpenRating: onOpenRating,
-          onRetry: onRetry,
-          onOpenCreatorProfile: onOpenCreatorProfile,
-          value: value,
-        );
-      },
     );
   }
 }
 
 class _VideoFeedOverlayChrome extends StatelessWidget {
   const _VideoFeedOverlayChrome({
+    required this.slot,
     required this.showChrome,
-    required this.errorMessage,
+    required this.overlayMessage,
     required this.isCurrentVideo,
     required this.username,
     required this.title,
@@ -177,11 +108,11 @@ class _VideoFeedOverlayChrome extends StatelessWidget {
     required this.onOpenRating,
     required this.onRetry,
     required this.onOpenCreatorProfile,
-    this.value,
   });
 
+  final VideoSlot slot;
   final bool showChrome;
-  final String? errorMessage;
+  final String? overlayMessage;
   final bool isCurrentVideo;
   final String username;
   final String title;
@@ -195,7 +126,6 @@ class _VideoFeedOverlayChrome extends StatelessWidget {
   final VoidCallback? onOpenRating;
   final VoidCallback? onRetry;
   final VoidCallback? onOpenCreatorProfile;
-  final VideoPlayerValue? value;
 
   @override
   Widget build(BuildContext context) {
@@ -203,14 +133,9 @@ class _VideoFeedOverlayChrome extends StatelessWidget {
       fit: StackFit.expand,
       children: [
         if (showChrome) const _VideoFeedGradientOverlay(),
-        _VideoFeedStateOverlay(
-          value: value,
-          controllerMissing: value == null,
-          errorMessage: errorMessage,
-          onRetry: onRetry,
-        ),
+        _VideoFeedStateOverlay(message: overlayMessage, onRetry: onRetry),
         if (showChrome && isCurrentVideo)
-          _VideoPlaybackToggleButton(value: value, onPressed: onTogglePlayback),
+          _VideoPlaybackToggleButton(slot: slot, onPressed: onTogglePlayback),
         if (showChrome)
           Positioned(
             left: 16,
@@ -254,43 +179,6 @@ class _VideoFeedOverlayChrome extends StatelessWidget {
   }
 }
 
-class _VideoPlayerSurface extends StatelessWidget {
-  const _VideoPlayerSurface({required this.controller});
-
-  final VideoPlayerController? controller;
-
-  @override
-  Widget build(BuildContext context) {
-    if (controller == null) {
-      return const _VideoPlaceholder();
-    }
-
-    return ValueListenableBuilder<VideoPlayerValue>(
-      valueListenable: controller!,
-      builder: (context, value, child) {
-        if (value.isInitialized) {
-          return ColoredBox(
-            color: Colors.black,
-            child: SizedBox.expand(
-              child: FittedBox(
-                fit: BoxFit.cover,
-                clipBehavior: Clip.hardEdge,
-                child: SizedBox(
-                  width: value.size.width,
-                  height: value.size.height,
-                  child: VideoPlayer(controller!),
-                ),
-              ),
-            ),
-          );
-        }
-
-        return const _VideoPlaceholder();
-      },
-    );
-  }
-}
-
 class _VideoFeedGradientOverlay extends StatelessWidget {
   const _VideoFeedGradientOverlay();
 
@@ -313,21 +201,15 @@ class _VideoFeedGradientOverlay extends StatelessWidget {
 }
 
 class _VideoFeedStateOverlay extends StatelessWidget {
-  const _VideoFeedStateOverlay({
-    required this.controllerMissing,
-    required this.errorMessage,
-    required this.onRetry,
-    this.value,
-  });
+  const _VideoFeedStateOverlay({required this.message, required this.onRetry});
 
-  final bool controllerMissing;
-  final String? errorMessage;
+  final String? message;
   final VoidCallback? onRetry;
-  final VideoPlayerValue? value;
 
   @override
   Widget build(BuildContext context) {
-    if (controllerMissing && errorMessage != null && onRetry != null) {
+    final message = this.message;
+    if (message != null && onRetry != null) {
       return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -335,7 +217,7 @@ class _VideoFeedStateOverlay extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 32),
               child: Text(
-                errorMessage!,
+                message,
                 textAlign: TextAlign.center,
                 style: const TextStyle(
                   color: Colors.white,
@@ -355,26 +237,22 @@ class _VideoFeedStateOverlay extends StatelessWidget {
       );
     }
 
-    if (value == null) {
-      return const SizedBox.shrink();
-    }
-
     return const SizedBox.shrink();
   }
 }
 
 class _VideoPlaybackToggleButton extends StatelessWidget {
   const _VideoPlaybackToggleButton({
-    required this.value,
+    required this.slot,
     required this.onPressed,
   });
 
-  final VideoPlayerValue? value;
+  final VideoSlot slot;
   final VoidCallback onPressed;
 
   @override
   Widget build(BuildContext context) {
-    if (value == null || !value!.isInitialized) {
+    if (slot.status != VideoSlotStatus.ready) {
       return const SizedBox.shrink();
     }
 
@@ -391,7 +269,7 @@ class _VideoPlaybackToggleButton extends StatelessWidget {
             border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
           ),
           child: Icon(
-            value!.isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+            slot.isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
             color: Colors.white,
             size: 40,
           ),
@@ -502,29 +380,6 @@ class _LoadingMoreIndicator extends StatelessWidget {
         SizedBox(width: 10),
         Text('Loading more videos', style: TextStyle(color: Colors.white)),
       ],
-    );
-  }
-}
-
-class _VideoPlaceholder extends StatelessWidget {
-  const _VideoPlaceholder();
-
-  @override
-  Widget build(BuildContext context) {
-    return ColoredBox(
-      color: Colors.black,
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          Container(color: Colors.black),
-          Container(color: Colors.black.withValues(alpha: 0.25)),
-          const Center(
-            child: CircularProgressIndicator(
-              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

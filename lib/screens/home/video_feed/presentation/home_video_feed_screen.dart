@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:beat_that/bloc/pooled_feed_playback.dart';
 import 'package:beat_that/constants/ad_mob_ids.dart';
 import 'package:beat_that/routes/app_router.dart';
 import 'package:beat_that/reporting/models/report_target.dart';
@@ -7,6 +8,7 @@ import 'package:beat_that/reporting/presentation/show_content_report_bottom_shee
 import 'package:beat_that/service_locator.dart';
 import 'package:beat_that/services/ad_mob_consent_service.dart';
 import 'package:beat_that/services/auth_service.dart';
+import 'package:beat_that/widgets/pooled_feed_route_aware.dart';
 import 'package:beat_that/widgets/custom_snackbar.dart';
 import 'package:beat_that/widgets/video_feed_chrome.dart';
 import 'package:beat_that/widgets/video_rating_bottom_sheet.dart';
@@ -37,10 +39,12 @@ class HomeVideoFeedScreen extends StatefulWidget {
   State<HomeVideoFeedScreen> createState() => _HomeVideoFeedScreenState();
 }
 
-class _HomeVideoFeedScreenState extends State<HomeVideoFeedScreen> {
+class _HomeVideoFeedScreenState extends State<HomeVideoFeedScreen>
+    with PooledFeedRouteAware {
   static const int _firstInterstitialThreshold = 8;
   static const int _subsequentInterstitialInterval = 10;
 
+  late final HomeVideoFeedCubit _cubit;
   late final PageController _pageController;
   late final AdMobConsentService _consentService;
   late final AuthService _authService;
@@ -76,6 +80,10 @@ class _HomeVideoFeedScreenState extends State<HomeVideoFeedScreen> {
   @override
   void initState() {
     super.initState();
+    _cubit = HomeVideoFeedCubit(
+      sessionId: widget.sessionId,
+      initialIndex: widget.initialIndex,
+    )..initialize();
     _pageController = PageController(initialPage: widget.initialIndex);
     _consentService = locator<AdMobConsentService>();
     _authService = locator<AuthService>();
@@ -88,10 +96,14 @@ class _HomeVideoFeedScreenState extends State<HomeVideoFeedScreen> {
   }
 
   @override
+  PooledFeedPlayback<Object?> get feedPlayback => _cubit;
+
+  @override
   void dispose() {
     _consentService.removeListener(_handleConsentStateChanged);
     _disposeInterstitialAd();
     _pageController.dispose();
+    unawaited(_cubit.close());
     super.dispose();
   }
 
@@ -127,8 +139,10 @@ class _HomeVideoFeedScreenState extends State<HomeVideoFeedScreen> {
           _isInterstitialLoading = false;
           _interstitialAd = ad;
           ad.fullScreenContentCallback = FullScreenContentCallback(
+            onAdShowedFullScreenContent: (_) => _cubit.onAdShown(),
             onAdDismissedFullScreenContent: (ad) {
               _isShowingInterstitial = false;
+              _cubit.onAdClosed();
               ad.dispose();
               if (identical(_interstitialAd, ad)) {
                 _interstitialAd = null;
@@ -137,6 +151,7 @@ class _HomeVideoFeedScreenState extends State<HomeVideoFeedScreen> {
             },
             onAdFailedToShowFullScreenContent: (ad, error) {
               _isShowingInterstitial = false;
+              _cubit.onAdClosed();
               ad.dispose();
               if (identical(_interstitialAd, ad)) {
                 _interstitialAd = null;
@@ -217,11 +232,8 @@ class _HomeVideoFeedScreenState extends State<HomeVideoFeedScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return BlocProvider(
-      create: (_) => HomeVideoFeedCubit(
-        sessionId: widget.sessionId,
-        initialIndex: widget.initialIndex,
-      )..initialize(),
+    return BlocProvider.value(
+      value: _cubit,
       child:
           BlocPresentationListener<
             HomeVideoFeedCubit,
@@ -253,7 +265,6 @@ class _HomeVideoFeedScreenState extends State<HomeVideoFeedScreen> {
                               _handlePageChanged(cubit, index),
                           itemBuilder: (context, index) {
                             final video = state.videos[index];
-                            final controller = cubit.controllerFor(index);
                             final isCurrentVideo = index == state.currentIndex;
                             final errorMessage = isCurrentVideo
                                 ? state.errorMessage
@@ -263,7 +274,7 @@ class _HomeVideoFeedScreenState extends State<HomeVideoFeedScreen> {
                             return HomeVideoFeedPage(
                               key: ValueKey(video.id),
                               video: video,
-                              controller: controller,
+                              slot: cubit.slotFor(index),
                               isCurrentVideo: isCurrentVideo,
                               errorMessage: errorMessage,
                               isLoadingMore:

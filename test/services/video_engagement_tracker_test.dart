@@ -1,8 +1,8 @@
+import 'package:beat_that/models/playback_progress.dart';
 import 'package:beat_that/services/preferences_service.dart';
 import 'package:beat_that/services/video_engagement_tracker.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
-import 'package:video_player/video_player.dart';
 
 class MockPreferencesService extends Mock implements PreferencesService {}
 
@@ -14,11 +14,10 @@ void main() {
   late MockPreferencesService preferences;
   late VideoEngagementTracker tracker;
 
-  VideoPlayerValue playing(int seconds, {int durationSeconds = 20}) {
-    return VideoPlayerValue(
+  PlaybackProgress playing(int seconds, {int durationSeconds = 20}) {
+    return PlaybackProgress(
       duration: Duration(seconds: durationSeconds),
       position: Duration(seconds: seconds),
-      isInitialized: true,
       isPlaying: true,
     );
   }
@@ -76,10 +75,9 @@ void main() {
 
     tracker.onPlaybackProgress(playing(19));
     tracker.onPlaybackProgress(
-      const VideoPlayerValue(
+      const PlaybackProgress(
         duration: Duration(seconds: 20),
         position: Duration(milliseconds: 900),
-        isInitialized: true,
         isPlaying: true,
       ),
     );
@@ -126,7 +124,11 @@ void main() {
   test('does not penalise a video that never started playing', () {
     tracker.startVideo(5);
     tracker.onPlaybackProgress(
-      const VideoPlayerValue(duration: Duration(seconds: 20)),
+      const PlaybackProgress(
+        position: Duration.zero,
+        duration: Duration(seconds: 20),
+        isPlaying: false,
+      ),
     );
 
     tracker.startVideo(6);
