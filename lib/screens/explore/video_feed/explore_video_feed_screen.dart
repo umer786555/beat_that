@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:beat_that/bloc/pooled_feed_playback.dart';
 import 'package:beat_that/constants/ad_mob_ids.dart';
 import 'package:beat_that/constants/app_colors.dart';
 import 'package:beat_that/models/sport_video.dart';
@@ -12,6 +13,7 @@ import 'package:beat_that/screens/explore/video_feed/explore_video_feed_state.da
 import 'package:beat_that/service_locator.dart';
 import 'package:beat_that/services/ad_mob_consent_service.dart';
 import 'package:beat_that/services/video_playback/video_slot.dart';
+import 'package:beat_that/widgets/pooled_feed_route_aware.dart';
 import 'package:beat_that/widgets/custom_snackbar.dart';
 import 'package:beat_that/widgets/pooled_video_surface.dart';
 import 'package:beat_that/widgets/video_feed_chrome.dart';
@@ -37,14 +39,13 @@ class ExploreVideoFeedScreen extends StatefulWidget {
 }
 
 class _ExploreVideoFeedScreenState extends State<ExploreVideoFeedScreen>
-    with RouteAware {
+    with PooledFeedRouteAware {
   static const int _firstInterstitialThreshold = 8;
   static const int _subsequentInterstitialInterval = 10;
 
   late final ExploreVideoFeedCubit _cubit;
   late final PageController _pageController;
   late final AdMobConsentService _consentService;
-  late final RouteObserver<PageRoute<dynamic>> _routeObserver;
   bool _isChromeVisible = false;
   InterstitialAd? _interstitialAd;
   bool _isInterstitialLoading = false;
@@ -90,7 +91,6 @@ class _ExploreVideoFeedScreenState extends State<ExploreVideoFeedScreen>
       randomHasWrapped: widget.extra.randomHasWrapped,
     )..initialize();
     _pageController = PageController(initialPage: widget.extra.initialIndex);
-    _routeObserver = locator<RouteObserver<PageRoute<dynamic>>>();
     _consentService = locator<AdMobConsentService>();
     _consentService.addListener(_handleConsentStateChanged);
     _lastVisitedIndex = widget.extra.initialIndex;
@@ -101,29 +101,16 @@ class _ExploreVideoFeedScreenState extends State<ExploreVideoFeedScreen>
   }
 
   @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    final route = ModalRoute.of(context);
-    if (route is PageRoute<dynamic>) {
-      _routeObserver.subscribe(this, route);
-    }
-  }
+  PooledFeedPlayback<Object?> get feedPlayback => _cubit;
 
   @override
   void dispose() {
-    _routeObserver.unsubscribe(this);
     _consentService.removeListener(_handleConsentStateChanged);
     _disposeInterstitialAd();
     _pageController.dispose();
     unawaited(_cubit.close());
     super.dispose();
   }
-
-  @override
-  void didPushNext() => _cubit.onRouteCovered();
-
-  @override
-  void didPopNext() => _cubit.onRouteUncovered();
 
   void _handleConsentStateChanged() {
     if (!_consentService.canRequestAds) {

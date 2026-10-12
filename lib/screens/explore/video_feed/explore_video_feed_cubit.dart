@@ -1,16 +1,11 @@
 import 'dart:async';
 
+import 'package:beat_that/bloc/pooled_feed_playback.dart';
 import 'package:bloc_presentation/bloc_presentation.dart';
-import 'package:beat_that/models/playback_progress.dart';
 import 'package:beat_that/models/sport_video.dart';
 import 'package:beat_that/service_locator.dart';
 import 'package:beat_that/services/explore_feed_progress_store.dart';
-import 'package:beat_that/services/preferences_service.dart';
 import 'package:beat_that/services/supabase_service.dart';
-import 'package:beat_that/services/video_engagement_tracker.dart';
-import 'package:beat_that/services/video_playback/video_player_pool.dart';
-import 'package:beat_that/services/video_playback/video_slot.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import 'explore_video_feed_presentation_event.dart';
@@ -21,9 +16,8 @@ class ExploreVideoFeedCubit extends Cubit<ExploreVideoFeedState>
         BlocPresentationMixin<
           ExploreVideoFeedState,
           ExploreVideoFeedPresentationEvent
-        > {
-  static const Duration _viewCountThreshold = Duration(seconds: 8);
-  static const Duration _replayResetThreshold = Duration(milliseconds: 600);
+        >,
+        PooledFeedPlayback<ExploreVideoFeedState> {
   static const int _loadMoreThreshold = 3;
   static const int _continuationPageSize = 20;
 
@@ -39,9 +33,7 @@ class ExploreVideoFeedCubit extends Cubit<ExploreVideoFeedState>
     this.randomAfterId,
     this.randomHasWrapped = false,
   }) : _supabaseService = locator<SupabaseService>(),
-       _preferencesService = locator<PreferencesService>(),
        _progressStore = locator<ExploreFeedProgressStore>(),
-       _pool = locator<VideoPlayerPool>(),
        super(
          ExploreVideoFeedState(
            videos: List<SportVideo>.from(initialVideos),
@@ -56,7 +48,6 @@ class ExploreVideoFeedCubit extends Cubit<ExploreVideoFeedState>
        );
 
   final SupabaseService _supabaseService;
-  final PreferencesService _preferencesService;
   final ExploreFeedProgressStore _progressStore;
   final String query;
   final String? selectedSportId;
@@ -66,12 +57,6 @@ class ExploreVideoFeedCubit extends Cubit<ExploreVideoFeedState>
   final String? randomSeed;
   final String? randomAfterId;
   final bool randomHasWrapped;
-  late final VideoEngagementTracker _engagementTracker = VideoEngagementTracker(
-    _preferencesService,
-  );
-  final VideoPlayerPool _pool;
-  StreamSubscription<PlaybackProgress>? _progressSubscription;
-  bool _viewThresholdReached = false;
   bool _isShuttingDown = false;
 
   Future<Map<String, dynamic>> _loadRandomExplorePage({
@@ -110,15 +95,17 @@ class ExploreVideoFeedCubit extends Cubit<ExploreVideoFeedState>
     return result;
   }
 
-  ValueListenable<VideoSlot> slotFor(int index) =>
-      _pool.slotFor(state.videos[index].videoPath);
+  @override
+  List<SportVideo> get feedVideos => state.videos;
+
+  @override
+  int get feedCurrentIndex => state.currentIndex;
 
   bool get _isInactive => _isShuttingDown || isClosed;
 
   Future<void> initialize() async {
-    _pool.claim(this);
-    _progressSubscription = _pool.activeProgress.listen(_onProgress);
-    _engagementTracker.startVideo(_subcategoryIdForIndex(state.currentIndex));
+    startPlayback();
+    engagementTracker.startVideo(_subcategoryIdForIndex(state.currentIndex));
     _activateCurrentVideo();
     await _loadUserRatingForIndex(state.currentIndex);
     await _loadMoreIfNeeded(state.currentIndex);
@@ -129,7 +116,7 @@ class ExploreVideoFeedCubit extends Cubit<ExploreVideoFeedState>
       return;
     }
 
-    _engagementTracker.startVideo(_subcategoryIdForIndex(index));
+    engagementTracker.startVideo(_subcategoryIdForIndex(index));
     emit(
       state.copyWith(
         currentIndex: index,
@@ -144,14 +131,6 @@ class ExploreVideoFeedCubit extends Cubit<ExploreVideoFeedState>
     await _loadMoreIfNeeded(index);
   }
 
-  void togglePlayback(int index) {
-    if (index != state.currentIndex) {
-      return;
-    }
-
-    _pool.toggleActivePlayback(this);
-  }
-
   void retryActiveVideo() {
     final videoPath = state.videos[state.currentIndex].videoPath;
     if (videoPath.isEmpty) {
@@ -159,16 +138,8 @@ class ExploreVideoFeedCubit extends Cubit<ExploreVideoFeedState>
     }
 
     emit(state.copyWith(clearErrorMessage: true));
-    _pool.retry(this, videoPath);
+    retryPlayback(videoPath);
   }
-
-  void onRouteCovered() => _pool.addPauseReason(PauseReason.covered);
-
-  void onRouteUncovered() => _pool.removePauseReason(PauseReason.covered);
-
-  void onAdShown() => _pool.addPauseReason(PauseReason.ad);
-
-  void onAdClosed() => _pool.removePauseReason(PauseReason.ad);
 
   String? reportTargetIdForIndex(int index) => _ratingTargetIdForIndex(index);
 
@@ -191,7 +162,7 @@ class ExploreVideoFeedCubit extends Cubit<ExploreVideoFeedState>
     );
 
     if (result['success'] == true) {
-      _engagementTracker.onRated(rating);
+      engagementTracker.onRated(rating);
       emit(
         state.copyWith(currentUserRating: rating, isSubmittingRating: false),
       );
@@ -213,8 +184,7 @@ class ExploreVideoFeedCubit extends Cubit<ExploreVideoFeedState>
   }
 
   void _activateCurrentVideo() {
-    _viewThresholdReached = false;
-    _updatePoolWindow();
+    activatePlayback();
 
     final index = state.currentIndex;
     if (index >= 0 &&
@@ -222,16 +192,6 @@ class ExploreVideoFeedCubit extends Cubit<ExploreVideoFeedState>
         state.videos[index].videoPath.isEmpty) {
       emit(state.copyWith(errorMessage: 'This video is unavailable.'));
     }
-  }
-
-  /// Points the pool's preload window at the current video. Synchronous, so a
-  /// fast fling just supersedes the previous window.
-  void _updatePoolWindow() {
-    _pool.setWindow(
-      owner: this,
-      keys: [for (final video in state.videos) video.videoPath],
-      activeIndex: state.currentIndex,
-    );
   }
 
   Future<void> _loadUserRatingForIndex(int index) async {
@@ -321,7 +281,7 @@ class ExploreVideoFeedCubit extends Cubit<ExploreVideoFeedState>
       _saveProgress();
 
       // Fill the preload window with the newly appended videos.
-      _updatePoolWindow();
+      updatePlaybackWindow();
     } catch (_) {
       if (_isInactive) return;
       emit(
@@ -333,21 +293,8 @@ class ExploreVideoFeedCubit extends Cubit<ExploreVideoFeedState>
     }
   }
 
-  /// Driven only by the pool's active player, so preloads never count a view.
-  void _onProgress(PlaybackProgress progress) {
-    _engagementTracker.onPlaybackProgress(progress);
-
-    if (progress.position <= _replayResetThreshold) {
-      _viewThresholdReached = false;
-    }
-
-    if (!progress.isPlaying ||
-        _viewThresholdReached ||
-        progress.position < _viewCountThreshold) {
-      return;
-    }
-
-    _viewThresholdReached = true;
+  @override
+  void onViewThresholdReached() {
     unawaited(_incrementViewCount(state.currentIndex));
   }
 
@@ -399,9 +346,7 @@ class ExploreVideoFeedCubit extends Cubit<ExploreVideoFeedState>
   @override
   Future<void> close() async {
     _isShuttingDown = true;
-    _pool.release(this);
-    await _progressSubscription?.cancel();
-    _engagementTracker.stop();
+    await stopPlayback();
     return super.close();
   }
 }

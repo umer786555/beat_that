@@ -208,6 +208,60 @@ void main() {
     });
   });
 
+  group('playback edge cases', () {
+    test('seek while paused keeps the paused state', () async {
+      final bloc = PlayUploadedVideoBloc(videoPath: videoPath);
+      final player = await initialize(bloc);
+      bloc.add(const PauseVideoEvent());
+      await flush();
+
+      bloc.add(const SeekVideoEvent(Duration(seconds: 3)));
+      await flush();
+
+      expect(player.seeks, [const Duration(seconds: 3)]);
+      expect(
+        bloc.state,
+        const PlayUploadedVideoPaused(
+          duration: Duration(seconds: 20),
+          currentPosition: Duration(seconds: 3),
+        ),
+      );
+      await bloc.close();
+    });
+
+    test('controls before initialize do nothing', () async {
+      final bloc = PlayUploadedVideoBloc(videoPath: videoPath);
+
+      bloc
+        ..add(const PlayVideoEvent())
+        ..add(const PauseVideoEvent())
+        ..add(const SeekVideoEvent(Duration(seconds: 3)));
+      await flush();
+
+      expect(bloc.state, isA<PlayUploadedVideoInitial>());
+      expect(created, isEmpty);
+      await bloc.close();
+    });
+
+    for (final (name, event) in [
+      ('play', const PlayVideoEvent()),
+      ('pause', const PauseVideoEvent()),
+      ('seek', const SeekVideoEvent(Duration(seconds: 3))),
+    ]) {
+      test('emits error when $name fails', () async {
+        final bloc = PlayUploadedVideoBloc(videoPath: videoPath);
+        final player = await initialize(bloc);
+        player.controlError = Exception('player gone');
+
+        bloc.add(event);
+        await flush();
+
+        expect(bloc.state, isA<PlayUploadedVideoError>());
+        await bloc.close();
+      });
+    }
+  });
+
   group('dispose', () {
     test('close disposes the player', () async {
       final bloc = PlayUploadedVideoBloc(videoPath: videoPath);

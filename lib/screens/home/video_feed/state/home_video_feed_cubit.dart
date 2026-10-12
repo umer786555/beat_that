@@ -1,17 +1,13 @@
 import 'dart:async';
 
+import 'package:beat_that/bloc/pooled_feed_playback.dart';
 import 'package:beat_that/models/home_feed_cursor.dart';
 import 'package:bloc_presentation/bloc_presentation.dart';
-import 'package:beat_that/models/playback_progress.dart';
 import 'package:beat_that/models/sport_video.dart';
 import 'package:beat_that/service_locator.dart';
 import 'package:beat_that/services/home_feed_service.dart';
-import 'package:beat_that/services/preferences_service.dart';
 import 'package:beat_that/services/home_video_feed_session_store.dart';
 import 'package:beat_that/services/supabase_service.dart';
-import 'package:beat_that/services/video_engagement_tracker.dart';
-import 'package:beat_that/services/video_playback/video_player_pool.dart';
-import 'package:beat_that/services/video_playback/video_slot.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -23,16 +19,12 @@ class HomeVideoFeedCubit extends Cubit<HomeVideoFeedState>
         BlocPresentationMixin<
           HomeVideoFeedState,
           HomeVideoFeedPresentationEvent
-        > {
-  static const Duration _viewCountThreshold = Duration(seconds: 8);
-  static const Duration _replayResetThreshold = Duration(milliseconds: 600);
-
+        >,
+        PooledFeedPlayback<HomeVideoFeedState> {
   HomeVideoFeedCubit({required this.sessionId, required int initialIndex})
     : _homeFeedService = locator<HomeFeedService>(),
-      _preferencesService = locator<PreferencesService>(),
       _supabaseService = locator<SupabaseService>(),
       _sessionStore = locator<HomeVideoFeedSessionStore>(),
-      _pool = locator<VideoPlayerPool>(),
       _seenVideoIds = _requireSession(sessionId).seenVideoIds,
       super(
         HomeVideoFeedState(
@@ -56,24 +48,19 @@ class HomeVideoFeedCubit extends Cubit<HomeVideoFeedState>
 
   final String sessionId;
   final HomeFeedService _homeFeedService;
-  final PreferencesService _preferencesService;
   final SupabaseService _supabaseService;
   final HomeVideoFeedSessionStore _sessionStore;
   final Set<String> _seenVideoIds;
-  late final VideoEngagementTracker _engagementTracker = VideoEngagementTracker(
-    _preferencesService,
-  );
-  final VideoPlayerPool _pool;
-  StreamSubscription<PlaybackProgress>? _progressSubscription;
-  bool _viewThresholdReached = false;
 
-  ValueListenable<VideoSlot> slotFor(int index) =>
-      _pool.slotFor(state.videos[index].videoPath);
+  @override
+  List<SportVideo> get feedVideos => state.videos;
+
+  @override
+  int get feedCurrentIndex => state.currentIndex;
 
   Future<void> initialize() async {
-    _pool.claim(this);
-    _progressSubscription = _pool.activeProgress.listen(_onProgress);
-    _engagementTracker.startVideo(_subcategoryIdForIndex(state.currentIndex));
+    startPlayback();
+    engagementTracker.startVideo(_subcategoryIdForIndex(state.currentIndex));
     _activateCurrentVideo();
     await _loadUserRatingForIndex(state.currentIndex);
     await _loadMoreIfNeeded(state.currentIndex);
@@ -84,7 +71,7 @@ class HomeVideoFeedCubit extends Cubit<HomeVideoFeedState>
       return;
     }
 
-    _engagementTracker.startVideo(_subcategoryIdForIndex(index));
+    engagementTracker.startVideo(_subcategoryIdForIndex(index));
     _sessionStore.updateCurrentIndex(sessionId, index);
     emit(
       state.copyWith(
@@ -99,14 +86,6 @@ class HomeVideoFeedCubit extends Cubit<HomeVideoFeedState>
     await _loadMoreIfNeeded(index);
   }
 
-  void togglePlayback(int index) {
-    if (index != state.currentIndex) {
-      return;
-    }
-
-    _pool.toggleActivePlayback(this);
-  }
-
   void retryActiveVideo() {
     final videoPath = state.videos[state.currentIndex].videoPath;
     if (videoPath.isEmpty) {
@@ -114,16 +93,8 @@ class HomeVideoFeedCubit extends Cubit<HomeVideoFeedState>
     }
 
     emit(state.copyWith(clearErrorMessage: true));
-    _pool.retry(this, videoPath);
+    retryPlayback(videoPath);
   }
-
-  void onRouteCovered() => _pool.addPauseReason(PauseReason.covered);
-
-  void onRouteUncovered() => _pool.removePauseReason(PauseReason.covered);
-
-  void onAdShown() => _pool.addPauseReason(PauseReason.ad);
-
-  void onAdClosed() => _pool.removePauseReason(PauseReason.ad);
 
   String? reportTargetIdForIndex(int index) => _ratingTargetIdForIndex(index);
 
@@ -144,7 +115,7 @@ class HomeVideoFeedCubit extends Cubit<HomeVideoFeedState>
     );
 
     if (result['success'] == true) {
-      _engagementTracker.onRated(rating);
+      engagementTracker.onRated(rating);
       emit(
         state.copyWith(currentUserRating: rating, isSubmittingRating: false),
       );
@@ -166,8 +137,7 @@ class HomeVideoFeedCubit extends Cubit<HomeVideoFeedState>
   }
 
   void _activateCurrentVideo() {
-    _viewThresholdReached = false;
-    _updatePoolWindow();
+    activatePlayback();
 
     final index = state.currentIndex;
     if (index >= 0 &&
@@ -175,16 +145,6 @@ class HomeVideoFeedCubit extends Cubit<HomeVideoFeedState>
         state.videos[index].videoPath.isEmpty) {
       emit(state.copyWith(errorMessage: 'This video is unavailable.'));
     }
-  }
-
-  /// Points the pool's preload window at the current video. Synchronous, so a
-  /// fast fling just supersedes the previous window.
-  void _updatePoolWindow() {
-    _pool.setWindow(
-      owner: this,
-      keys: [for (final video in state.videos) video.videoPath],
-      activeIndex: state.currentIndex,
-    );
   }
 
   Future<void> _loadUserRatingForIndex(int index) async {
@@ -263,7 +223,7 @@ class HomeVideoFeedCubit extends Cubit<HomeVideoFeedState>
       );
 
       // Fill the preload window with the newly appended videos.
-      _updatePoolWindow();
+      updatePlaybackWindow();
     } catch (_) {
       if (isClosed) return;
       emit(
@@ -275,21 +235,8 @@ class HomeVideoFeedCubit extends Cubit<HomeVideoFeedState>
     }
   }
 
-  /// Driven only by the pool's active player, so preloads never count a view.
-  void _onProgress(PlaybackProgress progress) {
-    _engagementTracker.onPlaybackProgress(progress);
-
-    if (progress.position <= _replayResetThreshold) {
-      _viewThresholdReached = false;
-    }
-
-    if (!progress.isPlaying ||
-        _viewThresholdReached ||
-        progress.position < _viewCountThreshold) {
-      return;
-    }
-
-    _viewThresholdReached = true;
+  @override
+  void onViewThresholdReached() {
     unawaited(_incrementViewCount(state.currentIndex));
   }
 
@@ -343,9 +290,7 @@ class HomeVideoFeedCubit extends Cubit<HomeVideoFeedState>
 
   @override
   Future<void> close() async {
-    _pool.release(this);
-    await _progressSubscription?.cancel();
-    _engagementTracker.stop();
+    await stopPlayback();
     return super.close();
   }
 }

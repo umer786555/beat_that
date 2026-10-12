@@ -229,6 +229,18 @@ void main() {
       await cubit.close();
     });
 
+    test('togglePlayback only toggles the current video', () async {
+      final cubit = buildCubit(makeVideos(3));
+      await cubit.initialize();
+
+      cubit
+        ..togglePlayback(1)
+        ..togglePlayback(0);
+
+      verify(() => pool.toggleActivePlayback(cubit)).called(1);
+      await cubit.close();
+    });
+
     test('an empty videoPath shows the unavailable message', () async {
       final cubit = buildCubit([makeVideo('v0', videoPath: '')]);
 
@@ -252,6 +264,17 @@ void main() {
         await cubit.close();
       },
     );
+
+    test('retryActiveVideo keeps the unavailable message', () async {
+      final cubit = buildCubit([makeVideo('v0', videoPath: '')]);
+      await cubit.initialize();
+
+      cubit.retryActiveVideo();
+
+      verifyNever(() => pool.retry(any(), any()));
+      expect(cubit.state.errorMessage, 'This video is unavailable.');
+      await cubit.close();
+    });
   });
 
   group('view tracking', () {

@@ -14,6 +14,9 @@ class FakePlaybackPlayer implements PlaybackPlayer {
   /// When true, `open()` waits until [completeOpens] or [failOpens] is called.
   bool holdOpens;
 
+  /// When set, `play()`, `pause()` and `seek()` throw it.
+  Object? controlError;
+
   final openCalls = <({String source, bool play, bool loop})>[];
   final seeks = <Duration>[];
   bool isPlaying = false;
@@ -74,16 +77,19 @@ class FakePlaybackPlayer implements PlaybackPlayer {
 
   @override
   Future<void> play() async {
+    if (controlError case final error?) throw error;
     isPlaying = isLoaded;
   }
 
   @override
   Future<void> pause() async {
+    if (controlError case final error?) throw error;
     isPlaying = false;
   }
 
   @override
   Future<void> seek(Duration position) async {
+    if (controlError case final error?) throw error;
     seeks.add(position);
   }
 
