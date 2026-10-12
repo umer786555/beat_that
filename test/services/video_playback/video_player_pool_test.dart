@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:beat_that/models/playback_progress.dart';
 import 'package:beat_that/services/video_playback/video_player_pool.dart';
 import 'package:beat_that/services/video_playback/video_slot.dart';
@@ -50,9 +52,9 @@ void main() {
 
   group('reuse by key', () {
     test('requesting the same videoPath twice opens it once', () async {
-      pool.setWindow(keys: ['a', 'a', 'b'], activeIndex: 0);
+      pool.setWindow(owner: owner, keys: ['a', 'a', 'b'], activeIndex: 0);
       await flush();
-      pool.setWindow(keys: ['a', 'a', 'b'], activeIndex: 0);
+      pool.setWindow(owner: owner, keys: ['a', 'a', 'b'], activeIndex: 0);
       await flush();
 
       expect(created, hasLength(2));
@@ -62,11 +64,11 @@ void main() {
     test(
       'moving the window keeps already loaded keys on their players',
       () async {
-        pool.setWindow(keys: keys(10), activeIndex: 0);
+        pool.setWindow(owner: owner, keys: keys(10), activeIndex: 0);
         await flush();
         final v1Player = playerFor('v1');
 
-        pool.setWindow(keys: keys(10), activeIndex: 1);
+        pool.setWindow(owner: owner, keys: keys(10), activeIndex: 1);
         await flush();
 
         expect(playerFor('v1'), same(v1Player));
@@ -81,7 +83,7 @@ void main() {
 
   group('preload window', () {
     test('opens active, 2 ahead and 1 behind, paused and looping', () async {
-      pool.setWindow(keys: keys(10), activeIndex: 3);
+      pool.setWindow(owner: owner, keys: keys(10), activeIndex: 3);
       await flush();
 
       expect(created, hasLength(4));
@@ -101,14 +103,14 @@ void main() {
     });
 
     test('only the active video plays', () async {
-      pool.setWindow(keys: keys(10), activeIndex: 3);
+      pool.setWindow(owner: owner, keys: keys(10), activeIndex: 3);
       await flush();
 
       expect(playing(), [playerFor('v3')]);
     });
 
     test('skips out-of-range indexes', () async {
-      pool.setWindow(keys: keys(10), activeIndex: 0);
+      pool.setWindow(owner: owner, keys: keys(10), activeIndex: 0);
       await flush();
       expect(
         created.map((player) => player.openedSources.single),
@@ -117,7 +119,7 @@ void main() {
 
       created.clear();
       pool = buildPool()..claim(owner);
-      pool.setWindow(keys: keys(3), activeIndex: 2);
+      pool.setWindow(owner: owner, keys: keys(3), activeIndex: 2);
       await flush();
       expect(
         created.map((player) => player.openedSources.single),
@@ -126,7 +128,7 @@ void main() {
     });
 
     test('skips empty keys', () async {
-      pool.setWindow(keys: ['v0', '', 'v2'], activeIndex: 0);
+      pool.setWindow(owner: owner, keys: ['v0', '', 'v2'], activeIndex: 0);
       await flush();
 
       expect(
@@ -136,7 +138,7 @@ void main() {
     });
 
     test('an empty active key plays nothing', () async {
-      pool.setWindow(keys: ['', 'v1', 'v2'], activeIndex: 0);
+      pool.setWindow(owner: owner, keys: ['', 'v1', 'v2'], activeIndex: 0);
       await flush();
 
       expect(playing(), isEmpty);
@@ -144,7 +146,7 @@ void main() {
 
     test('never exceeds the pool size', () async {
       pool = buildPool(size: 2)..claim(owner);
-      pool.setWindow(keys: keys(10), activeIndex: 3);
+      pool.setWindow(owner: owner, keys: keys(10), activeIndex: 3);
       await flush();
 
       expect(created, hasLength(2));
@@ -158,14 +160,14 @@ void main() {
   group('LRU eviction', () {
     test('reuses the least recently used player outside the window', () async {
       for (var index = 0; index <= 2; index++) {
-        pool.setWindow(keys: keys(10), activeIndex: index);
+        pool.setWindow(owner: owner, keys: keys(10), activeIndex: index);
         await flush();
       }
       expect(created, hasLength(5));
       final v0Player = playerFor('v0');
       final v1Player = playerFor('v1');
 
-      pool.setWindow(keys: keys(10), activeIndex: 3);
+      pool.setWindow(owner: owner, keys: keys(10), activeIndex: 3);
       await flush();
 
       expect(created, hasLength(5));
@@ -178,7 +180,7 @@ void main() {
       'resets the evicted slot to loading before reopening the player',
       () async {
         for (var index = 0; index <= 2; index++) {
-          pool.setWindow(keys: keys(10), activeIndex: index);
+          pool.setWindow(owner: owner, keys: keys(10), activeIndex: index);
           await flush();
         }
         final v0Player = playerFor('v0')..emitWidth(1080);
@@ -191,7 +193,7 @@ void main() {
           () => opensWhenReset.add(v0Player.openedSources.length),
         );
 
-        pool.setWindow(keys: keys(10), activeIndex: 3);
+        pool.setWindow(owner: owner, keys: keys(10), activeIndex: 3);
         expect(v0Slot.value, const VideoSlot.loading());
         expect(v0Slot.value.videoController, isNull);
         await flush();
@@ -203,13 +205,13 @@ void main() {
 
     test('pauses an evicted player that was playing', () async {
       pool = buildPool(size: 1)..claim(owner);
-      pool.setWindow(keys: keys(10), activeIndex: 0);
+      pool.setWindow(owner: owner, keys: keys(10), activeIndex: 0);
       await flush();
       final player = created.single;
       expect(player.isPlaying, isTrue);
 
       player.holdOpens = true;
-      pool.setWindow(keys: keys(10), activeIndex: 5);
+      pool.setWindow(owner: owner, keys: keys(10), activeIndex: 5);
 
       expect(player.isPlaying, isFalse);
     });
@@ -217,7 +219,7 @@ void main() {
 
   group('activation', () {
     test('swiping back restarts the video at 0', () async {
-      pool.setWindow(keys: keys(10), activeIndex: 0);
+      pool.setWindow(owner: owner, keys: keys(10), activeIndex: 0);
       await flush();
       playerFor('v0').emitProgress(
         const PlaybackProgress(
@@ -228,19 +230,19 @@ void main() {
       );
       await flush();
 
-      pool.setWindow(keys: keys(10), activeIndex: 1);
-      pool.setWindow(keys: keys(10), activeIndex: 0);
+      pool.setWindow(owner: owner, keys: keys(10), activeIndex: 1);
+      pool.setWindow(owner: owner, keys: keys(10), activeIndex: 0);
 
       expect(playerFor('v0').seeks, [Duration.zero]);
     });
 
     test('activating another video clears the user pause', () async {
-      pool.setWindow(keys: keys(10), activeIndex: 0);
+      pool.setWindow(owner: owner, keys: keys(10), activeIndex: 0);
       await flush();
-      pool.toggleActivePlayback();
+      pool.toggleActivePlayback(owner);
       expect(playing(), isEmpty);
 
-      pool.setWindow(keys: keys(10), activeIndex: 1);
+      pool.setWindow(owner: owner, keys: keys(10), activeIndex: 1);
 
       expect(playing(), [playerFor('v1')]);
     });
@@ -250,7 +252,7 @@ void main() {
     test('forwards progress from the active player only', () async {
       final forwarded = <PlaybackProgress>[];
       pool.activeProgress.listen(forwarded.add);
-      pool.setWindow(keys: keys(10), activeIndex: 0);
+      pool.setWindow(owner: owner, keys: keys(10), activeIndex: 0);
       await flush();
       const progress = PlaybackProgress(
         position: Duration(seconds: 1),
@@ -266,7 +268,7 @@ void main() {
     });
 
     test('mirrors play state into the slot', () async {
-      pool.setWindow(keys: keys(10), activeIndex: 0);
+      pool.setWindow(owner: owner, keys: keys(10), activeIndex: 0);
       await flush();
 
       playerFor(
@@ -283,7 +285,7 @@ void main() {
       test(
         '$reason pauses every player and removing it resumes the active one',
         () async {
-          pool.setWindow(keys: keys(10), activeIndex: 0);
+          pool.setWindow(owner: owner, keys: keys(10), activeIndex: 0);
           await flush();
 
           pool.addPauseReason(reason);
@@ -295,21 +297,21 @@ void main() {
       );
 
       test('$reason does not resume a video the user paused', () async {
-        pool.setWindow(keys: keys(10), activeIndex: 0);
+        pool.setWindow(owner: owner, keys: keys(10), activeIndex: 0);
         await flush();
-        pool.toggleActivePlayback();
+        pool.toggleActivePlayback(owner);
 
         pool.addPauseReason(reason);
         pool.removePauseReason(reason);
         expect(playing(), isEmpty);
 
-        pool.toggleActivePlayback();
+        pool.toggleActivePlayback(owner);
         expect(playing(), [playerFor('v0')]);
       });
     }
 
     test('playback waits until every reason is removed', () async {
-      pool.setWindow(keys: keys(10), activeIndex: 0);
+      pool.setWindow(owner: owner, keys: keys(10), activeIndex: 0);
       await flush();
 
       pool
@@ -326,7 +328,7 @@ void main() {
       'an open() finishing in the background does not start playback',
       () async {
         holdOpens = true;
-        pool.setWindow(keys: keys(10), activeIndex: 0);
+        pool.setWindow(owner: owner, keys: keys(10), activeIndex: 0);
         await flush();
         pool.addPauseReason(PauseReason.background);
 
@@ -347,7 +349,7 @@ void main() {
         ..addPauseReason(PauseReason.ad)
         ..release(owner)
         ..claim(owner)
-        ..setWindow(keys: keys(10), activeIndex: 0);
+        ..setWindow(owner: owner, keys: keys(10), activeIndex: 0);
       await flush();
       expect(playing(), [playerFor('v0')]);
 
@@ -355,7 +357,7 @@ void main() {
         ..addPauseReason(PauseReason.background)
         ..release(owner)
         ..claim(owner)
-        ..setWindow(keys: keys(10), activeIndex: 0);
+        ..setWindow(owner: owner, keys: keys(10), activeIndex: 0);
       await flush();
       expect(playing(), isEmpty);
     });
@@ -365,7 +367,7 @@ void main() {
     test(
       'the active video plays once open() completes, without width',
       () async {
-        pool.setWindow(keys: keys(10), activeIndex: 0);
+        pool.setWindow(owner: owner, keys: keys(10), activeIndex: 0);
         await flush();
 
         expect(playerFor('v0').isPlaying, isTrue);
@@ -374,7 +376,7 @@ void main() {
     );
 
     test('width > 0 after open() marks the slot ready', () async {
-      pool.setWindow(keys: keys(10), activeIndex: 0);
+      pool.setWindow(owner: owner, keys: keys(10), activeIndex: 0);
       await flush();
 
       playerFor('v0').emitWidth(1080);
@@ -387,7 +389,7 @@ void main() {
       'a width reported before open() completes is ignored until then',
       () async {
         holdOpens = true;
-        pool.setWindow(keys: keys(10), activeIndex: 0);
+        pool.setWindow(owner: owner, keys: keys(10), activeIndex: 0);
         await flush();
         final player = created.first..emitWidth(1080);
         await flush();
@@ -402,7 +404,7 @@ void main() {
 
     test('a null width from open() discards an earlier stale width', () async {
       holdOpens = true;
-      pool.setWindow(keys: keys(10), activeIndex: 0);
+      pool.setWindow(owner: owner, keys: keys(10), activeIndex: 0);
       await flush();
       final player = created.first
         ..emitWidth(1080)
@@ -420,13 +422,13 @@ void main() {
     test('an open() finishing after its key was evicted is dropped', () async {
       pool = buildPool(size: 1)..claim(owner);
       holdOpens = true;
-      pool.setWindow(keys: keys(10), activeIndex: 0);
+      pool.setWindow(owner: owner, keys: keys(10), activeIndex: 0);
       await flush();
       final statuses = <VideoSlotStatus>[];
       final v0Slot = pool.slotFor('v0');
       v0Slot.addListener(() => statuses.add(v0Slot.value.status));
 
-      pool.setWindow(keys: keys(10), activeIndex: 5);
+      pool.setWindow(owner: owner, keys: keys(10), activeIndex: 5);
       await flush();
       final player = created.single
         ..completeOpens()
@@ -443,7 +445,7 @@ void main() {
       'an open() finishing after release() never plays or marks ready',
       () async {
         holdOpens = true;
-        pool.setWindow(keys: keys(10), activeIndex: 0);
+        pool.setWindow(owner: owner, keys: keys(10), activeIndex: 0);
         await flush();
 
         pool.release(owner);
@@ -468,7 +470,7 @@ void main() {
           () => 'https://cdn/$key',
         ),
       )..claim(owner);
-      pool.setWindow(keys: keys(10), activeIndex: 0);
+      pool.setWindow(owner: owner, keys: keys(10), activeIndex: 0);
 
       pool.release(owner);
       await Future.wait(pending.values);
@@ -481,7 +483,7 @@ void main() {
   group('error and retry', () {
     test('an open() exception marks the slot error', () async {
       holdOpens = true;
-      pool.setWindow(keys: keys(10), activeIndex: 0);
+      pool.setWindow(owner: owner, keys: keys(10), activeIndex: 0);
       await flush();
 
       created.first.failOpens(Exception('decoder failed'));
@@ -495,7 +497,7 @@ void main() {
         resolveSource: (key) async =>
             key == 'v1' ? throw Exception('no url') : 'https://cdn/$key',
       )..claim(owner);
-      pool.setWindow(keys: keys(10), activeIndex: 0);
+      pool.setWindow(owner: owner, keys: keys(10), activeIndex: 0);
       await flush();
 
       expect(pool.slotFor('v1').value.status, VideoSlotStatus.error);
@@ -503,7 +505,7 @@ void main() {
     });
 
     test('an error event marks the slot error', () async {
-      pool.setWindow(keys: keys(10), activeIndex: 0);
+      pool.setWindow(owner: owner, keys: keys(10), activeIndex: 0);
       await flush();
 
       playerFor('v0').emitError('network down');
@@ -512,17 +514,64 @@ void main() {
       expect(pool.slotFor('v0').value.status, VideoSlotStatus.error);
     });
 
+    test('an error event while loading pauses the active player', () async {
+      pool.setWindow(owner: owner, keys: keys(10), activeIndex: 0);
+      await flush();
+      expect(playing(), [playerFor('v0')]);
+
+      playerFor('v0').emitError('network down');
+      await flush();
+
+      expect(playing(), isEmpty);
+    });
+
+    test('an error event after ready is ignored', () async {
+      pool.setWindow(owner: owner, keys: keys(10), activeIndex: 0);
+      await flush();
+      playerFor('v0').emitWidth(1080);
+      await flush();
+
+      playerFor('v0').emitError('vd: non-fatal decoder warning');
+      await flush();
+
+      expect(pool.slotFor('v0').value.status, VideoSlotStatus.ready);
+      expect(playing(), [playerFor('v0')]);
+    });
+
+    test(
+      'an error from the evicted source is not blamed on the new key',
+      () async {
+        final resolveB = Completer<String>();
+        pool = buildPool(
+          size: 1,
+          resolveSource: (key) async =>
+              key == 'b' ? resolveB.future : 'https://cdn/$key',
+        )..claim(owner);
+        pool.setWindow(owner: owner, keys: ['a', 'b'], activeIndex: 0);
+        await flush();
+
+        pool.setWindow(owner: owner, keys: ['a', 'b'], activeIndex: 1);
+        created.single.emitError('late error from a');
+        await flush();
+        resolveB.complete('https://cdn/b');
+        await flush();
+
+        expect(pool.slotFor('b').value.status, VideoSlotStatus.loading);
+        expect(playing(), [playerFor('b')]);
+      },
+    );
+
     test(
       'retry reopens the key and can reach ready without touching others',
       () async {
-        pool.setWindow(keys: keys(10), activeIndex: 0);
+        pool.setWindow(owner: owner, keys: keys(10), activeIndex: 0);
         await flush();
         playerFor('v1').emitWidth(720);
         playerFor('v0').emitError('network down');
         await flush();
         final v1Player = playerFor('v1');
 
-        pool.retry('v0');
+        pool.retry(owner, 'v0');
         expect(pool.slotFor('v0').value.status, VideoSlotStatus.loading);
         await flush();
         playerFor('v0').emitWidth(1080);
@@ -539,7 +588,7 @@ void main() {
     );
 
     test('retry of an unbound key does nothing', () {
-      pool.retry('unknown');
+      pool.retry(owner, 'unknown');
 
       expect(created, isEmpty);
     });
@@ -547,19 +596,19 @@ void main() {
 
   group('ownership', () {
     test('release() from a non-owner is a no-op', () async {
-      pool.setWindow(keys: keys(10), activeIndex: 0);
+      pool.setWindow(owner: owner, keys: keys(10), activeIndex: 0);
       await flush();
 
       pool.release(Object());
 
-      expect(created.every((player) => player.stopCount == 0), isTrue);
+      expect(created.map((player) => player.stopCount), everyElement(0));
       expect(playing(), [playerFor('v0')]);
     });
 
     test(
       'release() from the owner stops every player without disposing',
       () async {
-        pool.setWindow(keys: keys(10), activeIndex: 0);
+        pool.setWindow(owner: owner, keys: keys(10), activeIndex: 0);
         await flush();
 
         pool.release(owner);
@@ -576,7 +625,7 @@ void main() {
     test('setWindow() without an owner does nothing', () async {
       pool.release(owner);
 
-      pool.setWindow(keys: keys(10), activeIndex: 0);
+      pool.setWindow(owner: owner, keys: keys(10), activeIndex: 0);
       await flush();
 
       expect(created, isEmpty);
@@ -585,20 +634,42 @@ void main() {
     test(
       'a new claim releases the previous owner, whose late release is ignored',
       () async {
-        pool.setWindow(keys: keys(10), activeIndex: 0);
+        pool.setWindow(owner: owner, keys: keys(10), activeIndex: 0);
         await flush();
 
         final nextOwner = Object();
         pool.claim(nextOwner);
-        expect(created.every((player) => player.stopCount == 1), isTrue);
+        expect(created.map((player) => player.stopCount), everyElement(1));
 
-        pool.setWindow(keys: keys(10), activeIndex: 0);
+        pool.setWindow(owner: nextOwner, keys: keys(10), activeIndex: 0);
         await flush();
         pool.release(owner);
 
         expect(playing(), [playerFor('v0')]);
-        expect(created.every((player) => player.stopCount == 1), isTrue);
+        expect(created.map((player) => player.stopCount), everyElement(1));
       },
     );
+
+    test('a replaced owner cannot drive the new owner\'s players', () async {
+      final nextOwner = Object();
+      pool
+        ..claim(nextOwner)
+        ..setWindow(owner: nextOwner, keys: keys(10), activeIndex: 0);
+      await flush();
+      final openCount = created.expand((player) => player.openCalls).length;
+
+      pool
+        ..setWindow(owner: owner, keys: keys(10), activeIndex: 5)
+        ..toggleActivePlayback(owner)
+        ..retry(owner, 'v0');
+      await flush();
+
+      // No window move, no reopen, and the active video keeps playing.
+      expect(
+        created.expand((player) => player.openCalls),
+        hasLength(openCount),
+      );
+      expect(playing(), [playerFor('v0')]);
+    });
   });
 }

@@ -104,7 +104,7 @@ class HomeVideoFeedCubit extends Cubit<HomeVideoFeedState>
       return;
     }
 
-    _pool.toggleActivePlayback();
+    _pool.toggleActivePlayback(this);
   }
 
   void retryActiveVideo() {
@@ -114,7 +114,7 @@ class HomeVideoFeedCubit extends Cubit<HomeVideoFeedState>
     }
 
     emit(state.copyWith(clearErrorMessage: true));
-    _pool.retry(videoPath);
+    _pool.retry(this, videoPath);
   }
 
   void onRouteCovered() => _pool.addPauseReason(PauseReason.covered);
@@ -181,6 +181,7 @@ class HomeVideoFeedCubit extends Cubit<HomeVideoFeedState>
   /// fast fling just supersedes the previous window.
   void _updatePoolWindow() {
     _pool.setWindow(
+      owner: this,
       keys: [for (final video in state.videos) video.videoPath],
       activeIndex: state.currentIndex,
     );

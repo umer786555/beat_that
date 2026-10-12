@@ -28,8 +28,6 @@ class FakePlaybackPlayer implements PlaybackPlayer {
 
   List<String> get openedSources => [for (final call in openCalls) call.source];
 
-  int get pendingOpenCount => _pendingOpens.length;
-
   @override
   Stream<PlaybackProgress> get progress => _progress.stream;
 

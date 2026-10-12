@@ -70,7 +70,12 @@ class MediaKitPlaybackPlayer implements PlaybackPlayer {
   Future<void> pause() => _player.pause();
 
   @override
-  Future<void> seek(Duration position) => _player.seek(position);
+  Future<void> seek(Duration position) {
+    // Without this, a `playing` event that lands before the seek does would
+    // carry the old position, and a swipe-back could count a view at once.
+    _emitProgress(_progress.copyWith(position: position));
+    return _player.seek(position);
+  }
 
   @override
   Future<void> stop() => _player.stop();
@@ -97,7 +102,11 @@ class MediaKitPlaybackPlayer implements PlaybackPlayer {
     if (width == null || width <= 0) return;
     final platform = _player.platform;
     if (platform is! NativePlayer) return;
-    final hwdec = await platform.getProperty('hwdec-current');
-    debugPrint('MediaKitPlaybackPlayer hwdec-current: $hwdec');
+    try {
+      final hwdec = await platform.getProperty('hwdec-current');
+      debugPrint('MediaKitPlaybackPlayer hwdec-current: $hwdec');
+    } catch (error) {
+      debugPrint('MediaKitPlaybackPlayer hwdec-current unavailable: $error');
+    }
   }
 }

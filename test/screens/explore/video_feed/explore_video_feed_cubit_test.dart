@@ -117,7 +117,8 @@ void main() {
 
       verifyInOrder([
         () => pool.claim(cubit),
-        () => pool.setWindow(keys: pathsOf(videos), activeIndex: 1),
+        () =>
+            pool.setWindow(owner: cubit, keys: pathsOf(videos), activeIndex: 1),
       ]);
       await cubit.close();
     });
@@ -129,7 +130,10 @@ void main() {
 
       await cubit.onPageChanged(3);
 
-      verify(() => pool.setWindow(keys: pathsOf(videos), activeIndex: 3));
+      verify(
+        () =>
+            pool.setWindow(owner: cubit, keys: pathsOf(videos), activeIndex: 3),
+      );
       expect(cubit.state.currentIndex, 3);
       await cubit.close();
     });
@@ -145,8 +149,11 @@ void main() {
       await cubit.initialize();
 
       verify(
-        () =>
-            pool.setWindow(keys: pathsOf([...videos, ...more]), activeIndex: 0),
+        () => pool.setWindow(
+          owner: cubit,
+          keys: pathsOf([...videos, ...more]),
+          activeIndex: 0,
+        ),
       );
       await cubit.close();
     });
@@ -169,6 +176,7 @@ void main() {
 
       verifyNever(
         () => pool.setWindow(
+          owner: cubit,
           keys: any(named: 'keys'),
           activeIndex: any(named: 'activeIndex'),
         ),
@@ -239,7 +247,7 @@ void main() {
 
         cubit.retryActiveVideo();
 
-        verify(() => pool.retry('v1.mp4')).called(1);
+        verify(() => pool.retry(cubit, 'v1.mp4')).called(1);
         expect(cubit.state.errorMessage, isNull);
         await cubit.close();
       },

@@ -51,7 +51,13 @@ class PlayUploadedVideoBloc
         player.progress.firstWhere((p) => p.duration > Duration.zero),
         player.error.first,
       ]);
-      await player.open(source, play: false, loop: false);
+      try {
+        await player.open(source, play: false, loop: false);
+      } catch (_) {
+        // Nothing will await it now, and it fails once the player is disposed.
+        loadedOrFailed.ignore();
+        rethrow;
+      }
       final outcome = await loadedOrFailed;
       if (outcome is! PlaybackProgress) throw Exception(outcome);
 

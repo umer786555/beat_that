@@ -111,6 +111,31 @@ void main() {
       await bloc.close();
     });
 
+    test(
+      'emits error when open() throws, with no unhandled error after close',
+      () async {
+        GetIt.instance
+          ..unregister<PlaybackPlayer>()
+          ..registerFactory<PlaybackPlayer>(() {
+            final player = FakePlaybackPlayer(holdOpens: true);
+            created.add(player);
+            return player;
+          });
+        final bloc = PlayUploadedVideoBloc(videoPath: videoPath);
+        bloc.add(const InitializeVideoEvent());
+        await flush();
+
+        created.single.failOpens(Exception('player disposed'));
+        await flush();
+        expect(bloc.state, isA<PlayUploadedVideoError>());
+
+        // Disposing closes the progress stream the load was waiting on.
+        await bloc.close();
+        await flush();
+        expect(created.single.isDisposed, isTrue);
+      },
+    );
+
     test('retrying disposes the previous player', () async {
       final bloc = PlayUploadedVideoBloc(videoPath: videoPath);
       final first = await initialize(bloc);
@@ -229,7 +254,7 @@ void main() {
       }
 
       expect(created, hasLength(20));
-      expect(created.every((player) => player.isDisposed), isTrue);
+      expect(created.map((player) => player.isDisposed), everyElement(isTrue));
     });
   });
 }

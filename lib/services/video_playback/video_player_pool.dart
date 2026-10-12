@@ -76,14 +76,24 @@ class VideoPlayerPool {
       unawaited(pooled.player.stop());
     }
     _bound.clear();
+    // Pages still mounted during an exit transition must not keep a controller
+    // that the next owner is about to reuse.
+    for (final slot in _slots.values) {
+      slot.value = const VideoSlot.loading();
+    }
     _slots.clear();
   }
 
   /// Loads the window around [activeIndex] and plays the active video.
   ///
   /// Synchronous so each call supersedes the last one during a fast fling.
-  void setWindow({required List<String> keys, required int activeIndex}) {
-    if (_owner == null) return;
+  /// Ignored unless [owner] holds the pool, like the other feed-driven calls.
+  void setWindow({
+    required Object owner,
+    required List<String> keys,
+    required int activeIndex,
+  }) {
+    if (!_isOwner(owner)) return;
 
     final wanted = <String>[];
     for (final offset in const [0, 1, 2, -1]) {
@@ -124,13 +134,15 @@ class VideoPlayerPool {
   }
 
   /// Pauses or resumes the active video at the user's request.
-  void toggleActivePlayback() {
+  void toggleActivePlayback(Object owner) {
+    if (!_isOwner(owner)) return;
     _userPaused = !_userPaused;
     _syncPlayback();
   }
 
   /// Reopens [key] after an error without touching other slots.
-  void retry(String key) {
+  void retry(Object owner, String key) {
+    if (!_isOwner(owner)) return;
     final pooled = _bound[key];
     if (pooled == null) return;
     _slot(key).value = const VideoSlot.loading();
@@ -146,6 +158,8 @@ class VideoPlayerPool {
     _reasons.remove(reason);
     _syncPlayback();
   }
+
+  bool _isOwner(Object owner) => _owner != null && identical(owner, _owner);
 
   ValueNotifier<VideoSlot> _slot(String key) =>
       _slots.putIfAbsent(key, () => ValueNotifier(const VideoSlot.loading()));
@@ -186,6 +200,7 @@ class VideoPlayerPool {
     final token = ++pooled.token;
     final owner = _owner;
     pooled
+      ..isOpenStarted = false
       ..isOpened = false
       ..hasFrame = false
       ..isPlayRequested = false
@@ -195,6 +210,7 @@ class VideoPlayerPool {
     try {
       final source = await _resolveSource(key);
       if (!isCurrent()) return;
+      pooled.isOpenStarted = true;
       await pooled.player.open(source, play: false, loop: true);
       if (!isCurrent()) {
         // Released while opening: don't leave media loaded in an idle player.
@@ -219,9 +235,17 @@ class VideoPlayerPool {
     });
     pooled.player.error.listen((message) {
       final key = pooled.key;
-      if (key == null) return;
+      // Before this load's open() starts, an error belongs to the previous
+      // source. Once the video shows, mpv's decoder and stream logs aren't
+      // fatal, so only an error while loading fails the slot.
+      if (key == null || !pooled.isOpenStarted) return;
+      final slot = _slot(key);
+      if (slot.value.status != VideoSlotStatus.loading) return;
       debugPrint('VideoPlayerPool playback error for $key: $message');
-      _slot(key).value = const VideoSlot(status: VideoSlotStatus.error);
+      slot.value = const VideoSlot(status: VideoSlotStatus.error);
+      // Stop the audio under the error overlay until a retry reopens it.
+      pooled.isOpened = false;
+      _syncPlayback();
     });
     pooled.player.progress.listen((progress) {
       final key = pooled.key;
@@ -270,6 +294,9 @@ class _PooledPlayer {
   /// Bumped on every load and unbind; async work for an older token is dropped.
   int token = 0;
   int lastUsed = 0;
+
+  /// The current load has called `open()`, so errors belong to its source.
+  bool isOpenStarted = false;
   bool isOpened = false;
   bool hasFrame = false;
   bool isPlayRequested = false;
@@ -278,6 +305,7 @@ class _PooledPlayer {
   void unbind() {
     key = null;
     token++;
+    isOpenStarted = false;
     isOpened = false;
     hasFrame = false;
     isPlayRequested = false;

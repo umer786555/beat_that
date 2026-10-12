@@ -32,7 +32,7 @@ void main() {
           : (random.nextBool() ? 1 : -1) * (3 + random.nextInt(6));
       index = (index + step).clamp(0, keys.length - 1);
 
-      pool.setWindow(keys: keys, activeIndex: index);
+      pool.setWindow(owner: owner, keys: keys, activeIndex: index);
       // Flings don't wait for opens to finish; normal swipes do.
       if (step.abs() == 1) {
         await Future<void>.delayed(Duration.zero);
