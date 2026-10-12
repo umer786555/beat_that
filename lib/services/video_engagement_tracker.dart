@@ -1,7 +1,7 @@
 import 'dart:async';
 
+import 'package:beat_that/models/playback_progress.dart';
 import 'package:beat_that/services/preferences_service.dart';
-import 'package:video_player/video_player.dart';
 
 /// Turns how a viewer reacts to the active video into interest signals.
 ///
@@ -38,12 +38,12 @@ class VideoEngagementTracker {
     _ratingRecorded = false;
   }
 
-  void onPlaybackProgress(VideoPlayerValue value) {
-    if (_subcategoryId == null || !value.isInitialized) return;
+  void onPlaybackProgress(PlaybackProgress progress) {
+    if (_subcategoryId == null) return;
 
-    final position = value.position;
-    final duration = value.duration;
-    if (value.isPlaying) _hasPlayed = true;
+    final position = progress.position;
+    final duration = progress.duration;
+    if (progress.isPlaying) _hasPlayed = true;
     if (position > _furthestPosition) _furthestPosition = position;
 
     if (!_watchedRecorded && position >= watchedThreshold) {

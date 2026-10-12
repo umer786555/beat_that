@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:bloc_presentation/bloc_presentation.dart';
+import 'package:beat_that/models/playback_progress.dart';
 import 'package:beat_that/models/sport_video.dart';
 import 'package:beat_that/service_locator.dart';
 import 'package:beat_that/services/explore_feed_progress_store.dart';
@@ -480,7 +481,13 @@ class ExploreVideoFeedCubit extends Cubit<ExploreVideoFeedState>
       return;
     }
 
-    _engagementTracker.onPlaybackProgress(value);
+    _engagementTracker.onPlaybackProgress(
+      PlaybackProgress(
+        position: value.position,
+        duration: value.duration,
+        isPlaying: value.isPlaying,
+      ),
+    );
 
     if (value.position <= _replayResetThreshold) {
       _viewThresholdReachedIndexes.remove(index);

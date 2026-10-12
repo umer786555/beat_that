@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:beat_that/models/home_feed_cursor.dart';
 import 'package:bloc_presentation/bloc_presentation.dart';
+import 'package:beat_that/models/playback_progress.dart';
 import 'package:beat_that/models/sport_video.dart';
 import 'package:beat_that/service_locator.dart';
 import 'package:beat_that/services/home_feed_service.dart';
@@ -404,7 +405,13 @@ class HomeVideoFeedCubit extends Cubit<HomeVideoFeedState>
       return;
     }
 
-    _engagementTracker.onPlaybackProgress(value);
+    _engagementTracker.onPlaybackProgress(
+      PlaybackProgress(
+        position: value.position,
+        duration: value.duration,
+        isPlaying: value.isPlaying,
+      ),
+    );
 
     if (value.position <= _replayResetThreshold) {
       _viewThresholdReachedIndexes.remove(index);
