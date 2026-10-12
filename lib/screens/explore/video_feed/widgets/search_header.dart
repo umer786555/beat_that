@@ -44,7 +44,10 @@ class SearchHeader extends StatefulWidget {
 
 class _SearchHeaderState extends State<SearchHeader> {
   static const Duration _animationDuration = Duration(milliseconds: 220);
+  static const Duration _chipScrollDuration = Duration(milliseconds: 200);
 
+  final ScrollController _chipScrollController = ScrollController();
+  final GlobalKey _selectedChipKey = GlobalKey();
   late FocusNode _focusNode;
   late bool _isSearchOpen;
 
@@ -63,6 +66,12 @@ class _SearchHeaderState extends State<SearchHeader> {
   void didUpdateWidget(covariant SearchHeader oldWidget) {
     super.didUpdateWidget(oldWidget);
 
+    if (oldWidget.selectedFilterId != widget.selectedFilterId) {
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _scrollSelectedChipIntoView(),
+      );
+    }
+
     if (oldWidget.controller == widget.controller) {
       return;
     }
@@ -79,8 +88,25 @@ class _SearchHeaderState extends State<SearchHeader> {
   void dispose() {
     _focusNode.removeListener(_onFocusChanged);
     _focusNode.dispose();
+    _chipScrollController.dispose();
     widget.controller.removeListener(_onControllerChanged);
     super.dispose();
+  }
+
+  // ScrollPosition.ensureVisible scrolls only the chip row. Scrollable's
+  // version would also scroll every ancestor, including the vertical grid.
+  void _scrollSelectedChipIntoView() {
+    final chipObject = _selectedChipKey.currentContext?.findRenderObject();
+    if (!mounted || chipObject == null || !_chipScrollController.hasClients) {
+      return;
+    }
+
+    _chipScrollController.position.ensureVisible(
+      chipObject,
+      alignment: 0.5,
+      duration: _chipScrollDuration,
+      curve: Curves.easeOut,
+    );
   }
 
   void _onFocusChanged() {
@@ -170,6 +196,7 @@ class _SearchHeaderState extends State<SearchHeader> {
           Align(
             alignment: Alignment.centerLeft,
             child: SingleChildScrollView(
+              controller: _chipScrollController,
               scrollDirection: Axis.horizontal,
               child: Row(
                 children: [
@@ -182,6 +209,9 @@ class _SearchHeaderState extends State<SearchHeader> {
                   if (!_isSearchOpen)
                     SizedBox(width: widget.filterControlSpacing),
                   SportChip(
+                    key: widget.selectedFilterId == null
+                        ? _selectedChipKey
+                        : null,
                     label: 'All',
                     selected: widget.selectedFilterId == null,
                     onSelected: () => widget.onFilterChanged(null),
@@ -200,6 +230,9 @@ class _SearchHeaderState extends State<SearchHeader> {
                         left: widget.filterControlSpacing,
                       ),
                       child: SportChip(
+                        key: widget.selectedFilterId == option.id
+                            ? _selectedChipKey
+                            : null,
                         label: option.label,
                         selected: widget.selectedFilterId == option.id,
                         onSelected: () => widget.onFilterChanged(
