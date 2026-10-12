@@ -1,19 +1,21 @@
 import 'dart:async';
-import 'dart:io';
+import 'package:beat_that/models/playback_progress.dart';
 import 'package:beat_that/service_locator.dart';
-import 'package:beat_that/services/supabase_service.dart';
+import 'package:beat_that/services/video_playback/playback_player.dart';
+import 'package:beat_that/services/video_playback/video_source_resolver.dart';
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:video_player/video_player.dart';
 
 part 'play_uploaded_video_event.dart';
 part 'play_uploaded_video_state.dart';
 
 class PlayUploadedVideoBloc
     extends Bloc<PlayUploadedVideoEvent, PlayUploadedVideoState> {
-  VideoPlayerController? _videoController;
+  PlaybackPlayer? _player;
+  StreamSubscription<PlaybackProgress>? _progressSubscription;
+  PlaybackProgress _progress = PlaybackProgress.zero;
   final String videoPath;
-  final SupabaseService _supabaseService = locator<SupabaseService>();
+  final VideoSourceResolver _sourceResolver = locator<VideoSourceResolver>();
 
   PlayUploadedVideoBloc({required this.videoPath})
     : super(PlayUploadedVideoInitial()) {
@@ -33,36 +35,30 @@ class PlayUploadedVideoBloc
     try {
       emit(PlayUploadedVideoLoading());
 
-      // Dispose old controller if exists
-      await _videoController?.dispose();
+      // Replace the player synchronously so close() always disposes the
+      // latest one, even if it runs while this handler is still awaiting.
+      final previousPlayer = _player;
+      final player = _player = locator<PlaybackPlayer>();
+      await _progressSubscription?.cancel();
+      _progress = PlaybackProgress.zero;
+      _progressSubscription = player.progress.listen((p) => _progress = p);
+      await previousPlayer?.dispose();
 
-      final isUrl =
-          videoPath.startsWith('http://') || videoPath.startsWith('https://');
-      final localFile = File(videoPath);
-      final isLocalFile = !isUrl && await localFile.exists();
+      final source = await _sourceResolver.resolve(videoPath);
 
-      if (isUrl) {
-        _videoController = VideoPlayerController.networkUrl(
-          Uri.parse(videoPath),
-        );
-      } else if (isLocalFile) {
-        _videoController = VideoPlayerController.file(localFile);
-      } else {
-        final resolvedVideoUrl = await _supabaseService.resolveVideoPlaybackUrl(
-          videoPath,
-        );
-        _videoController = VideoPlayerController.networkUrl(
-          Uri.parse(resolvedVideoUrl),
-        );
-      }
-
-      // Initialize the controller
-      await _videoController!.initialize();
+      // Subscribe before open() so neither event is missed.
+      final loadedOrFailed = Future.any<Object>([
+        player.progress.firstWhere((p) => p.duration > Duration.zero),
+        player.error.first,
+      ]);
+      await player.open(source, play: false, loop: false);
+      final outcome = await loadedOrFailed;
+      if (outcome is! PlaybackProgress) throw Exception(outcome);
 
       // Emit initial ready state - only once
       emit(
         PlayUploadedVideoReady(
-          duration: _videoController!.value.duration,
+          duration: outcome.duration,
           currentPosition: Duration.zero,
           isPlaying: false,
         ),
@@ -77,15 +73,15 @@ class PlayUploadedVideoBloc
     PlayVideoEvent event,
     Emitter<PlayUploadedVideoState> emit,
   ) async {
-    if (_videoController == null) return;
+    if (_player == null) return;
 
     try {
-      await _videoController!.play();
+      await _player!.play();
 
       emit(
         PlayUploadedVideoPlaying(
-          duration: _videoController!.value.duration,
-          currentPosition: _videoController!.value.position,
+          duration: _progress.duration,
+          currentPosition: _progress.position,
         ),
       );
     } catch (e) {
@@ -98,15 +94,15 @@ class PlayUploadedVideoBloc
     PauseVideoEvent event,
     Emitter<PlayUploadedVideoState> emit,
   ) async {
-    if (_videoController == null) return;
+    if (_player == null) return;
 
     try {
-      await _videoController!.pause();
+      await _player!.pause();
 
       emit(
         PlayUploadedVideoPaused(
-          duration: _videoController!.value.duration,
-          currentPosition: _videoController!.value.position,
+          duration: _progress.duration,
+          currentPosition: _progress.position,
         ),
       );
     } catch (e) {
@@ -119,23 +115,23 @@ class PlayUploadedVideoBloc
     SeekVideoEvent event,
     Emitter<PlayUploadedVideoState> emit,
   ) async {
-    if (_videoController == null) return;
+    if (_player == null) return;
 
     try {
-      await _videoController!.seekTo(event.position);
+      await _player!.seek(event.position);
 
       final currentState = state;
       if (currentState is PlayUploadedVideoPlaying) {
         emit(
           PlayUploadedVideoPlaying(
-            duration: _videoController!.value.duration,
+            duration: _progress.duration,
             currentPosition: event.position,
           ),
         );
       } else if (currentState is PlayUploadedVideoPaused) {
         emit(
           PlayUploadedVideoPaused(
-            duration: _videoController!.value.duration,
+            duration: _progress.duration,
             currentPosition: event.position,
           ),
         );
@@ -145,15 +141,29 @@ class PlayUploadedVideoBloc
     }
   }
 
-  /// Dispose video controller
+  /// Dispose the player; safe to call more than once.
   Future<void> _onDisposeVideo(
     DisposeVideoEvent event,
     Emitter<PlayUploadedVideoState> emit,
-  ) async {
-    await _videoController?.dispose();
-    _videoController = null;
+  ) => _disposePlayer();
+
+  Future<void> _disposePlayer() async {
+    final player = _player;
+    _player = null;
+    await _progressSubscription?.cancel();
+    _progressSubscription = null;
+    await player?.dispose();
   }
 
-  /// Get the video controller (for use in the UI)
-  VideoPlayerController? get videoController => _videoController;
+  @override
+  Future<void> close() async {
+    await super.close();
+    await _disposePlayer();
+  }
+
+  /// Get the player (for use in the UI)
+  PlaybackPlayer? get player => _player;
+
+  /// Latest progress of [player], to seed widgets that listen to its stream.
+  PlaybackProgress get progress => _progress;
 }
