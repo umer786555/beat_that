@@ -1,3 +1,4 @@
+import 'package:beat_that/widgets/feed_grid_geometry.dart';
 import 'package:flutter/widgets.dart';
 
 /// Scrolls a lazily built feed grid until the card holding [targetKey] is visible.
@@ -39,14 +40,14 @@ Future<void> revealFeedGridItem({
 }
 
 /// Approximate scroll offset of [index] in a 2-column feed grid, ignoring ads.
+///
+/// [headerOffset] is the height of any slivers above the grid.
 double estimateFeedGridOffset({
   required int index,
   required double gridWidth,
-  double horizontalPadding = 12,
-  double spacing = 6,
-  double childAspectRatio = 0.64,
+  double headerOffset = 0,
 }) {
-  final cardWidth = (gridWidth - horizontalPadding - spacing) / 2;
-  final rowExtent = cardWidth / childAspectRatio + spacing;
-  return (index ~/ 2) * rowExtent;
+  final cardWidth = (gridWidth - 3 * kFeedGridSpacing) / 2;
+  final rowExtent = cardWidth / kFeedGridChildAspectRatio + kFeedGridSpacing;
+  return headerOffset + (index ~/ 2) * rowExtent;
 }

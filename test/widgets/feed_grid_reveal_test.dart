@@ -1,3 +1,4 @@
+import 'package:beat_that/widgets/feed_grid_geometry.dart';
 import 'package:beat_that/widgets/feed_grid_reveal.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -20,12 +21,7 @@ void main() {
               SliverPadding(
                 padding: const EdgeInsets.symmetric(horizontal: 6),
                 sliver: SliverGrid(
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 2,
-                    crossAxisSpacing: 6,
-                    mainAxisSpacing: 6,
-                    childAspectRatio: 0.64,
-                  ),
+                  gridDelegate: kFeedGridDelegate,
                   delegate: SliverChildBuilderDelegate((context, local) {
                     final index = section * 8 + local;
                     return ColoredBox(
@@ -91,5 +87,24 @@ void main() {
     await reveal;
 
     expect(controller.offset, 0);
+  });
+
+  group('estimateFeedGridOffset', () {
+    test('headerOffset adds exactly its value', () {
+      for (final index in [0, 10]) {
+        final base = estimateFeedGridOffset(index: index, gridWidth: 400);
+        final withHeader = estimateFeedGridOffset(
+          index: index,
+          gridWidth: 400,
+          headerOffset: 100,
+        );
+
+        expect(withHeader, base + 100);
+      }
+    });
+
+    test('index 0 starts at the top without a header', () {
+      expect(estimateFeedGridOffset(index: 0, gridWidth: 400), 0);
+    });
   });
 }

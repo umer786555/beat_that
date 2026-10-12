@@ -7,11 +7,12 @@ import 'package:beat_that/screens/explore/video_feed/widgets/explore_empty_state
 import 'package:beat_that/screens/explore/video_feed/widgets/explore_error_state.dart';
 import 'package:beat_that/screens/explore/video_feed/widgets/no_results_state.dart';
 import 'package:beat_that/screens/explore/video_feed/widgets/search_header.dart';
-import 'package:beat_that/screens/explore/video_feed/widgets/search_loading_card.dart';
 import 'package:beat_that/service_locator.dart';
 import 'package:beat_that/services/explore_feed_progress_store.dart';
 import 'package:beat_that/widgets/explore_feed_native_ad_card.dart';
+import 'package:beat_that/widgets/feed_grid_geometry.dart';
 import 'package:beat_that/widgets/feed_grid_reveal.dart';
+import 'package:beat_that/widgets/feed_grid_skeleton_sliver.dart';
 import 'package:beat_that/widgets/video_feed_card.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -258,10 +259,7 @@ class _ExploreViewState extends State<_ExploreView> {
                       Expanded(
                         child: RefreshIndicator(
                           onRefresh: onRefresh,
-                          child: _buildExploreGrid(
-                            loadedState: loadedState,
-                            isDark: isDark,
-                          ),
+                          child: _buildExploreGrid(loadedState: loadedState),
                         ),
                       ),
                     ],
@@ -275,10 +273,7 @@ class _ExploreViewState extends State<_ExploreView> {
     );
   }
 
-  Widget _buildExploreGrid({
-    required ExploreLoaded loadedState,
-    required bool isDark,
-  }) {
+  Widget _buildExploreGrid({required ExploreLoaded loadedState}) {
     final sections = _buildFeedSections(loadedState.videos);
 
     return CustomScrollView(
@@ -299,7 +294,16 @@ class _ExploreViewState extends State<_ExploreView> {
               child: ExploreFeedNativeAdCard(slotIndex: sectionIndex),
             ),
         ],
-        if (loadedState.isLoadingMore) _buildLoadingSliver(isDark: isDark),
+        if (loadedState.isLoadingMore)
+          const FeedGridSkeletonSliver(
+            itemCount: 2,
+            padding: EdgeInsets.fromLTRB(
+              kFeedGridSpacing,
+              12,
+              kFeedGridSpacing,
+              0,
+            ),
+          ),
         if (loadedState.loadMoreFailed) _buildLoadMoreRetrySliver(),
         const SliverToBoxAdapter(child: SizedBox(height: 24)),
       ],
@@ -335,18 +339,13 @@ class _ExploreViewState extends State<_ExploreView> {
   }) {
     return SliverPadding(
       padding: EdgeInsets.fromLTRB(
-        6,
-        section.startVideoIndex == 0 ? 6 : 0,
-        6,
+        kFeedGridSpacing,
+        section.startVideoIndex == 0 ? kFeedGridSpacing : 0,
+        kFeedGridSpacing,
         0,
       ),
       sliver: SliverGrid(
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 2,
-          crossAxisSpacing: 6,
-          mainAxisSpacing: 6,
-          childAspectRatio: 0.64,
-        ),
+        gridDelegate: kFeedGridDelegate,
         delegate: SliverChildBuilderDelegate((context, localIndex) {
           final globalIndex = section.startVideoIndex + localIndex;
           final video = section.videos[localIndex];
@@ -419,23 +418,6 @@ class _ExploreViewState extends State<_ExploreView> {
         final state = exploreBloc.state;
         return mounted && state is ExploreLoaded && index < state.videos.length;
       },
-    );
-  }
-
-  SliverPadding _buildLoadingSliver({required bool isDark}) {
-    return SliverPadding(
-      padding: const EdgeInsets.fromLTRB(6, 12, 6, 0),
-      sliver: SliverGrid(
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 2,
-          crossAxisSpacing: 6,
-          mainAxisSpacing: 6,
-          childAspectRatio: 0.64,
-        ),
-        delegate: SliverChildBuilderDelegate((context, index) {
-          return SearchLoadingCard(isDark: isDark);
-        }, childCount: 2),
-      ),
     );
   }
 
