@@ -1,8 +1,14 @@
+import 'dart:async';
+
 import 'package:beat_that/constants/sports_data.dart';
 import 'package:beat_that/models/sport_video.dart';
 import 'package:beat_that/screens/explore/explore_screen.dart';
+import 'package:beat_that/screens/explore/video_feed/widgets/explore_error_state.dart';
+import 'package:beat_that/screens/explore/video_feed/widgets/search_header.dart';
 import 'package:beat_that/service_locator.dart';
 import 'package:beat_that/services/supabase_service.dart';
+import 'package:beat_that/widgets/beat_shimmer.dart';
+import 'package:beat_that/widgets/feed_grid_skeleton_sliver.dart';
 import 'package:beat_that/widgets/video_feed_card.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -30,6 +36,49 @@ void main() {
 
   Widget buildTestApp() {
     return const MaterialApp(home: ExploreScreen());
+  }
+
+  // Four videos fill two grid rows without an ad slot, enough to scroll.
+  List<SportVideo> buildVideos({int count = 4, int startIndex = 1}) {
+    return [
+      for (var i = startIndex; i < startIndex + count; i++)
+        SportVideo(
+          id: 'video-$i',
+          userId: 'user-$i',
+          title: 'Drill $i',
+          description: '',
+          videoPath: 'profiles/user-$i/videos/video$i.mp4',
+          thumbnailPath: 'profiles/user-$i/thumbnails/thumb$i.jpg',
+          thumbnailUrl: 'https://example.com/thumb$i.jpg',
+          username: 'coach$i',
+          viewCount: i,
+          averageRating: 4,
+        ),
+    ];
+  }
+
+  ScrollPosition verticalScrollPosition(WidgetTester tester) {
+    return tester
+        .state<ScrollableState>(
+          find
+              .descendant(
+                of: find.byType(CustomScrollView),
+                matching: find.byType(Scrollable),
+              )
+              .first,
+        )
+        .position;
+  }
+
+  void stubFirstRandomPage(Future<Map<String, dynamic>> Function() answer) {
+    when(
+      () => mockSupabaseService.getRandomExploreVideos(
+        limit: 20,
+        seed: any(named: 'seed'),
+        afterId: null,
+        hasWrapped: false,
+      ),
+    ).thenAnswer((_) => answer());
   }
 
   setUp(() {
@@ -178,5 +227,166 @@ void main() {
         sportId: null,
       ),
     ).called(2);
+  });
+
+  testWidgets('shows skeleton cards while the first search is pending', (
+    tester,
+  ) async {
+    final pendingPage = Completer<Map<String, dynamic>>();
+    stubFirstRandomPage(() => pendingPage.future);
+
+    await tester.pumpWidget(buildTestApp());
+    await tester.pump();
+
+    expect(find.byType(FeedGridSkeletonSliver), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+
+    pendingPage.complete(buildRandomExploreResult());
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('error state stays refreshable', (tester) async {
+    when(
+      () => mockSupabaseService.getRandomExploreVideos(
+        limit: 20,
+        seed: any(named: 'seed'),
+        afterId: null,
+        hasWrapped: false,
+      ),
+    ).thenThrow(Exception('offline'));
+
+    await tester.pumpWidget(buildTestApp());
+    await tester.pumpAndSettle();
+
+    expect(find.byType(ExploreErrorState), findsOneWidget);
+
+    await tester.fling(
+      find.byType(ExploreErrorState),
+      const Offset(0, 300),
+      1000,
+    );
+    await tester.pumpAndSettle();
+
+    verify(
+      () => mockSupabaseService.getRandomExploreVideos(
+        limit: 20,
+        seed: any(named: 'seed'),
+        afterId: null,
+        hasWrapped: false,
+      ),
+    ).called(2);
+  });
+
+  testWidgets('header floats away on scroll and returns on a small drag down', (
+    tester,
+  ) async {
+    stubFirstRandomPage(
+      () async => buildRandomExploreResult(videos: buildVideos()),
+    );
+
+    await tester.pumpWidget(buildTestApp());
+    await tester.pumpAndSettle();
+
+    expect(tester.getTopLeft(find.byType(SearchHeader)).dy, 0);
+
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, -400));
+    await tester.pumpAndSettle();
+
+    // Finders skip offstage widgets, so a fully hidden header isn't found.
+    expect(find.byType(SearchHeader), findsNothing);
+
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, 50));
+    await tester.pumpAndSettle();
+
+    expect(tester.getTopLeft(find.byType(SearchHeader)).dy, 0);
+    expect(verticalScrollPosition(tester).pixels, greaterThan(0));
+  });
+
+  testWidgets('shows two skeleton cards while loading more', (tester) async {
+    final secondPage = Completer<Map<String, dynamic>>();
+    stubFirstRandomPage(
+      () async => buildRandomExploreResult(
+        videos: buildVideos(),
+        hasMore: true,
+        nextCursor: {'afterId': 'video-4', 'hasWrapped': false},
+      ),
+    );
+    when(
+      () => mockSupabaseService.getRandomExploreVideos(
+        limit: 20,
+        seed: any(named: 'seed'),
+        afterId: 'video-4',
+        hasWrapped: false,
+      ),
+    ).thenAnswer((_) => secondPage.future);
+
+    await tester.pumpWidget(buildTestApp());
+    await tester.pumpAndSettle();
+
+    expect(find.byType(FeedGridSkeletonSliver), findsNothing);
+
+    // The first drag nears the end and starts the load; the second scrolls the
+    // appended skeleton row into view.
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, -600));
+    await tester.pump();
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, -600));
+    await tester.pump();
+
+    expect(
+      find.descendant(
+        of: find.byType(FeedGridSkeletonSliver),
+        matching: find.byType(BeatShimmerFill),
+      ),
+      findsNWidgets(2),
+    );
+
+    secondPage.complete(buildRandomExploreResult());
+    await tester.pumpAndSettle();
+
+    expect(find.byType(FeedGridSkeletonSliver), findsNothing);
+  });
+
+  testWidgets('selecting a filter while scrolled down jumps to the top', (
+    tester,
+  ) async {
+    final sportId = (sportOrderByLocale['en'] ?? const <String>[]).first;
+    final sportLabel = getDisplayNameForSport(sportId);
+    stubFirstRandomPage(
+      () async => buildRandomExploreResult(videos: buildVideos()),
+    );
+    when(
+      () => mockSupabaseService.searchVideosByTitle(
+        '',
+        limit: 20,
+        offset: 0,
+        sportId: sportId,
+      ),
+    ).thenAnswer(
+      (_) async => {
+        'videos': buildVideos(),
+        'totalCount': 4,
+        'hasMore': false,
+        'nextOffset': 4,
+      },
+    );
+
+    await tester.pumpWidget(buildTestApp());
+    await tester.pumpAndSettle();
+
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, -400));
+    await tester.pumpAndSettle();
+    // A small drag down brings the floating header back without
+    // returning to the top.
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, 50));
+    await tester.pumpAndSettle();
+
+    expect(verticalScrollPosition(tester).pixels, greaterThan(0));
+
+    await tester.tap(find.text(sportLabel).first);
+    await tester.pump();
+
+    expect(verticalScrollPosition(tester).pixels, 0);
+
+    await tester.pumpAndSettle();
   });
 }
