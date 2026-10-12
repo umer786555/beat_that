@@ -112,8 +112,6 @@ class VideoFeedCard extends StatelessWidget {
   }
 }
 
-
-
 /// Modern bottom overlay showing creator info and engagement metrics
 class _BottomContentOverlay extends StatelessWidget {
   final String? username;

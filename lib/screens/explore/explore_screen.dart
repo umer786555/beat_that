@@ -118,7 +118,10 @@ class _ExploreViewState extends State<_ExploreView> {
   void _submitQuery(String query, String? selectedFilterId) {
     _submittedQuery = query;
     context.read<ExploreBloc>().add(
-      SearchExploreVideosEvent(query: query, selectedFilterId: selectedFilterId),
+      SearchExploreVideosEvent(
+        query: query,
+        selectedFilterId: selectedFilterId,
+      ),
     );
   }
 
@@ -220,7 +223,8 @@ class _ExploreViewState extends State<_ExploreView> {
                       onRefresh: onRefresh,
                       child: NoResultsState(
                         query: loadedState.query,
-                        selectedFilterLabel: loadedState.selectedFilterId == null
+                        selectedFilterLabel:
+                            loadedState.selectedFilterId == null
                             ? null
                             : loadedState.filterCatalog.labelFor(
                                 loadedState.selectedFilterId,
@@ -229,9 +233,8 @@ class _ExploreViewState extends State<_ExploreView> {
                     );
                   }
 
-                  final selectedFilterLabel = loadedState.filterCatalog.labelFor(
-                    loadedState.selectedFilterId,
-                  );
+                  final selectedFilterLabel = loadedState.filterCatalog
+                      .labelFor(loadedState.selectedFilterId);
                   final filterLabel = loadedState.selectedFilterId == null
                       ? loadedState.query
                       : loadedState.query.isEmpty
@@ -414,9 +417,7 @@ class _ExploreViewState extends State<_ExploreView> {
       // Stop if the merge was skipped and the grid doesn't contain this video.
       shouldContinue: () {
         final state = exploreBloc.state;
-        return mounted &&
-            state is ExploreLoaded &&
-            index < state.videos.length;
+        return mounted && state is ExploreLoaded && index < state.videos.length;
       },
     );
   }

@@ -2,7 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 class ExploreErrorState extends StatelessWidget {
-  const ExploreErrorState({super.key, required this.message, required this.onRetry});
+  const ExploreErrorState({
+    super.key,
+    required this.message,
+    required this.onRetry,
+  });
 
   final String message;
   final VoidCallback onRetry;

@@ -196,12 +196,16 @@ class _SearchHeaderState extends State<SearchHeader> {
                     final option = entry.$2;
 
                     return Padding(
-                      padding: EdgeInsets.only(left: widget.filterControlSpacing),
+                      padding: EdgeInsets.only(
+                        left: widget.filterControlSpacing,
+                      ),
                       child: SportChip(
                         label: option.label,
                         selected: widget.selectedFilterId == option.id,
                         onSelected: () => widget.onFilterChanged(
-                          widget.selectedFilterId == option.id ? null : option.id,
+                          widget.selectedFilterId == option.id
+                              ? null
+                              : option.id,
                         ),
                         selectedColor: chipSelectedColor,
                         selectedLabelColor: chipSelectedLabelColor,
