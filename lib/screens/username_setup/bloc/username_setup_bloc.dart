@@ -2,7 +2,6 @@ import 'package:beat_that/service_locator.dart';
 import 'package:beat_that/services/auth_service.dart';
 import 'package:beat_that/services/preferences_service.dart';
 import 'package:beat_that/services/supabase_service.dart';
-import 'package:beat_that/constants/app_strings.dart';
 import 'package:bloc_presentation/bloc_presentation.dart';
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -30,8 +29,6 @@ class UsernameSetupBloc extends Bloc<UsernameSetupEvent, UsernameSetupState>
     Emitter<UsernameSetupState> emit,
   ) async {
     try {
-
-
       emit(UsernameSetupLoading());
 
       // Step 1: Save username to Supabase
@@ -52,7 +49,6 @@ class UsernameSetupBloc extends Bloc<UsernameSetupEvent, UsernameSetupState>
 
       // Step 2: Only if Supabase save was successful, save to preferences
       await preferencesService.updateUserProfileUsername(event.username);
-
 
       emit(UsernameSetupSuccess(event.username));
 

@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:beat_that/constants/sports_data.dart';
 import 'package:beat_that/routes/app_router.dart';
 import 'package:beat_that/screens/explore/bloc/explore_bloc.dart';
 import 'package:beat_that/screens/explore/video_feed/explore_video_feed_route_extra.dart';
@@ -9,7 +8,10 @@ import 'package:beat_that/screens/explore/video_feed/widgets/explore_error_state
 import 'package:beat_that/screens/explore/video_feed/widgets/no_results_state.dart';
 import 'package:beat_that/screens/explore/video_feed/widgets/search_header.dart';
 import 'package:beat_that/screens/explore/video_feed/widgets/search_loading_card.dart';
+import 'package:beat_that/service_locator.dart';
+import 'package:beat_that/services/explore_feed_progress_store.dart';
 import 'package:beat_that/widgets/explore_feed_native_ad_card.dart';
+import 'package:beat_that/widgets/feed_grid_reveal.dart';
 import 'package:beat_that/widgets/video_feed_card.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -21,8 +23,12 @@ class ExploreScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final platformLocale = WidgetsBinding.instance.platformDispatcher.locale;
+
     return BlocProvider(
-      create: (context) => ExploreBloc(),
+      create: (context) => ExploreBloc(locale: platformLocale)
+        ..add(const LoadExploreFiltersEvent())
+        ..add(const SearchExploreVideosEvent(query: '')),
       child: const _ExploreView(),
     );
   }
@@ -36,7 +42,7 @@ class _ExploreView extends StatefulWidget {
 }
 
 class _ExploreViewState extends State<_ExploreView> {
-  static const Duration _searchDebounce = Duration(milliseconds: 350);
+  static const Duration _searchDebounce = Duration(milliseconds: 500);
   static const double _loadMoreThreshold = 360;
   static const int _firstAdInsertionIndex = 4;
   static const int _subsequentAdInsertionInterval = 8;
@@ -44,7 +50,9 @@ class _ExploreViewState extends State<_ExploreView> {
   final TextEditingController _searchController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   Timer? _debounce;
-  String? _selectedSportId;
+  String _submittedQuery = '';
+  final GlobalKey _revealKey = GlobalKey();
+  int? _revealIndex;
 
   @override
   void initState() {
@@ -86,11 +94,15 @@ class _ExploreViewState extends State<_ExploreView> {
     }
 
     _debounce?.cancel();
+    final query = ExploreBloc.effectiveQuery(value);
+    if (query == _submittedQuery) {
+      return;
+    }
 
-    if (value.trim().isEmpty) {
-      context.read<ExploreBloc>().add(
-        SearchExploreVideosEvent(query: '', selectedSportId: _selectedSportId),
-      );
+    final selectedFilterId = context.read<ExploreBloc>().state.selectedFilterId;
+
+    if (query.isEmpty) {
+      _submitQuery('', selectedFilterId);
       return;
     }
 
@@ -99,47 +111,47 @@ class _ExploreViewState extends State<_ExploreView> {
         return;
       }
 
-      context.read<ExploreBloc>().add(
-        SearchExploreVideosEvent(
-          query: value,
-          selectedSportId: _selectedSportId,
-        ),
-      );
+      _submitQuery(query, selectedFilterId);
     });
   }
 
-  void _onSportChanged(String? sportId) {
-    if (_selectedSportId == sportId) {
+  void _submitQuery(String query, String? selectedFilterId) {
+    _submittedQuery = query;
+    context.read<ExploreBloc>().add(
+      SearchExploreVideosEvent(query: query, selectedFilterId: selectedFilterId),
+    );
+  }
+
+  void _onFilterChanged(String? filterId) {
+    final selectedFilterId = context.read<ExploreBloc>().state.selectedFilterId;
+    if (selectedFilterId == filterId) {
       return;
     }
 
-    setState(() {
-      _selectedSportId = sportId;
-    });
-
     _debounce?.cancel();
-    context.read<ExploreBloc>().add(
-      SearchExploreVideosEvent(
-        query: _searchController.text,
-        selectedSportId: _selectedSportId,
-      ),
-    );
+    _submitQuery(ExploreBloc.effectiveQuery(_searchController.text), filterId);
   }
 
   void _clearSearchQuery() {
     _debounce?.cancel();
     _searchController.clear();
-    context.read<ExploreBloc>().add(
-      SearchExploreVideosEvent(query: '', selectedSportId: _selectedSportId),
-    );
+    if (_submittedQuery.isEmpty) {
+      return;
+    }
+
+    _submitQuery('', context.read<ExploreBloc>().state.selectedFilterId);
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final platformLocale = WidgetsBinding.instance.platformDispatcher.locale;
-    final availableSportIds = getOrderedSportIdsForLocale(platformLocale);
+    final filterCatalog = context.select(
+      (ExploreBloc bloc) => bloc.state.filterCatalog,
+    );
+    final selectedFilterId = context.select(
+      (ExploreBloc bloc) => bloc.state.selectedFilterId,
+    );
 
     Future<void> onRefresh() async {
       final exploreBloc = context.read<ExploreBloc>();
@@ -158,10 +170,10 @@ class _ExploreViewState extends State<_ExploreView> {
           children: [
             SearchHeader(
               controller: _searchController,
-              selectedSportId: _selectedSportId,
-              availableSportIds: availableSportIds,
+              filterCatalog: filterCatalog,
+              selectedFilterId: selectedFilterId,
               onChanged: _onQueryChanged,
-              onSportChanged: _onSportChanged,
+              onFilterChanged: _onFilterChanged,
               onClearQuery: _clearSearchQuery,
             ),
             Expanded(
@@ -191,34 +203,55 @@ class _ExploreViewState extends State<_ExploreView> {
 
                   final loadedState = state as ExploreLoaded;
                   if (loadedState.videos.isEmpty) {
+                    if (loadedState.isRandomFeed) {
+                      return _buildRefreshableBody(
+                        onRefresh: onRefresh,
+                        child: ExploreEmptyState(
+                          isDark: isDark,
+                          title: 'No Videos Yet',
+                          description:
+                              'There are no public videos to explore right now.',
+                          icon: Icons.video_library_outlined,
+                        ),
+                      );
+                    }
+
                     return _buildRefreshableBody(
                       onRefresh: onRefresh,
                       child: NoResultsState(
                         query: loadedState.query,
-                        selectedSportId: loadedState.selectedSportId,
+                        selectedFilterLabel: loadedState.selectedFilterId == null
+                            ? null
+                            : loadedState.filterCatalog.labelFor(
+                                loadedState.selectedFilterId,
+                              ),
                       ),
                     );
                   }
 
-                  final filterLabel = loadedState.selectedSportId == null
+                  final selectedFilterLabel = loadedState.filterCatalog.labelFor(
+                    loadedState.selectedFilterId,
+                  );
+                  final filterLabel = loadedState.selectedFilterId == null
                       ? loadedState.query
                       : loadedState.query.isEmpty
-                      ? getDisplayNameForSport(loadedState.selectedSportId!)
-                      : '${loadedState.query} in ${getDisplayNameForSport(loadedState.selectedSportId!)}';
+                      ? selectedFilterLabel
+                      : '${loadedState.query} in $selectedFilterLabel';
 
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-                        child: Text(
-                          '${loadedState.totalCount} result${loadedState.totalCount == 1 ? '' : 's'} for "$filterLabel"',
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            color: Colors.grey[600],
-                            fontWeight: FontWeight.w600,
+                      if (!loadedState.isRandomFeed)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                          child: Text(
+                            '${loadedState.totalCount} result${loadedState.totalCount == 1 ? '' : 's'} for "$filterLabel"',
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: Colors.grey[600],
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ),
-                      ),
                       Expanded(
                         child: RefreshIndicator(
                           onRefresh: onRefresh,
@@ -264,8 +297,32 @@ class _ExploreViewState extends State<_ExploreView> {
             ),
         ],
         if (loadedState.isLoadingMore) _buildLoadingSliver(isDark: isDark),
+        if (loadedState.loadMoreFailed) _buildLoadMoreRetrySliver(),
         const SliverToBoxAdapter(child: SizedBox(height: 24)),
       ],
+    );
+  }
+
+  SliverToBoxAdapter _buildLoadMoreRetrySliver() {
+    return SliverToBoxAdapter(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+        child: Column(
+          children: [
+            Text(
+              "Couldn't load more videos.",
+              style: TextStyle(color: Colors.grey[600]),
+            ),
+            TextButton.icon(
+              onPressed: () => context.read<ExploreBloc>().add(
+                const LoadMoreExploreVideosEvent(isRetry: true),
+              ),
+              icon: const Icon(Icons.refresh),
+              label: const Text('Retry'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -291,6 +348,7 @@ class _ExploreViewState extends State<_ExploreView> {
           final globalIndex = section.startVideoIndex + localIndex;
           final video = section.videos[localIndex];
           return VideoFeedCard(
+            key: globalIndex == _revealIndex ? _revealKey : null,
             videoId: video.id,
             thumbnailUrl: video.thumbnailUrl ?? '',
             title: video.title,
@@ -298,20 +356,33 @@ class _ExploreViewState extends State<_ExploreView> {
             sportId: video.sportId,
             viewCount: video.viewCount,
             rating: video.averageRating,
-            onTap: () {
+            onTap: () async {
               HapticFeedback.mediumImpact();
+              final exploreBloc = context.read<ExploreBloc>();
+              final progressStore = locator<ExploreFeedProgressStore>()
+                ..clear();
 
-              context.pushNamed(
+              await context.pushNamed(
                 'explore-video-feed',
                 extra: ExploreVideoFeedExtra(
                   videos: List.of(loadedState.videos),
                   initialIndex: globalIndex,
                   query: loadedState.query,
-                  selectedSportId: loadedState.selectedSportId,
+                  selectedSportId: loadedState.selectedFilterId,
                   nextOffset: loadedState.nextOffset,
                   hasMoreContent: loadedState.hasMore,
+                  isRandomFeed: loadedState.isRandomFeed,
+                  randomSeed: loadedState.randomSeed,
+                  randomAfterId: loadedState.randomAfterId,
+                  randomHasWrapped: loadedState.randomHasWrapped,
                 ),
               );
+
+              final progress = progressStore.take();
+              if (progress != null && !exploreBloc.isClosed) {
+                exploreBloc.add(MergeExploreFeedProgressEvent(progress));
+                _revealVideo(progress.currentIndex, exploreBloc);
+              }
             },
             onUsernameTap: () {
               final userId = video.userId;
@@ -327,6 +398,26 @@ class _ExploreViewState extends State<_ExploreView> {
           );
         }, childCount: section.videos.length),
       ),
+    );
+  }
+
+  void _revealVideo(int index, ExploreBloc exploreBloc) {
+    if (!mounted) return;
+    setState(() => _revealIndex = index);
+    revealFeedGridItem(
+      controller: _scrollController,
+      targetKey: _revealKey,
+      estimatedOffset: estimateFeedGridOffset(
+        index: index,
+        gridWidth: MediaQuery.sizeOf(context).width,
+      ),
+      // Stop if the merge was skipped and the grid doesn't contain this video.
+      shouldContinue: () {
+        final state = exploreBloc.state;
+        return mounted &&
+            state is ExploreLoaded &&
+            index < state.videos.length;
+      },
     );
   }
 

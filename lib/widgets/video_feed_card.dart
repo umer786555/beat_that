@@ -1,5 +1,4 @@
 import 'package:beat_that/constants/app_colors.dart';
-import 'package:beat_that/constants/sports_data.dart';
 import 'package:flutter/material.dart';
 
 /// Reusable video feed card component for displaying videos in grid
@@ -43,12 +42,6 @@ class VideoFeedCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final formattedViews = VideoFeedCard.formatViewCount(viewCount);
-    final sportLabel = sportId != null && sportId!.isNotEmpty
-        ? getDisplayNameForSport(sportId!)
-        : null;
-    final sportIcon = sportId != null && sportId!.isNotEmpty
-        ? getIconForSport(sportId!)
-        : null;
 
     return Material(
       color: Colors.transparent,
@@ -56,7 +49,7 @@ class VideoFeedCard extends StatelessWidget {
         onTap: onTap,
         onLongPress: onLongPress,
         splashFactory: NoSplash.splashFactory,
-        overlayColor: MaterialStateProperty.all(Colors.transparent),
+        overlayColor: WidgetStateProperty.all(Colors.transparent),
         borderRadius: BorderRadius.circular(12),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(12),
@@ -99,14 +92,7 @@ class VideoFeedCard extends StatelessWidget {
                   ),
                 ),
               ),
-              // Top sport badge
-              if (sportLabel != null && sportIcon != null)
-                Positioned(
-                  top: 10,
-                  left: 10,
-                  child: _ModernSportBadge(icon: sportIcon, label: sportLabel),
-                ),
-              // Bottom content area
+
               Positioned(
                 left: 0,
                 right: 0,
@@ -126,34 +112,7 @@ class VideoFeedCard extends StatelessWidget {
   }
 }
 
-/// Subtle sport badge with minimalist design
-class _ModernSportBadge extends StatelessWidget {
-  final IconData icon;
-  final String label;
 
-  const _ModernSportBadge({required this.icon, required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, size: 13, color: Colors.white.withValues(alpha: 0.9)),
-        const SizedBox(width: 5),
-        Text(
-          label,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-            color: Colors.white.withValues(alpha: 0.9),
-            fontWeight: FontWeight.w500,
-            fontSize: 11,
-            letterSpacing: 0.2,
-          ),
-        ),
-      ],
-    );
-  }
-}
 
 /// Modern bottom overlay showing creator info and engagement metrics
 class _BottomContentOverlay extends StatelessWidget {

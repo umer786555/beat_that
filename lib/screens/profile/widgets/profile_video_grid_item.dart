@@ -9,6 +9,8 @@ class ProfileVideoGridItem extends StatelessWidget {
     super.key,
     required this.thumbnail,
     required this.isDark,
+    required this.isDeleting,
+    required this.isDeleteLocked,
     required this.onOpen,
     required this.onReviewIssuesTap,
     required this.onDeleteConfirmed,
@@ -16,6 +18,8 @@ class ProfileVideoGridItem extends StatelessWidget {
 
   final MyVideo thumbnail;
   final bool isDark;
+  final bool isDeleting;
+  final bool isDeleteLocked;
   final VoidCallback onOpen;
   final VoidCallback onReviewIssuesTap;
   final ValueChanged<String> onDeleteConfirmed;
@@ -24,6 +28,10 @@ class ProfileVideoGridItem extends StatelessWidget {
   static const double _borderWidth = 1.5;
 
   Future<void> _handleLongPress(BuildContext context) async {
+    if (isDeleteLocked) {
+      return;
+    }
+
     HapticFeedback.heavyImpact();
 
     final shouldDelete = await showVideoDeleteConfirmation(
@@ -47,8 +55,8 @@ class ProfileVideoGridItem extends StatelessWidget {
       borderRadius: borderRadius,
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: onOpen,
-        onLongPress: () => _handleLongPress(context),
+        onTap: isDeleting ? null : onOpen,
+        onLongPress: isDeleteLocked ? null : () => _handleLongPress(context),
         borderRadius: borderRadius,
         splashFactory: InkSplash.splashFactory,
         child: Container(
@@ -67,15 +75,15 @@ class ProfileVideoGridItem extends StatelessWidget {
               _buildThumbnail(),
 
               // Rejected overlay
-              if (thumbnail.approved == false)
-                _buildRejectedOverlay(),
+              if (thumbnail.approved == false) _buildRejectedOverlay(),
 
               // Rejected review action
-              if (thumbnail.approved == false)
-                _buildRejectedAction(context),
+              if (thumbnail.approved == false) _buildRejectedAction(context),
 
               // Approval status badge
               _buildStatusBadge(context),
+
+              if (isDeleting) _buildDeletingOverlay(context),
             ],
           ),
         ),
@@ -98,9 +106,7 @@ class ProfileVideoGridItem extends StatelessWidget {
 
   Widget _buildRejectedOverlay() {
     return IgnorePointer(
-      child: ColoredBox(
-        color: Colors.black.withValues(alpha: 0.3),
-      ),
+      child: ColoredBox(color: Colors.black.withValues(alpha: 0.3)),
     );
   }
 
@@ -121,19 +127,12 @@ class ProfileVideoGridItem extends StatelessWidget {
   }
 
   Widget _buildStatusBadge(BuildContext context) {
-    return Positioned(
-      top: 8,
-      right: 8,
-      child: _buildApprovalBadge(),
-    );
+    return Positioned(top: 8, right: 8, child: _buildApprovalBadge());
   }
 
   Color _getBorderColor(BuildContext context) {
     if (thumbnail.approved == true) {
-      return Theme.of(context)
-          .colorScheme
-          .outline
-          .withValues(alpha: 0.08);
+      return Theme.of(context).colorScheme.outline.withValues(alpha: 0.08);
     }
 
     if (thumbnail.approved == null) {
@@ -145,32 +144,23 @@ class ProfileVideoGridItem extends StatelessWidget {
 
   Widget _buildRejectedHint(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: 12,
-        vertical: 10,
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
         color: Colors.black.withValues(alpha: 0.7),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: Colors.white.withValues(alpha: 0.12),
-        ),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
       ),
       child: Row(
         children: [
-          const Icon(
-            Icons.info_outline,
-            color: Colors.white,
-            size: 16,
-          ),
+          const Icon(Icons.info_outline, color: Colors.white, size: 16),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
               'Tap to review issues',
               style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
-                  ),
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ),
           const Icon(
@@ -187,11 +177,7 @@ class ProfileVideoGridItem extends StatelessWidget {
     if (thumbnail.approved == true) {
       return _buildBadge(
         color: Colors.blue,
-        child: const Icon(
-          Icons.check,
-          color: Colors.white,
-          size: 16,
-        ),
+        child: const Icon(Icons.check, color: Colors.white, size: 16),
       );
     }
 
@@ -214,11 +200,7 @@ class ProfileVideoGridItem extends StatelessWidget {
 
     return _buildBadge(
       color: Colors.red.withValues(alpha: 0.9),
-      child: const Icon(
-        Icons.close,
-        color: Colors.white,
-        size: 16,
-      ),
+      child: const Icon(Icons.close, color: Colors.white, size: 16),
     );
   }
 
@@ -229,11 +211,39 @@ class ProfileVideoGridItem extends StatelessWidget {
   }) {
     return Container(
       padding: EdgeInsets.all(padding),
-      decoration: BoxDecoration(
-        color: color,
-        shape: BoxShape.circle,
-      ),
+      decoration: BoxDecoration(color: color, shape: BoxShape.circle),
       child: child,
+    );
+  }
+
+  Widget _buildDeletingOverlay(BuildContext context) {
+    return Positioned.fill(
+      child: ColoredBox(
+        color: Colors.black.withValues(alpha: 0.55),
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(
+                width: 26,
+                height: 26,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.5,
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'Deleting video...',
+                style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

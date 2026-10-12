@@ -6,6 +6,7 @@ class HomeVideoFeedSession {
     required this.id,
     required List<SportVideo> videos,
     required this.nextCursor,
+    required this.currentIndex,
     Set<String>? seenVideoIds,
     this.hasMoreContent = true,
   }) : videos = List<SportVideo>.from(videos),
@@ -17,8 +18,15 @@ class HomeVideoFeedSession {
   final Set<String> seenVideoIds;
   HomeFeedCursor nextCursor;
   bool hasMoreContent;
+
+  /// The video the viewer is on, so the grid can scroll to it on return.
+  int currentIndex;
 }
 
+/// Hands Home feed state to the full-screen feed and back again.
+///
+/// The screen that creates a session owns it and must [takeSession] it once
+/// the full-screen feed closes.
 class HomeVideoFeedSessionStore {
   int _nextSessionId = 0;
   final Map<String, HomeVideoFeedSession> _sessions = {};
@@ -26,6 +34,7 @@ class HomeVideoFeedSessionStore {
   String createSession({
     required List<SportVideo> videos,
     required HomeFeedCursor nextCursor,
+    required int initialIndex,
     bool hasMoreContent = true,
   }) {
     _nextSessionId++;
@@ -34,6 +43,7 @@ class HomeVideoFeedSessionStore {
       id: id,
       videos: videos,
       nextCursor: nextCursor,
+      currentIndex: initialIndex,
       hasMoreContent: hasMoreContent,
     );
     return id;
@@ -55,7 +65,7 @@ class HomeVideoFeedSessionStore {
     }
 
     session.videos.addAll(videos);
-  session.nextCursor = nextCursor;
+    session.nextCursor = nextCursor;
     session.hasMoreContent = hasMoreContent;
 
     for (final video in videos) {
@@ -63,7 +73,11 @@ class HomeVideoFeedSessionStore {
     }
   }
 
-  void removeSession(String sessionId) {
-    _sessions.remove(sessionId);
+  void updateCurrentIndex(String sessionId, int index) {
+    _sessions[sessionId]?.currentIndex = index;
+  }
+
+  HomeVideoFeedSession? takeSession(String sessionId) {
+    return _sessions.remove(sessionId);
   }
 }

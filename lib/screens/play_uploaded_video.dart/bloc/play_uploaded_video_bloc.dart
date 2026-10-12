@@ -37,8 +37,7 @@ class PlayUploadedVideoBloc
       await _videoController?.dispose();
 
       final isUrl =
-          videoPath.startsWith('http://') ||
-          videoPath.startsWith('https://');
+          videoPath.startsWith('http://') || videoPath.startsWith('https://');
       final localFile = File(videoPath);
       final isLocalFile = !isUrl && await localFile.exists();
 

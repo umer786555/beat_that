@@ -1,18 +1,18 @@
 /// Model representing a sport subcategory from the database
-class SportSubcategory {
+class Subcategorys {
   final int id;
   final String sportId;
   final String name;
 
-  const SportSubcategory({
+  const Subcategorys({
     required this.id,
     required this.sportId,
     required this.name,
   });
 
   /// Create a SportSubcategory from a database map
-  factory SportSubcategory.fromJson(Map<String, dynamic> json) {
-    return SportSubcategory(
+  factory Subcategorys.fromJson(Map<String, dynamic> json) {
+    return Subcategorys(
       id: (json['id'] ?? 0) as int,
       sportId: (json['sport_id'] ?? '') as String,
       name: (json['name'] ?? '') as String,
@@ -21,20 +21,12 @@ class SportSubcategory {
 
   /// Convert SportSubcategory to JSON
   Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'sport_id': sportId,
-      'name': name,
-    };
+    return {'id': id, 'sport_id': sportId, 'name': name};
   }
 
   /// Create a copy of this subcategory with optional field overrides
-  SportSubcategory copyWith({
-    int? id,
-    String? sportId,
-    String? name,
-  }) {
-    return SportSubcategory(
+  Subcategorys copyWith({int? id, String? sportId, String? name}) {
+    return Subcategorys(
       id: id ?? this.id,
       sportId: sportId ?? this.sportId,
       name: name ?? this.name,
@@ -42,12 +34,13 @@ class SportSubcategory {
   }
 
   @override
-  String toString() => 'SportSubcategory(id: $id, sportId: $sportId, name: $name)';
+  String toString() =>
+      'SportSubcategory(id: $id, sportId: $sportId, name: $name)';
 
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is SportSubcategory &&
+      other is Subcategorys &&
           runtimeType == other.runtimeType &&
           id == other.id &&
           sportId == other.sportId &&

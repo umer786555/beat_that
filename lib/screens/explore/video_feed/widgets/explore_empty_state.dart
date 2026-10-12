@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 class ExploreEmptyState extends StatelessWidget {
   const ExploreEmptyState({
+    super.key,
     required this.isDark,
     this.title = 'Search Videos',
     this.description =

@@ -1,9 +1,9 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:beat_that/models/sport.dart';
-import 'package:beat_that/models/sport_subcategory.dart';
+import 'package:beat_that/models/category.dart';
 import 'package:beat_that/constants/sports_data.dart';
 import 'package:beat_that/services/supabase_service.dart';
 import 'package:beat_that/service_locator.dart';
+import 'package:beat_that/constants/app_strings.dart';
 import 'sports_hub_event.dart';
 import 'sports_hub_state.dart';
 
@@ -17,7 +17,6 @@ class SportsHubBloc extends Bloc<SportsHubEvent, SportsHubState> {
     on<RetrySportsEvent>(_onRetrySports);
   }
 
-  /// Handle FetchSportsEvent - fetch sports from Supabase and apply locale ordering
   Future<void> _onFetchSports(
     FetchSportsEvent event,
     Emitter<SportsHubState> emit,
@@ -26,52 +25,61 @@ class SportsHubBloc extends Bloc<SportsHubEvent, SportsHubState> {
     emit(const SportsHubLoading());
 
     try {
-      // Step 1: Fetch all sports and their subcategories from Supabase in one call
-      // Returns Map<String, List<SportSubcategory>> where key is sport_id and value is list of subcategory objects
-      // Example: {'soccer': [SportSubcategory(id:1, name:'Penalty Kick'), ...], 'basketball': [...]}
-      final sportMap = await _supabaseService.getAllSportsWithSubcategories();
-
-      // Handle empty data case
-      if (sportMap.isEmpty) {
-        emit(const SportsHubError(message: 'No sports found in the database'));
-        return;
-      }
+      // Step 1: Fetch only sports data (small payload) from new sports table
+      // Returns List<Category> with empty subcategories
+      final sports = await _supabaseService.getAllSports();
 
       // Step 2: Get the correct ordering based on user's locale
       // Different regions have different sports popularity (e.g., cricket in India, football in US)
       final orderedSportIds = getOrderedSportIdsForLocale(event.locale);
+      final orderIndexBySportName = <String, int>{
+        for (var index = 0; index < orderedSportIds.length; index++)
+          orderedSportIds[index]: index,
+      };
 
-      // Step 3: Build Sport objects in the correct regional order
-      // - Filter to only sports that exist in our database
-      // - Build each sport with metadata (icon, name) and fetched subcategories
-      // - Remove any nulls and convert to list
-      final sports = orderedSportIds
-          .where((id) => sportMap.containsKey(id))
-          .map((id) => _buildSport(id, sportMap[id]!))
-          .whereType<Sport>()
-          .toList();
+      // Step 3: Sort fetched sports according to locale preferences.
+      // Backend sports not present in the hard-coded order list are appended
+      // instead of being dropped from the UI.
+      // "Other Games" is always placed at the bottom.
+      final sportsWithoutOther = <CategoryModel>[];
+      CategoryModel? otherGames;
 
-      // Step 4: Emit loaded state with ordered sports
-      emit(SportsHubLoaded(sports: sports));
+      for (final sport in sports) {
+        if (sport.displayName.toLowerCase() == 'other games') {
+          otherGames = sport;
+        } else {
+          sportsWithoutOther.add(sport);
+        }
+      }
+
+      sportsWithoutOther.sort((left, right) {
+        final leftIndex =
+            orderIndexBySportName[left.name] ?? orderedSportIds.length;
+        final rightIndex =
+            orderIndexBySportName[right.name] ?? orderedSportIds.length;
+
+        if (leftIndex != rightIndex) {
+          return leftIndex.compareTo(rightIndex);
+        }
+
+        return left.displayName.toLowerCase().compareTo(
+          right.displayName.toLowerCase(),
+        );
+      });
+
+      // Add "Other Games" at the end if it exists
+      if (otherGames != null) {
+        sportsWithoutOther.add(otherGames);
+      }
+
+      final orderedSports = sportsWithoutOther;
+
+      // Step 4: Emit loaded state with sports (subcategories will load on selection)
+      emit(SportsHubLoaded(sports: orderedSports));
     } catch (e) {
       // Handle any errors during fetch
-      emit(SportsHubError(message: 'Failed to fetch sports: $e'));
+      emit(SportsHubError(message:  AppStrings.somethingWentWrongPleaseTryAgain));
     }
-  }
-
-  /// Build a Sport object from a sport ID and its subcategories
-  ///
-  /// Uses helper functions to infer the display name and icon from the sport ID
-  /// Subcategories are fetched from Supabase database
-  Sport? _buildSport(String sportId, List<SportSubcategory> subcategories) {
-    return Sport(
-      id: sportId,
-      name: sportId,
-      displayName: getDisplayNameForSport(sportId),
-      icon: getIconForSport(sportId),
-      imageAssetPath: getImageAssetPathForSport(sportId),
-      subcategories: subcategories, // From Supabase
-    );
   }
 
   /// Handle RetrySportsEvent - retry fetching after an error

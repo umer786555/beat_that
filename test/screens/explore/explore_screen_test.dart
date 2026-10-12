@@ -1,4 +1,5 @@
 import 'package:beat_that/constants/sports_data.dart';
+import 'package:beat_that/models/sport_video.dart';
 import 'package:beat_that/screens/explore/explore_screen.dart';
 import 'package:beat_that/service_locator.dart';
 import 'package:beat_that/services/supabase_service.dart';
@@ -12,6 +13,20 @@ class MockSupabaseService extends Mock implements SupabaseService {}
 
 void main() {
   late MockSupabaseService mockSupabaseService;
+
+  Map<String, dynamic> buildRandomExploreResult({
+    List<dynamic> videos = const <dynamic>[],
+    bool hasMore = false,
+    Map<String, dynamic>? nextCursor,
+    String seed = 'seed-1',
+  }) {
+    return {
+      'videos': videos,
+      'hasMore': hasMore,
+      'nextCursor': nextCursor,
+      'seed': seed,
+    };
+  }
 
   Widget buildTestApp() {
     return const MaterialApp(home: ExploreScreen());
@@ -34,16 +49,18 @@ void main() {
       final platformCalls = <MethodCall>[];
       final result = {
         'videos': [
-          {
-            'id': 'video-1',
-            'title': 'Baseline drill',
-            'thumbnailUrl': 'https://example.com/thumb1.jpg',
-            'thumbnail_path': 'profiles/user-1/thumbnails/thumb1.jpg',
-            'video_path': 'profiles/user-1/videos/video1.mp4',
-            'username': 'coach1',
-            'view_count': 12,
-            'average_rating': 4.4,
-          },
+          const SportVideo(
+            id: 'video-1',
+            userId: 'user-1',
+            title: 'Baseline drill',
+            description: '',
+            videoPath: 'profiles/user-1/videos/video1.mp4',
+            thumbnailPath: 'profiles/user-1/thumbnails/thumb1.jpg',
+            thumbnailUrl: 'https://example.com/thumb1.jpg',
+            username: 'coach1',
+            viewCount: 12,
+            averageRating: 4.4,
+          ),
         ],
         'totalCount': 1,
         'hasMore': false,
@@ -68,6 +85,14 @@ void main() {
           sportId: sportId,
         ),
       ).thenAnswer((_) async => result);
+      when(
+        () => mockSupabaseService.getRandomExploreVideos(
+          limit: 20,
+          seed: any(named: 'seed'),
+          afterId: null,
+          hasWrapped: false,
+        ),
+      ).thenAnswer((_) async => buildRandomExploreResult());
 
       await tester.pumpWidget(buildTestApp());
       await tester.tap(find.text(sportLabel).first);
@@ -121,14 +146,24 @@ void main() {
         sportId: null,
       ),
     ).thenAnswer((_) async => emptyResult);
+    when(
+      () => mockSupabaseService.getRandomExploreVideos(
+        limit: 20,
+        seed: any(named: 'seed'),
+        afterId: null,
+        hasWrapped: false,
+      ),
+    ).thenAnswer((_) async => buildRandomExploreResult());
 
     await tester.pumpWidget(buildTestApp());
+    await tester.tap(find.text('Search'));
+    await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField), query);
-    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump(const Duration(milliseconds: 600));
     await tester.pumpAndSettle();
 
     expect(find.byType(RefreshIndicator), findsOneWidget);
-    expect(find.text('No videos found for "$query"'), findsOneWidget);
+    expect(find.text('No matching videos for "$query"'), findsOneWidget);
 
     final refreshIndicator = tester.widget<RefreshIndicator>(
       find.byType(RefreshIndicator),

@@ -4,8 +4,6 @@ import 'package:go_router/go_router.dart';
 import 'package:beat_that/models/my_video.dart';
 import 'package:beat_that/screens/profile/widgets/profile_video_grid_item.dart';
 import 'package:beat_that/routes/app_router.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:beat_that/screens/profile/bloc/profile_bloc.dart';
 
 /// A reusable widget that displays a grid of user's videos with improved spacing and balance.
 ///
@@ -31,6 +29,9 @@ class ProfileVideosGrid extends StatelessWidget {
   /// Whether dark mode is enabled
   final bool isDark;
 
+  /// The id of the tile currently being deleted.
+  final String? deletingVideoId;
+
   /// Callback when a video is opened
   final Function(String videoPath) onVideoOpen;
 
@@ -41,12 +42,15 @@ class ProfileVideosGrid extends StatelessWidget {
     super.key,
     required this.videos,
     required this.isDark,
+    required this.deletingVideoId,
     required this.onVideoOpen,
     required this.onVideoDeleteConfirmed,
   });
 
   @override
   Widget build(BuildContext context) {
+    final isDeleteLocked = deletingVideoId != null;
+
     return SliverPadding(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 16),
       sliver: SliverGrid(
@@ -61,6 +65,8 @@ class ProfileVideosGrid extends StatelessWidget {
           return ProfileVideoGridItem(
             thumbnail: video,
             isDark: isDark,
+            isDeleting: deletingVideoId == video.id,
+            isDeleteLocked: isDeleteLocked,
             onOpen: () {
               HapticFeedback.mediumImpact();
               GoRouter.of(context).pushNamed(
@@ -79,9 +85,7 @@ class ProfileVideosGrid extends StatelessWidget {
               );
             },
             onDeleteConfirmed: (videoId) {
-              context.read<ProfileBloc>().add(
-                DeleteVideoEvent(videoId: videoId),
-              );
+              onVideoDeleteConfirmed(videoId);
             },
           );
         }, childCount: videos.length),

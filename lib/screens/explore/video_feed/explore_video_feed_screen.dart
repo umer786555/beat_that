@@ -218,6 +218,10 @@ class _ExploreVideoFeedScreenState extends State<ExploreVideoFeedScreen> {
         selectedSportId: widget.extra.selectedSportId,
         nextOffset: widget.extra.nextOffset,
         hasMoreContent: widget.extra.hasMoreContent,
+        isRandomFeed: widget.extra.isRandomFeed,
+        randomSeed: widget.extra.randomSeed,
+        randomAfterId: widget.extra.randomAfterId,
+        randomHasWrapped: widget.extra.randomHasWrapped,
       )..initialize(),
       child:
           BlocPresentationListener<

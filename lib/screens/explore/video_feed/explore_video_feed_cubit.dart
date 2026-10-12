@@ -4,7 +4,10 @@ import 'dart:io';
 import 'package:bloc_presentation/bloc_presentation.dart';
 import 'package:beat_that/models/sport_video.dart';
 import 'package:beat_that/service_locator.dart';
+import 'package:beat_that/services/explore_feed_progress_store.dart';
+import 'package:beat_that/services/preferences_service.dart';
 import 'package:beat_that/services/supabase_service.dart';
+import 'package:beat_that/services/video_engagement_tracker.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:video_player/video_player.dart';
 
@@ -29,32 +32,88 @@ class ExploreVideoFeedCubit extends Cubit<ExploreVideoFeedState>
     required this.nextOffset,
     required this.hasMoreContent,
     this.selectedSportId,
+    this.isRandomFeed = false,
+    this.randomSeed,
+    this.randomAfterId,
+    this.randomHasWrapped = false,
   }) : _supabaseService = locator<SupabaseService>(),
+      _preferencesService = locator<PreferencesService>(),
+      _progressStore = locator<ExploreFeedProgressStore>(),
        super(
          ExploreVideoFeedState(
            videos: List<SportVideo>.from(initialVideos),
            currentIndex: initialIndex,
            nextOffset: nextOffset,
            hasMoreContent: hasMoreContent,
+           isRandomFeed: isRandomFeed,
+           randomSeed: randomSeed,
+           randomAfterId: randomAfterId,
+           randomHasWrapped: randomHasWrapped,
          ),
        );
 
   final SupabaseService _supabaseService;
+  final PreferencesService _preferencesService;
+  final ExploreFeedProgressStore _progressStore;
   final String query;
   final String? selectedSportId;
   final int nextOffset;
   final bool hasMoreContent;
+  final bool isRandomFeed;
+  final String? randomSeed;
+  final String? randomAfterId;
+  final bool randomHasWrapped;
+  late final VideoEngagementTracker _engagementTracker = VideoEngagementTracker(
+    _preferencesService,
+  );
   final Map<int, VideoPlayerController> _controllers = {};
   final Map<int, Future<void>> _controllerInitializers = {};
   final Map<int, void Function()> _controllerListeners = {};
   final Set<int> _viewThresholdReachedIndexes = {};
   bool _isShuttingDown = false;
 
+  Future<Map<String, dynamic>> _loadRandomExplorePage({
+    String? seed,
+    String? afterId,
+    bool hasWrapped = false,
+  }) async {
+    final result = await _supabaseService.getRandomExploreVideos(
+      limit: _continuationPageSize,
+      seed: seed,
+      afterId: afterId,
+      hasWrapped: hasWrapped,
+    );
+
+    if (result['errorCode'] == '22023' && (afterId != null || hasWrapped)) {
+      final resetResult = await _supabaseService.getRandomExploreVideos(
+        limit: _continuationPageSize,
+        seed: result['seed'] as String? ?? seed,
+        afterId: null,
+        hasWrapped: false,
+      );
+
+      final resetError = resetResult['error'] as String?;
+      if (resetError != null && resetError.isNotEmpty) {
+        throw Exception(resetError);
+      }
+
+      return resetResult;
+    }
+
+    final error = result['error'] as String?;
+    if (error != null && error.isNotEmpty) {
+      throw Exception(error);
+    }
+
+    return result;
+  }
+
   VideoPlayerController? controllerFor(int index) => _controllers[index];
 
   bool get _isInactive => _isShuttingDown || isClosed;
 
   Future<void> initialize() async {
+    _engagementTracker.startVideo(_subcategoryIdForIndex(state.currentIndex));
     await _activateIndex(state.currentIndex);
     await _loadUserRatingForIndex(state.currentIndex);
     await _loadMoreIfNeeded(state.currentIndex);
@@ -65,6 +124,7 @@ class ExploreVideoFeedCubit extends Cubit<ExploreVideoFeedState>
       return;
     }
 
+    _engagementTracker.startVideo(_subcategoryIdForIndex(index));
     emit(
       state.copyWith(
         currentIndex: index,
@@ -72,6 +132,7 @@ class ExploreVideoFeedCubit extends Cubit<ExploreVideoFeedState>
         currentUserRating: null,
       ),
     );
+    _saveProgress();
 
     await _activateIndex(index);
     await _loadUserRatingForIndex(index);
@@ -123,6 +184,7 @@ class ExploreVideoFeedCubit extends Cubit<ExploreVideoFeedState>
     );
 
     if (result['success'] == true) {
+      _engagementTracker.onRated(rating);
       emit(
         state.copyWith(currentUserRating: rating, isSubmittingRating: false),
       );
@@ -286,12 +348,19 @@ class ExploreVideoFeedCubit extends Cubit<ExploreVideoFeedState>
     emit(state.copyWith(isLoadingMore: true, clearErrorMessage: true));
 
     try {
-      final result = await _supabaseService.searchVideosByTitle(
-        query,
-        limit: _continuationPageSize,
-        offset: state.nextOffset,
-        sportId: selectedSportId,
-      );
+      final result = state.isRandomFeed
+          ? await _loadRandomExplorePage(
+              seed: state.randomSeed,
+              afterId: state.randomAfterId,
+              hasWrapped: state.randomHasWrapped,
+            )
+          : await _supabaseService.searchVideosByTitle(
+              query,
+              limit: _continuationPageSize,
+              offset: state.nextOffset,
+              sportId: selectedSportId,
+            );
+      if (_isInactive) return;
 
       final newVideos = List<SportVideo>.from(
         result['videos'] as List<dynamic>? ?? const <SportVideo>[],
@@ -304,17 +373,32 @@ class ExploreVideoFeedCubit extends Cubit<ExploreVideoFeedState>
         final videoId = video.id;
         return !existingIds.contains(videoId);
       }).toList();
+      final nextCursor = result['nextCursor'] as Map<String, dynamic>?;
 
       emit(
         state.copyWith(
           videos: [...state.videos, ...dedupedVideos],
-          nextOffset: result['nextOffset'] as int? ?? state.nextOffset,
+          nextOffset: state.isRandomFeed
+              ? state.nextOffset
+              : result['nextOffset'] as int? ?? state.nextOffset,
           hasMoreContent: result['hasMore'] == true,
+          randomSeed: state.isRandomFeed
+              ? result['seed'] as String? ?? state.randomSeed
+              : null,
+          randomAfterId: state.isRandomFeed
+              ? (nextCursor?['afterId'] as String?)
+              : null,
+          randomHasWrapped: state.isRandomFeed
+              ? ((nextCursor?['hasWrapped']) == true)
+              : false,
           isLoadingMore: false,
           clearErrorMessage: true,
         ),
       );
+
+      _saveProgress();
     } catch (_) {
+      if (_isInactive) return;
       emit(
         state.copyWith(
           isLoadingMore: false,
@@ -396,6 +480,8 @@ class ExploreVideoFeedCubit extends Cubit<ExploreVideoFeedState>
       return;
     }
 
+    _engagementTracker.onPlaybackProgress(value);
+
     if (value.position <= _replayResetThreshold) {
       _viewThresholdReachedIndexes.remove(index);
     }
@@ -418,6 +504,7 @@ class ExploreVideoFeedCubit extends Cubit<ExploreVideoFeedState>
 
   Future<void> _incrementViewCount(int index) async {
     final linkedVideoId = _linkedVideoIdForIndex(index);
+
     if (linkedVideoId == null || linkedVideoId.isEmpty) {
       return;
     }
@@ -435,6 +522,31 @@ class ExploreVideoFeedCubit extends Cubit<ExploreVideoFeedState>
     return state.videos[index].id;
   }
 
+  int? _subcategoryIdForIndex(int index) {
+    if (index < 0 || index >= state.videos.length) {
+      return null;
+    }
+
+    return state.videos[index].subcategoryId;
+  }
+
+  void _saveProgress() {
+    _progressStore.save(
+      ExploreFeedProgress(
+        query: query,
+        selectedSportId: selectedSportId,
+        isRandomFeed: state.isRandomFeed,
+        videos: state.videos,
+        currentIndex: state.currentIndex,
+        nextOffset: state.nextOffset,
+        hasMore: state.hasMoreContent,
+        randomSeed: state.randomSeed,
+        randomAfterId: state.randomAfterId,
+        randomHasWrapped: state.randomHasWrapped,
+      ),
+    );
+  }
+
   void _bumpControllerGeneration() {
     emit(state.copyWith(controllerGeneration: state.controllerGeneration + 1));
   }
@@ -442,6 +554,7 @@ class ExploreVideoFeedCubit extends Cubit<ExploreVideoFeedState>
   @override
   Future<void> close() async {
     _isShuttingDown = true;
+    _engagementTracker.stop();
 
     for (final entry in _controllerListeners.entries) {
       final controller = _controllers[entry.key];

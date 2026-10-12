@@ -1,7 +1,7 @@
 import 'package:beat_that/models/my_video.dart';
+import 'package:beat_that/widgets/beat_shimmer.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:shimmer/shimmer.dart';
 import 'package:beat_that/constants/app_colors.dart';
 import 'package:beat_that/constants/sports_data.dart';
 import 'package:beat_that/widgets/thumbnail_error_widget.dart';
@@ -22,15 +22,6 @@ class VideoThumbnailItem extends StatelessWidget {
     required this.onTap,
     this.onLongPress,
   });
-
-  /// YouTube-style shimmer colors for loading state
-  Color _getShimmerBaseColor() {
-    return isDark ? const Color(0xFF313131) : const Color(0xFFF0F0F0);
-  }
-
-  Color _getShimmerHighlightColor() {
-    return isDark ? const Color(0xFF424242) : const Color(0xFFE0E0E0);
-  }
 
   /// Format view count in human-readable format (1.2M, 500K, etc.) - YouTube style
   String _formatViewCount(int count) {
@@ -103,13 +94,8 @@ class VideoThumbnailItem extends StatelessWidget {
                       fit: BoxFit.cover,
                       loadingBuilder: (context, child, loadingProgress) {
                         if (loadingProgress == null) return child;
-                        // YouTube-style shimmer effect
-                        return Shimmer.fromColors(
-                          baseColor: _getShimmerBaseColor(),
-                          highlightColor: _getShimmerHighlightColor(),
-                          period: const Duration(milliseconds: 1200),
-                          child: Container(color: _getShimmerBaseColor()),
-                        );
+
+                        return const BeatShimmerFill();
                       },
                       errorBuilder: (context, error, stackTrace) {
                         return ThumbnailErrorWidget(
@@ -249,7 +235,9 @@ class VideoThumbnailItem extends StatelessWidget {
                                     child: Text(
                                       'No ratings',
                                       style: TextStyle(
-                                        color: Colors.white.withValues(alpha: 0.7),
+                                        color: Colors.white.withValues(
+                                          alpha: 0.7,
+                                        ),
                                         fontSize: 11,
                                         fontWeight: FontWeight.w500,
                                         letterSpacing: -0.2,
@@ -272,7 +260,9 @@ class VideoThumbnailItem extends StatelessWidget {
                                       Icon(
                                         Icons.visibility_rounded,
                                         size: 13,
-                                        color: Colors.white.withValues(alpha: 0.9),
+                                        color: Colors.white.withValues(
+                                          alpha: 0.9,
+                                        ),
                                       ),
                                       const SizedBox(width: 3),
                                       Text(
@@ -280,7 +270,9 @@ class VideoThumbnailItem extends StatelessWidget {
                                             ? '${_formatViewCount(thumbnail.viewCount)} views'
                                             : 'No views',
                                         style: TextStyle(
-                                          color: Colors.white.withValues(alpha: 0.9),
+                                          color: Colors.white.withValues(
+                                            alpha: 0.9,
+                                          ),
                                           fontSize: 11,
                                           fontWeight: FontWeight.w600,
                                           letterSpacing: -0.2,

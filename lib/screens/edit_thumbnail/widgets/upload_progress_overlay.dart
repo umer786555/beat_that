@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:beat_that/constants/app_colors.dart';
+
 class UploadProgressOverlay extends StatelessWidget {
   final num progressPercent;
   final num sentBytes;
@@ -34,13 +35,9 @@ class UploadProgressOverlay extends StatelessWidget {
     final progress = (progressPercent / 100).clamp(0.0, 1.0);
     final percentage = progressPercent.clamp(0, 100).toInt();
 
-    final surfaceColor = isDarkMode
-        ? const Color(0xFF1C1C1E)
-        : Colors.white;
+    final surfaceColor = isDarkMode ? const Color(0xFF1C1C1E) : Colors.white;
 
-    final primaryTextColor = isDarkMode
-        ? Colors.white
-        : AppColors.black;
+    final primaryTextColor = isDarkMode ? Colors.white : AppColors.black;
 
     final secondaryTextColor = primaryTextColor.withValues(alpha: 0.55);
 
@@ -55,24 +52,15 @@ class UploadProgressOverlay extends StatelessWidget {
         duration: const Duration(milliseconds: 250),
         curve: Curves.easeOut,
         child: Container(
-          color: Colors.black.withValues(
-            alpha: isDarkMode ? 0.68 : 0.52,
-          ),
+          color: Colors.black.withValues(alpha: isDarkMode ? 0.68 : 0.52),
           alignment: Alignment.center,
           child: SafeArea(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24),
               child: Container(
                 width: double.infinity,
-                constraints: const BoxConstraints(
-                  maxWidth: 360,
-                ),
-                padding: const EdgeInsets.fromLTRB(
-                  24,
-                  24,
-                  24,
-                  16,
-                ),
+                constraints: const BoxConstraints(maxWidth: 360),
+                padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
                 decoration: BoxDecoration(
                   color: surfaceColor,
                   borderRadius: BorderRadius.circular(24),

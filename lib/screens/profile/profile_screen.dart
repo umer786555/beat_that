@@ -222,8 +222,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         ProfileVideosGrid(
                           videos: state.myVideo,
                           isDark: isDark,
+                          deletingVideoId: state.deletingVideoId,
                           onVideoOpen: (videoPath) {},
-                          onVideoDeleteConfirmed: (videoId) {},
+                          onVideoDeleteConfirmed: (videoId) {
+                            context.read<ProfileBloc>().add(
+                              DeleteVideoEvent(videoId: videoId),
+                            );
+                          },
                         ),
                     ],
                   ),
@@ -236,7 +241,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   child: FloatingActionButton.extended(
                     onPressed: () async {
                       HapticFeedback.mediumImpact();
-                      GoRouter.of(context).pushNamed('sports-hub');
+                      GoRouter.of(context).pushNamed('upload-category');
                     },
                     backgroundColor: isDark
                         ? AppColors.cyan

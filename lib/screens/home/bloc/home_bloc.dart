@@ -19,7 +19,8 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
   final supabaseService = locator<SupabaseService>();
   final homeFeedService = locator<HomeFeedService>();
   final authService = locator<AuthService>();
-  // Track pagination state
+  // Session-scoped feed state; `_seenFeedVideoIds` guards against rare repeats
+  // when follows change mid-session.
   List<SportVideo> _allFeedVideos = [];
   final Set<String> _seenFeedVideoIds = <String>{};
   HomeFeedCursor _feedCursor = const HomeFeedCursor.initial();
@@ -31,6 +32,7 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
     on<FetchFeedEvent>(_onFetchFeed);
     on<RefreshFeedEvent>(_onRefreshFeed);
     on<LoadMoreFeedEvent>(_onLoadMoreFeed);
+    on<MergeVideoFeedSessionEvent>(_onMergeVideoFeedSession);
   }
 
   /// Handle InitialEvent - save user profile and fetch initial feed
@@ -68,13 +70,7 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
     }
   }
 
-  /// Handle FetchFeedEvent - fetch blended home feed
-  ///
-  /// Fetches videos from 4 sources in parallel and blends them:
-  /// - 40% Personalized (user's engaged categories)
-  /// - 30% Following (videos from followed users)
-  /// - 20% Trending (best-rated videos from last 7 days)
-  /// - 10% Discovery (random from unwatched categories)
+  /// Handle FetchFeedEvent by requesting the next RPC-backed Home feed page.
   Future<void> _onFetchFeed(
     FetchFeedEvent event,
     Emitter<HomeState> emit,
@@ -88,12 +84,7 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
       final isFirstLoad = event.offset == 0;
       emit(FeedLoading(offset: event.offset, isFirstLoad: isFirstLoad));
 
-      // Keep advancing through blended feed offsets until we either fill this
-      // page with unseen videos or the feed is actually exhausted.
       final feedResult = await homeFeedService.getHomeFeedContinuation(
-        seenVideoIds: event.offset == 0
-            ? <String>{}
-            : Set<String>.from(_seenFeedVideoIds),
         cursor: event.offset == 0
             ? const HomeFeedCursor.initial()
             : _feedCursor,
@@ -225,5 +216,37 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
         ),
       );
     }
+  }
+
+  void _onMergeVideoFeedSession(
+    MergeVideoFeedSessionEvent event,
+    Emitter<HomeState> emit,
+  ) {
+    final videos = event.videos;
+    if (state is! FeedLoaded ||
+        _isPaginationRequestInFlight ||
+        videos.length <= _allFeedVideos.length) {
+      return;
+    }
+
+    // Only extend the grid if the session continues the grid's list exactly.
+    for (var i = 0; i < _allFeedVideos.length; i++) {
+      if (videos[i].id != _allFeedVideos[i].id) return;
+    }
+
+    final previousCount = _allFeedVideos.length;
+    _allFeedVideos = List<SportVideo>.from(videos);
+    _seenFeedVideoIds.addAll(videos.map((video) => video.id));
+    _feedCursor = event.nextCursor;
+    _hasMoreFeedContent = event.hasMoreContent;
+
+    emit(
+      FeedLoaded(
+        videos: List<SportVideo>.from(_allFeedVideos),
+        offset: previousCount,
+        hasMoreContent: event.hasMoreContent,
+        nextCursor: event.nextCursor,
+      ),
+    );
   }
 }

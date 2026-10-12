@@ -230,10 +230,18 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState>
   ) async {
     print('Attempting to delete video with ID: ${event.videoId}');
 
+    final currentState = state;
+
+    if (currentState is! ProfileLoaded) {
+      return;
+    }
+
+    if (currentState.deletingVideoId != null) {
+      return;
+    }
+
     try {
-      // Save current state before emitting loading
-      final previousState = state;
-      emit(ProfileLoading());
+      emit(currentState.copyWith(nextDeletingVideoId: event.videoId));
 
       // Call Supabase service to delete the video
       final deleteResult = await supabaseService.deleteMyVideoViaEdgeFunction(
@@ -245,23 +253,53 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState>
 
         // Fetch updated thumbnails after deletion
         final updatedThumbnails = await supabaseService.getMyVideo();
+        await _syncApprovalSubscription(updatedThumbnails);
 
-        // Emit success with updated thumbnails
-        if (previousState is ProfileLoaded) {
-          emit(previousState.copyWith(thumbnails: updatedThumbnails));
-        } else {
-          // Fallback: just trigger full profile load
-          add(LoadProfileEvent());
-        }
+        _emitLatestLoadedState(
+          emit,
+          thumbnails: updatedThumbnails,
+          clearDeletingVideo: true,
+        );
+        emitPresentation(
+          ProfileDeleteVideoSuccessEvent(message: 'Video deleted.'),
+        );
       } else {
-        emit(
-          ProfileError(
+        _emitLatestLoadedState(emit, clearDeletingVideo: true);
+        emitPresentation(
+          ProfileDeleteVideoErrorEvent(
             message: 'Failed to delete video: ${deleteResult['error']}',
           ),
         );
       }
     } catch (e) {
-      emit(ProfileError(message: 'Failed to delete video: $e'));
+      _emitLatestLoadedState(emit, clearDeletingVideo: true);
+      emitPresentation(
+        ProfileDeleteVideoErrorEvent(message: 'Failed to delete video: $e'),
+      );
+    }
+  }
+
+  void _emitLatestLoadedState(
+    Emitter<ProfileState> emit, {
+    List<MyVideo>? thumbnails,
+    bool clearDeletingVideo = false,
+  }) {
+    final latestState = state;
+
+    if (latestState is ProfileLoaded) {
+      emit(
+        latestState.copyWith(
+          thumbnails: thumbnails,
+          nextDeletingVideoId: clearDeletingVideo
+              ? null
+              : _deletingVideoIdUnset,
+        ),
+      );
+      return;
+    }
+
+    if (!isClosed) {
+      add(const LoadProfileEvent());
     }
   }
 

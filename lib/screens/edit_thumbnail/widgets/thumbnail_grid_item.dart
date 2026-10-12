@@ -1,7 +1,7 @@
 import 'package:beat_that/constants/app_colors.dart';
+import 'package:beat_that/widgets/beat_shimmer.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:shimmer/shimmer.dart';
 
 class ThumbnailGridItem extends StatelessWidget {
   final Uint8List? thumbnailData;
@@ -24,16 +24,18 @@ class ThumbnailGridItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: isLoading ? null : () {
-        HapticFeedback.mediumImpact();
-        onTap();
-      },
+      onTap: isLoading
+          ? null
+          : () {
+              HapticFeedback.mediumImpact();
+              onTap();
+            },
       child: Container(
         decoration: BoxDecoration(
           border: Border.all(
-            color: isSelected 
-              ? AppColors.electricMagenta
-              : (borderColor ?? Theme.of(context).dividerColor),
+            color: isSelected
+                ? AppColors.electricMagenta
+                : (borderColor ?? Theme.of(context).dividerColor),
             width: isSelected ? 1 : 1,
           ),
           borderRadius: BorderRadius.circular(borderRadius ?? 8),
@@ -49,13 +51,7 @@ class ThumbnailGridItem extends StatelessWidget {
                       firstChild: SizedBox(
                         width: constraints.maxWidth,
                         height: constraints.maxHeight,
-                        child: Shimmer.fromColors(
-                          baseColor: Colors.grey[300]!,
-                          highlightColor: Colors.grey[100]!,
-                          child: Container(
-                            color: Colors.white,
-                          ),
-                        ),
+                        child: const BeatShimmerFill(),
                       ),
                       secondChild: SizedBox(
                         width: constraints.maxWidth,
@@ -63,6 +59,11 @@ class ThumbnailGridItem extends StatelessWidget {
                         child: Image.memory(
                           thumbnailData!,
                           fit: BoxFit.cover,
+                          cacheHeight: constraints.hasBoundedHeight
+                              ? (constraints.maxHeight *
+                                        MediaQuery.devicePixelRatioOf(context))
+                                    .round()
+                              : null,
                           errorBuilder: (context, error, stackTrace) {
                             return Center(
                               child: Column(
@@ -87,7 +88,9 @@ class ThumbnailGridItem extends StatelessWidget {
                           },
                         ),
                       ),
-                      crossFadeState: isLoading ? CrossFadeState.showFirst : CrossFadeState.showSecond,
+                      crossFadeState: isLoading
+                          ? CrossFadeState.showFirst
+                          : CrossFadeState.showSecond,
                       duration: const Duration(milliseconds: 400),
                     );
                   },
@@ -108,11 +111,7 @@ class ThumbnailGridItem extends StatelessWidget {
                         shape: BoxShape.circle,
                       ),
                       padding: EdgeInsets.all(8),
-                      child: Icon(
-                        Icons.check,
-                        color: Colors.white,
-                        size: 28,
-                      ),
+                      child: Icon(Icons.check, color: Colors.white, size: 28),
                     ),
                   ),
                 ),

@@ -11,6 +11,7 @@ import 'package:beat_that/services/dio_upload_service.dart';
 import 'package:beat_that/services/home_feed_service.dart';
 import 'package:beat_that/services/home_video_feed_session_store.dart';
 import 'package:beat_that/services/onboarding_service.dart';
+import 'package:beat_that/services/explore_feed_progress_store.dart';
 import 'package:beat_that/routes/app_router.dart';
 
 /// Service Locator instance for dependency injection
@@ -89,6 +90,10 @@ void setupServiceLocator(PreferencesService preferencesService) {
     // Register HomeVideoFeedSessionStore for lightweight route handoff
     locator.registerSingleton<HomeVideoFeedSessionStore>(
       HomeVideoFeedSessionStore(),
+    );
+
+    locator.registerSingleton<ExploreFeedProgressStore>(
+      ExploreFeedProgressStore(),
     );
 
     locator.registerSingleton<OnboardingService>(

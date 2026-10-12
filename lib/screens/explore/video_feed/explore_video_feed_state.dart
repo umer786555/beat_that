@@ -8,6 +8,10 @@ class ExploreVideoFeedState extends Equatable {
   final int currentIndex;
   final int nextOffset;
   final bool hasMoreContent;
+  final bool isRandomFeed;
+  final String? randomSeed;
+  final String? randomAfterId;
+  final bool randomHasWrapped;
   final bool isLoadingMore;
   final int controllerGeneration;
   final String? errorMessage;
@@ -19,6 +23,10 @@ class ExploreVideoFeedState extends Equatable {
     required this.currentIndex,
     required this.nextOffset,
     required this.hasMoreContent,
+    this.isRandomFeed = false,
+    this.randomSeed,
+    this.randomAfterId,
+    this.randomHasWrapped = false,
     this.isLoadingMore = false,
     this.controllerGeneration = 0,
     this.errorMessage,
@@ -31,6 +39,10 @@ class ExploreVideoFeedState extends Equatable {
     int? currentIndex,
     int? nextOffset,
     bool? hasMoreContent,
+    bool? isRandomFeed,
+    Object? randomSeed = _sentinel,
+    Object? randomAfterId = _sentinel,
+    bool? randomHasWrapped,
     bool? isLoadingMore,
     int? controllerGeneration,
     String? errorMessage,
@@ -43,6 +55,14 @@ class ExploreVideoFeedState extends Equatable {
       currentIndex: currentIndex ?? this.currentIndex,
       nextOffset: nextOffset ?? this.nextOffset,
       hasMoreContent: hasMoreContent ?? this.hasMoreContent,
+        isRandomFeed: isRandomFeed ?? this.isRandomFeed,
+        randomSeed: identical(randomSeed, _sentinel)
+          ? this.randomSeed
+          : randomSeed as String?,
+        randomAfterId: identical(randomAfterId, _sentinel)
+          ? this.randomAfterId
+          : randomAfterId as String?,
+        randomHasWrapped: randomHasWrapped ?? this.randomHasWrapped,
       isLoadingMore: isLoadingMore ?? this.isLoadingMore,
       controllerGeneration: controllerGeneration ?? this.controllerGeneration,
       errorMessage: clearErrorMessage
@@ -61,6 +81,10 @@ class ExploreVideoFeedState extends Equatable {
     currentIndex,
     nextOffset,
     hasMoreContent,
+    isRandomFeed,
+    randomSeed,
+    randomAfterId,
+    randomHasWrapped,
     isLoadingMore,
     controllerGeneration,
     errorMessage,

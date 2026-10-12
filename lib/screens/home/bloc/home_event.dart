@@ -13,7 +13,7 @@ final class InitialEvent extends HomeEvent {
   const InitialEvent();
 }
 
-/// Fetch the home feed with 40/30/20/10 blending
+/// Fetch the next weighted home-feed continuation
 /// [limit] - number of videos to fetch (default: 50)
 /// [offset] - pagination offset (default: 0)
 final class FetchFeedEvent extends HomeEvent {
@@ -37,4 +37,20 @@ final class RefreshFeedEvent extends HomeEvent {
 /// Load next page of feed (pagination)
 final class LoadMoreFeedEvent extends HomeEvent {
   const LoadMoreFeedEvent();
+}
+
+/// Adds pages loaded in the full-screen feed back into the Home grid.
+final class MergeVideoFeedSessionEvent extends HomeEvent {
+  const MergeVideoFeedSessionEvent({
+    required this.videos,
+    required this.nextCursor,
+    required this.hasMoreContent,
+  });
+
+  final List<SportVideo> videos;
+  final HomeFeedCursor nextCursor;
+  final bool hasMoreContent;
+
+  @override
+  List<Object> get props => [videos, nextCursor, hasMoreContent];
 }

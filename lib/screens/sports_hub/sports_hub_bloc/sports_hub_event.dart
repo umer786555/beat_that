@@ -18,3 +18,4 @@ class RetrySportsEvent extends SportsHubEvent {
 
   const RetrySportsEvent({this.locale});
 }
+

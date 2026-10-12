@@ -149,7 +149,9 @@ class _TitleInputBottomSheetState extends State<TitleInputBottomSheet> {
         ),
       ),
       child: Padding(
-        padding: _defaultPadding,
+        padding:
+            _defaultPadding +
+            EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,

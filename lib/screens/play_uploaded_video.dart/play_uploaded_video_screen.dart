@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'package:beat_that/constants/app_colors.dart';
-import 'package:beat_that/models/sport.dart';
+import 'package:beat_that/constants/app_strings.dart';
+import 'package:beat_that/constants/upload_limits.dart';
+import 'package:beat_that/models/category.dart';
 import 'package:beat_that/widgets/error_screen.dart';
 import 'package:beat_that/widgets/loading_screen.dart';
 import 'package:beat_that/widgets/custom_back_button.dart';
@@ -20,8 +22,9 @@ import 'package:beat_that/routes/app_router.dart';
 class PlayUploadedVideoScreen extends StatefulWidget {
   final String videoPath;
   final bool shouldShowEditButtons;
-  final Sport? sport;
+  final CategoryModel? sport;
   final String? selectedSubcategory;
+  final String? customSportName;
 
   const PlayUploadedVideoScreen({
     super.key,
@@ -29,6 +32,7 @@ class PlayUploadedVideoScreen extends StatefulWidget {
     this.shouldShowEditButtons = false,
     this.sport,
     this.selectedSubcategory,
+    this.customSportName,
   });
 
   @override
@@ -113,6 +117,13 @@ class _PlayUploadedVideoScreenState extends State<PlayUploadedVideoScreen> {
             return _buildFullScreenVideoLayout(context, state, bloc);
           }
 
+          final loadedDuration = state is PlayUploadedVideoLoaded
+              ? state.duration
+              : null;
+          final isTooShort =
+              loadedDuration != null &&
+              loadedDuration < UploadLimits.minimumVideoDuration;
+
           return Scaffold(
             appBar: AppBar(
               elevation: 0,
@@ -127,48 +138,73 @@ class _PlayUploadedVideoScreenState extends State<PlayUploadedVideoScreen> {
               ),
               leading: IconButton(
                 icon: const Icon(Icons.arrow_back_ios),
-                onPressed: () {
-                  context.read<PlayUploadedVideoBloc>().add(
-                    const DisposeVideoEvent(),
-                  );
-
-                  Navigator.pop(context);
-                },
+                onPressed: () => _closeEditor(context, bloc),
               ),
             ),
-            body: _buildBody(context, state),
-            // Floating action button for continue (only in edit mode)
+            body: Stack(
+              fit: StackFit.expand,
+              children: [
+                _buildBody(context, state),
+                if (isTooShort)
+                  Positioned(
+                    top: _padding12,
+                    left: _padding16,
+                    right: _padding16,
+                    child: _buildTooShortBanner(),
+                  ),
+              ],
+            ),
             floatingActionButton:
-                videoController != null &&
-                    (state is PlayUploadedVideoReady ||
-                        state is PlayUploadedVideoPlaying ||
-                        state is PlayUploadedVideoPaused)
-                ? FloatingActionButton.extended(
-                    onPressed: () {
-                      HapticFeedback.mediumImpact();
-                      final duration = videoController.value.duration;
-                      context.goNamed(
-                        'edit-thumbnail',
-                        extra: EditThumbnailExtra(
-                          videoPath: widget.videoPath,
-                          videoDuration: duration,
-                          sport: widget.sport!,
-                          selectedSubcategory: widget.selectedSubcategory,
-                        ),
-                      );
-                    },
-                    backgroundColor: AppColors.cyan,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    icon: const Icon(Icons.arrow_forward),
-                    label: const Text('Next'),
+                videoController != null && loadedDuration != null
+                ? _buildEditFab(
+                    context,
+                    bloc,
+                    loadedDuration,
+                    isTooShort: isTooShort,
                   )
                 : null,
           );
         },
       ),
+    );
+  }
+
+  void _closeEditor(BuildContext context, PlayUploadedVideoBloc bloc) {
+    bloc.add(const DisposeVideoEvent());
+    Navigator.pop(context);
+  }
+
+  Widget _buildEditFab(
+    BuildContext context,
+    PlayUploadedVideoBloc bloc,
+    Duration videoDuration, {
+    required bool isTooShort,
+  }) {
+    return FloatingActionButton.extended(
+      onPressed: () {
+        HapticFeedback.mediumImpact();
+        if (isTooShort) {
+          _closeEditor(context, bloc);
+          return;
+        }
+        context.goNamed(
+          'edit-thumbnail',
+          extra: EditThumbnailExtra(
+            videoPath: widget.videoPath,
+            videoDuration: videoDuration,
+            sport: widget.sport!,
+            selectedSubcategory: widget.selectedSubcategory,
+            customSportName: widget.customSportName,
+          ),
+        );
+      },
+      backgroundColor: AppColors.cyan,
+      foregroundColor: Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      icon: Icon(
+        isTooShort ? Icons.video_library_outlined : Icons.arrow_forward,
+      ),
+      label: Text(isTooShort ? AppStrings.chooseAnotherVideo : 'Next'),
     );
   }
 
@@ -320,10 +356,7 @@ class _PlayUploadedVideoScreenState extends State<PlayUploadedVideoScreen> {
               ),
 
             // Bottom gradient + progress slider (only show when controls visible)
-            if (_showControls &&
-                (state is PlayUploadedVideoReady ||
-                    state is PlayUploadedVideoPlaying ||
-                    state is PlayUploadedVideoPaused))
+            if (_showControls && state is PlayUploadedVideoLoaded)
               Positioned(
                 bottom: 0,
                 left: 0,
@@ -468,9 +501,7 @@ class _PlayUploadedVideoScreenState extends State<PlayUploadedVideoScreen> {
             ),
 
           // Bottom gradient + progress slider (always visible in edit mode for precise editing)
-          if (state is PlayUploadedVideoReady ||
-              state is PlayUploadedVideoPlaying ||
-              state is PlayUploadedVideoPaused)
+          if (state is PlayUploadedVideoLoaded)
             Positioned(
               bottom: 0,
               left: 0,
@@ -554,6 +585,69 @@ class _PlayUploadedVideoScreenState extends State<PlayUploadedVideoScreen> {
               ),
             ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildTooShortBanner() {
+    return Semantics(
+      liveRegion: true,
+      child: Container(
+        padding: const EdgeInsets.all(_padding16),
+        decoration: BoxDecoration(
+          color: AppColors.red,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.black.withValues(alpha: 0.4),
+              blurRadius: 16,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.2),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.timer_off_outlined,
+                color: Colors.white,
+                size: 28,
+              ),
+            ),
+            const SizedBox(width: _padding12),
+            const Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    AppStrings.videoTooShortTitle,
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 17,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: -0.2,
+                    ),
+                  ),
+                  SizedBox(height: 4),
+                  Text(
+                    AppStrings.videoTooShort,
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

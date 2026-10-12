@@ -4,19 +4,20 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
-import 'package:shimmer/shimmer.dart';
 import 'package:beat_that/service_locator.dart';
 import 'package:beat_that/screens/home/bloc/home_bloc.dart';
 import 'package:beat_that/screens/home/video_feed/models/home_video_feed_route_extra.dart';
 import 'package:beat_that/services/app_onboarding.dart';
 import 'package:beat_that/services/home_video_feed_session_store.dart';
 import 'package:beat_that/services/onboarding_service.dart';
+import 'package:beat_that/widgets/beat_shimmer.dart';
+import 'package:beat_that/widgets/feed_grid_reveal.dart';
 import 'package:beat_that/widgets/home_feed_native_ad_card.dart';
 import 'package:beat_that/widgets/video_feed_card.dart';
 import 'package:beat_that/widgets/shimmer_loading.dart';
 
 /// Home screen displayed when user is logged in
-/// Shows personalized video feed with YouTube/Instagram-style layout
+/// Shows personalized video feed
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -36,6 +37,8 @@ class _HomeScreenState extends State<HomeScreen> {
   HomeFeedCursor _lastCursor = const HomeFeedCursor.initial();
   bool _lastHasMoreContent = true;
   bool _hasAttemptedHomeOnboarding = false;
+  final GlobalKey _revealKey = GlobalKey();
+  int? _revealIndex;
 
   @override
   void initState() {
@@ -156,7 +159,7 @@ class _HomeScreenState extends State<HomeScreen> {
         builder: (context, state) {
           // Initial state - not ready yet
           if (state is HomeInitial) {
-            return const Center(child: CircularProgressIndicator());
+            return const ShimmerLoading(cardCount: 8);
           }
 
           if (state is UserProfileLoaded) {
@@ -290,6 +293,7 @@ class _HomeScreenState extends State<HomeScreen> {
           final globalIndex = section.startVideoIndex + localIndex;
           final video = section.videos[localIndex];
           final card = VideoFeedCard(
+            key: globalIndex == _revealIndex ? _revealKey : null,
             videoId: video.id,
             thumbnailUrl: video.thumbnailUrl ?? '',
             title: video.title,
@@ -297,21 +301,35 @@ class _HomeScreenState extends State<HomeScreen> {
             sportId: video.sportId,
             viewCount: video.viewCount,
             rating: video.averageRating,
-            onTap: () {
+            onTap: () async {
+              final homeBloc = context.read<HomeBloc>();
               final sessionStore = locator<HomeVideoFeedSessionStore>();
               final sessionId = sessionStore.createSession(
                 videos: List.of(allVideos),
                 nextCursor: nextCursor,
                 hasMoreContent: hasMoreContent,
+                initialIndex: globalIndex,
               );
 
-              context.pushNamed(
+              await context.pushNamed(
                 'home-video-feed',
                 extra: HomeVideoFeedExtra(
                   sessionId: sessionId,
                   initialIndex: globalIndex,
                 ),
               );
+
+              final session = sessionStore.takeSession(sessionId);
+              if (session == null || homeBloc.isClosed) return;
+
+              homeBloc.add(
+                MergeVideoFeedSessionEvent(
+                  videos: List.of(session.videos),
+                  nextCursor: session.nextCursor,
+                  hasMoreContent: session.hasMoreContent,
+                ),
+              );
+              _revealVideo(session.currentIndex, homeBloc);
             },
           );
 
@@ -331,6 +349,24 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  void _revealVideo(int index, HomeBloc homeBloc) {
+    if (!mounted) return;
+    setState(() => _revealIndex = index);
+    revealFeedGridItem(
+      controller: _scrollController,
+      targetKey: _revealKey,
+      estimatedOffset: estimateFeedGridOffset(
+        index: index,
+        gridWidth: MediaQuery.sizeOf(context).width,
+      ),
+      // Stop if the merge was skipped and the grid doesn't contain this video.
+      shouldContinue: () {
+        final state = homeBloc.state;
+        return mounted && state is FeedLoaded && index < state.videos.length;
+      },
+    );
+  }
+
   SliverPadding _buildLoadingSliver() {
     return SliverPadding(
       padding: const EdgeInsets.fromLTRB(6, 12, 6, 0),
@@ -342,16 +378,9 @@ class _HomeScreenState extends State<HomeScreen> {
           childAspectRatio: 0.64,
         ),
         delegate: SliverChildBuilderDelegate((context, index) {
-          return Shimmer.fromColors(
-            baseColor: Colors.grey[300]!,
-            highlightColor: Colors.grey[100]!,
-            period: const Duration(milliseconds: 1500),
-            child: Container(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(12),
-                color: Colors.grey[300],
-              ),
-            ),
+          return ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: const BeatShimmerFill(),
           );
         }, childCount: 2),
       ),

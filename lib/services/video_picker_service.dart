@@ -37,10 +37,16 @@ class VideoPickerService {
   /// Returns the selected photo file, or null if cancelled/error
   /// Photos are saved to app cache and only persist temporarily.
   /// If you need to keep the photo, move it to a permanent location.
-  Future<XFile?> pickGalleryPhoto() async {
+  Future<XFile?> pickGalleryPhoto({
+    double? maxDimension,
+    int? imageQuality,
+  }) async {
     try {
       final XFile? photo = await _imagePicker.pickImage(
         source: ImageSource.gallery,
+        maxWidth: maxDimension,
+        maxHeight: maxDimension,
+        imageQuality: imageQuality,
       );
       return photo;
     } catch (e) {
@@ -49,4 +55,3 @@ class VideoPickerService {
     }
   }
 }
-

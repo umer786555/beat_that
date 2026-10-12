@@ -1,5 +1,5 @@
 import 'package:beat_that/constants/app_colors.dart';
-import 'package:beat_that/constants/sports_data.dart';
+import 'package:beat_that/screens/explore/explore_filter_catalog.dart';
 import 'package:beat_that/screens/explore/video_feed/widgets/sport_chip.dart';
 import 'package:flutter/material.dart';
 
@@ -7,10 +7,10 @@ class SearchHeader extends StatefulWidget {
   const SearchHeader({
     super.key,
     required this.controller,
-    required this.selectedSportId,
-    required this.availableSportIds,
+    required this.filterCatalog,
+    required this.selectedFilterId,
     required this.onChanged,
-    required this.onSportChanged,
+    required this.onFilterChanged,
     required this.onClearQuery,
     this.onSubmitted,
 
@@ -20,14 +20,14 @@ class SearchHeader extends StatefulWidget {
     this.cursorColor = AppColors.cyan,
     this.padding = const EdgeInsets.fromLTRB(16, 12, 16, 6),
     this.spaceBetween = 10,
-    this.sportChipSpacing = 8,
+    this.filterControlSpacing = 8,
   });
 
   final TextEditingController controller;
-  final String? selectedSportId;
-  final List<String> availableSportIds;
+  final ExploreFilterCatalog filterCatalog;
+  final String? selectedFilterId;
   final ValueChanged<String> onChanged;
-  final ValueChanged<String?> onSportChanged;
+  final ValueChanged<String?> onFilterChanged;
   final VoidCallback onClearQuery;
   final VoidCallback? onSubmitted;
   final ValueChanged<bool>? onFocusChanged;
@@ -36,7 +36,7 @@ class SearchHeader extends StatefulWidget {
   final Color cursorColor;
   final EdgeInsets padding;
   final double spaceBetween;
-  final double sportChipSpacing;
+  final double filterControlSpacing;
 
   @override
   State<SearchHeader> createState() => _SearchHeaderState();
@@ -146,6 +146,7 @@ class _SearchHeaderState extends State<SearchHeader> {
         ? AppColors.cyan.withValues(alpha: 0.78)
         : AppColors.electricMagenta.withValues(alpha: 0.9);
     const chipSelectedLabelColor = AppColors.white;
+    final allOptions = widget.filterCatalog.allOptions;
 
     return Padding(
       padding: widget.padding,
@@ -178,21 +179,29 @@ class _SearchHeaderState extends State<SearchHeader> {
                       onOpenSearch: _openSearch,
                       labelText: widget.labelText,
                     ),
-                  if (!_isSearchOpen) SizedBox(width: widget.sportChipSpacing),
-                  ...widget.availableSportIds.indexed.map(
-                    (entry) {
-                      final index = entry.$1;
-                      final sportId = entry.$2;
+                  if (!_isSearchOpen)
+                    SizedBox(width: widget.filterControlSpacing),
+                  SportChip(
+                    label: 'All',
+                    selected: widget.selectedFilterId == null,
+                    onSelected: () => widget.onFilterChanged(null),
+                    selectedColor: chipSelectedColor,
+                    selectedLabelColor: chipSelectedLabelColor,
+                    unselectedBackgroundColor: chipBackgroundColor,
+                    unselectedBorderColor: chipBorderColor,
+                    unselectedLabelColor: theme.colorScheme.onSurfaceVariant,
+                    borderRadius: 999,
+                  ),
+                  ...allOptions.indexed.map((entry) {
+                    final option = entry.$2;
 
-                      return Padding(
-                        padding: EdgeInsets.only(
-                          left: index == 0 ? 0 : widget.sportChipSpacing,
-                        ),
+                    return Padding(
+                      padding: EdgeInsets.only(left: widget.filterControlSpacing),
                       child: SportChip(
-                        label: _getDisplayNameForSport(sportId),
-                        selected: widget.selectedSportId == sportId,
-                        onSelected: () => widget.onSportChanged(
-                          widget.selectedSportId == sportId ? null : sportId,
+                        label: option.label,
+                        selected: widget.selectedFilterId == option.id,
+                        onSelected: () => widget.onFilterChanged(
+                          widget.selectedFilterId == option.id ? null : option.id,
                         ),
                         selectedColor: chipSelectedColor,
                         selectedLabelColor: chipSelectedLabelColor,
@@ -203,8 +212,7 @@ class _SearchHeaderState extends State<SearchHeader> {
                         borderRadius: 999,
                       ),
                     );
-                    },
-                  ),
+                  }),
                 ],
               ),
             ),
@@ -212,10 +220,6 @@ class _SearchHeaderState extends State<SearchHeader> {
         ],
       ),
     );
-  }
-
-  String _getDisplayNameForSport(String sportId) {
-    return getDisplayNameForSport(sportId);
   }
 }
 

@@ -1,6 +1,20 @@
 import 'dart:convert';
+import 'dart:math' as math;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user_personal_profile.dart';
+
+/// How strongly each viewer action changes interest in a subcategory.
+enum EngagementSignal {
+  watched(1),
+  completed(2),
+  ratedHigh(3),
+  ratedLow(-2),
+  quickSkip(-0.5);
+
+  const EngagementSignal(this.weight);
+
+  final double weight;
+}
 
 /// Service to manage application preferences using SharedPreferences
 /// Provides a clean abstraction layer for storing and retrieving app-wide preferences
@@ -87,94 +101,103 @@ class PreferencesService {
     await _prefs.remove('user_personal_profile');
   }
 
-  /// Track a video view for a subcategory
-  /// Increments view count and updates last_viewed timestamp
-  /// Automatically enforces max 20 categories by removing oldest viewed
-  Future<void> trackVideoView(String subcategoryId) async {
+  static const String _engagementKey = 'engagement_data';
+  static const double _halfLifeDays = 14;
+  static const double _minActiveScore = 0.05;
+  static const int _maxTrackedSubcategories = 20;
+
+  /// Adjusts interest in [subcategoryId] by [signal], after fading the
+  /// existing score to today.
+  Future<void> recordEngagement(
+    int subcategoryId,
+    EngagementSignal signal,
+  ) async {
     try {
-      final engagementJson = _prefs.getString('engagement_data');
-      Map<String, dynamic> engagement = {};
+      final engagement = _readEngagement();
+      final now = DateTime.now();
+      final key = subcategoryId.toString();
+      final updatedScore =
+          _currentScore(engagement[key], now) + signal.weight;
 
-      if (engagementJson != null) {
-        engagement = jsonDecode(engagementJson) as Map<String, dynamic>;
-      }
-
-      final now = DateTime.now().toIso8601String();
-
-      // Create new entry or update existing one
-      if (engagement.containsKey(subcategoryId)) {
-        final entry = engagement[subcategoryId] as Map<String, dynamic>;
-        entry['views'] = (entry['views'] as int) + 1;
-        entry['last_viewed'] = now;
+      if (updatedScore <= 0) {
+        engagement.remove(key);
       } else {
-        engagement[subcategoryId] = {'views': 1, 'last_viewed': now};
+        engagement[key] = {
+          'score': updatedScore,
+          'updated_at': now.toIso8601String(),
+        };
       }
 
-      // Enforce max 20 categories - remove oldest if we exceed limit
-      if (engagement.length > 20) {
-        final sortedByTime = engagement.entries.toList()
-          ..sort(
-            (a, b) => DateTime.parse(
-              a.value['last_viewed'] as String,
-            ).compareTo(DateTime.parse(b.value['last_viewed'] as String)),
-          );
-
-        engagement.remove(sortedByTime.first.key);
+      if (engagement.length > _maxTrackedSubcategories) {
+        final weakestKey = engagement.keys.reduce(
+          (a, b) =>
+              _currentScore(engagement[a], now) <=
+                  _currentScore(engagement[b], now)
+              ? a
+              : b,
+        );
+        engagement.remove(weakestKey);
       }
 
-      await _prefs.setString('engagement_data', jsonEncode(engagement));
+      await _prefs.setString(_engagementKey, jsonEncode(engagement));
     } catch (e) {
-      print('Error tracking video view: $e');
+      print('Error recording engagement: $e');
     }
   }
 
-  /// Get top engaged subcategories sorted by view count (highest first)
-  /// Returns list of MapEntry with subcategory ID and engagement data
-  /// Limit defaults to 5, can be customized
+  /// Subcategories ranked by current (faded) interest score, highest first.
   Future<List<MapEntry<String, dynamic>>> getTopSubcategories({
     int limit = 5,
   }) async {
     try {
-      final engagementJson = _prefs.getString('engagement_data');
-      if (engagementJson == null) return [];
+      final now = DateTime.now();
+      final scored =
+          _readEngagement().entries
+              .map((entry) => MapEntry(entry.key, _currentScore(entry.value, now)))
+              .where((entry) => entry.value >= _minActiveScore)
+              .toList()
+            ..sort((a, b) => b.value.compareTo(a.value));
 
-      final engagement = jsonDecode(engagementJson) as Map<String, dynamic>;
-
-      // Convert to list and sort by view count (descending)
-      final sortedList = engagement.entries.toList()
-        ..sort(
-          (a, b) =>
-              (b.value['views'] as int).compareTo(a.value['views'] as int),
-        );
-
-      return sortedList.take(limit).toList();
+      return scored.take(limit).toList();
     } catch (e) {
       print('Error getting top subcategories: $e');
       return [];
     }
   }
 
-  /// Clean up engagement data older than 30 days
-  /// Removes any subcategory not viewed in the last 30 days
-  /// Call this on app launch or periodically to maintain fresh data
+  /// Removes subcategories whose interest has faded to almost nothing.
   Future<void> cleanupOldEngagement() async {
     try {
-      final engagementJson = _prefs.getString('engagement_data');
-      if (engagementJson == null) return;
+      final engagement = _readEngagement();
+      final now = DateTime.now();
+      engagement.removeWhere(
+        (_, value) => _currentScore(value, now) < _minActiveScore,
+      );
 
-      final engagement = jsonDecode(engagementJson) as Map<String, dynamic>;
-      final thirtyDaysAgo = DateTime.now().subtract(Duration(days: 30));
-
-      // Remove entries older than 30 days
-      engagement.removeWhere((key, value) {
-        final lastViewed = DateTime.parse(value['last_viewed'] as String);
-        return lastViewed.isBefore(thirtyDaysAgo);
-      });
-
-      await _prefs.setString('engagement_data', jsonEncode(engagement));
+      await _prefs.setString(_engagementKey, jsonEncode(engagement));
     } catch (e) {
       print('Error cleaning up old engagement data: $e');
     }
+  }
+
+  Map<String, dynamic> _readEngagement() {
+    final engagementJson = _prefs.getString(_engagementKey);
+    if (engagementJson == null) return {};
+    return jsonDecode(engagementJson) as Map<String, dynamic>;
+  }
+
+  double _currentScore(Object? entry, DateTime now) {
+    if (entry is! Map) return 0;
+
+    final score = (entry['score'] as num?)?.toDouble() ?? 0;
+    final updatedAt = DateTime.tryParse(entry['updated_at'] as String? ?? '');
+    if (updatedAt == null) return score;
+
+    final elapsedDays =
+        now.difference(updatedAt).inSeconds / Duration.secondsPerDay;
+    if (elapsedDays <= 0) return score;
+
+    return score * math.pow(0.5, elapsedDays / _halfLifeDays);
   }
 
   /// Get all engagement data for debugging or analysis

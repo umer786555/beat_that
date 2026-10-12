@@ -1,14 +1,14 @@
-import 'package:beat_that/constants/sports_data.dart';
 import 'package:flutter/material.dart';
 
 class NoResultsState extends StatelessWidget {
   const NoResultsState({
+    super.key,
     required this.query,
-    this.selectedSportId,
+    this.selectedFilterLabel,
   });
 
   final String query;
-  final String? selectedSportId;
+  final String? selectedFilterLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -21,11 +21,11 @@ class NoResultsState extends StatelessWidget {
             const Icon(Icons.video_library_outlined, size: 56),
             const SizedBox(height: 16),
             Text(
-              selectedSportId == null
+              selectedFilterLabel == null || selectedFilterLabel!.isEmpty
                   ? 'No matching videos for "$query"'
                   : query.isEmpty
-                  ? 'No videos in ${getDisplayNameForSport(selectedSportId!)}'
-                  : 'No matching videos for "$query" in ${getDisplayNameForSport(selectedSportId!)}',
+                  ? 'No videos in $selectedFilterLabel'
+                  : 'No matching videos for "$query" in $selectedFilterLabel',
               textAlign: TextAlign.center,
               style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
             ),

@@ -33,8 +33,8 @@ class MyVideo {
   /// Number of likes received
   final int? likeCount;
 
-  /// Sport subcategory ID associated with the video
-  final double? subcategoryId;
+  /// Sport subcategory ID associated with the video.
+  final int? subcategoryId;
 
   /// Sport ID associated with the video
   final String? sportId;
@@ -47,6 +47,9 @@ class MyVideo {
 
   /// Country code where the video was created
   final String? countryCode;
+
+  /// Optional custom option label stored with the video
+  final String? customOptionName;
 
   const MyVideo({
     required this.id,
@@ -65,6 +68,7 @@ class MyVideo {
     this.subcategoryName,
     this.approved,
     this.countryCode,
+    this.customOptionName,
   });
 
   /// Create MyVideo from JSON response
@@ -81,11 +85,12 @@ class MyVideo {
       viewCount: json['view_count'] as int? ?? 0,
       averageRating: (json['average_rating'] as num?)?.toDouble(),
       likeCount: json['like_count'] as int?,
-      subcategoryId: (json['subcategory_id'] as num?)?.toDouble(),
+      subcategoryId: (json['subcategory_id'] as num?)?.toInt(),
       sportId: json['sport_id'] as String?,
       subcategoryName: json['subcategory_name'] as String?,
       approved: json['approved'] as bool?,
       countryCode: json['country_code'] as String?,
+      customOptionName: json['custom_option_name'] as String?,
     );
   }
 
@@ -108,6 +113,7 @@ class MyVideo {
       'subcategory_name': subcategoryName,
       'approved': approved,
       'country_code': countryCode,
+      'custom_option_name': customOptionName,
     };
   }
 
@@ -121,7 +127,7 @@ class MyVideo {
     String? sportId,
     int? subcategoryId,
     String? subcategoryName,
-    String? countryCode,
+    String? customOptionName,
     String dataType = 'user_profile_video',
   }) {
     return {
@@ -133,7 +139,7 @@ class MyVideo {
       'sport_id': sportId,
       'subcategory_id': subcategoryId,
       'subcategory_name': subcategoryName,
-      'country_code': countryCode,
+      'custom_option_name': customOptionName,
       'view_count': 0,
       'data_type': dataType,
     };
@@ -152,11 +158,12 @@ class MyVideo {
     int? viewCount,
     double? averageRating,
     int? likeCount,
-    double? subcategoryId,
+    int? subcategoryId,
     String? sportId,
     String? subcategoryName,
     bool? approved,
     String? countryCode,
+    String? customOptionName,
   }) {
     return MyVideo(
       id: id ?? this.id,
@@ -175,6 +182,7 @@ class MyVideo {
       subcategoryName: subcategoryName ?? this.subcategoryName,
       approved: approved ?? this.approved,
       countryCode: countryCode ?? this.countryCode,
+      customOptionName: customOptionName ?? this.customOptionName,
     );
   }
 
@@ -182,6 +190,6 @@ class MyVideo {
   String toString() {
     return 'MyVideo(id: $id, title: $title, userId: $userId, videoPath: $videoPath, '
       'thumbnailPath: $thumbnailPath, thumbnailUrl: $thumbnailUrl, viewCount: $viewCount, likeCount: $likeCount, '
-        'approved: $approved, countryCode: $countryCode)';
+        'approved: $approved, countryCode: $countryCode, customOptionName: $customOptionName)';
   }
 }

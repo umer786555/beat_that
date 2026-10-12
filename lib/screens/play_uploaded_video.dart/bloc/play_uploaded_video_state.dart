@@ -13,48 +13,48 @@ final class PlayUploadedVideoInitial extends PlayUploadedVideoState {}
 /// Loading state - video is initializing
 final class PlayUploadedVideoLoading extends PlayUploadedVideoState {}
 
-/// Video ready and can be played
-final class PlayUploadedVideoReady extends PlayUploadedVideoState {
+/// Video initialized: ready, playing, or paused.
+sealed class PlayUploadedVideoLoaded extends PlayUploadedVideoState {
   final Duration duration;
   final Duration currentPosition;
+
+  const PlayUploadedVideoLoaded({
+    required this.duration,
+    required this.currentPosition,
+  });
+
+  @override
+  List<Object?> get props => [duration, currentPosition];
+}
+
+/// Video ready and can be played
+final class PlayUploadedVideoReady extends PlayUploadedVideoLoaded {
   final bool isPlaying;
 
   const PlayUploadedVideoReady({
-    required this.duration,
-    required this.currentPosition,
+    required super.duration,
+    required super.currentPosition,
     required this.isPlaying,
   });
 
   @override
-  List<Object?> get props => [duration, currentPosition, isPlaying];
+  List<Object?> get props => [...super.props, isPlaying];
 }
 
 /// Video is playing
-final class PlayUploadedVideoPlaying extends PlayUploadedVideoState {
-  final Duration duration;
-  final Duration currentPosition;
-
+final class PlayUploadedVideoPlaying extends PlayUploadedVideoLoaded {
   const PlayUploadedVideoPlaying({
-    required this.duration,
-    required this.currentPosition,
+    required super.duration,
+    required super.currentPosition,
   });
-
-  @override
-  List<Object?> get props => [duration, currentPosition];
 }
 
 /// Video is paused
-final class PlayUploadedVideoPaused extends PlayUploadedVideoState {
-  final Duration duration;
-  final Duration currentPosition;
-
+final class PlayUploadedVideoPaused extends PlayUploadedVideoLoaded {
   const PlayUploadedVideoPaused({
-    required this.duration,
-    required this.currentPosition,
+    required super.duration,
+    required super.currentPosition,
   });
-
-  @override
-  List<Object?> get props => [duration, currentPosition];
 }
 
 /// Error state

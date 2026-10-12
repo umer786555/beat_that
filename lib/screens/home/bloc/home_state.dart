@@ -37,7 +37,7 @@ final class FeedLoading extends HomeState {
 }
 
 /// Feed loaded successfully
-/// [videos] - List of blended videos (40/30/20/10 distribution)
+/// [videos] - List of scored, deduplicated videos for the current session
 /// [offset] - Current pagination offset
 /// [hasMoreContent] - Whether more content is available (for pagination logic)
 /// [nextCursor] - Per-source cursor used for the next continuation fetch

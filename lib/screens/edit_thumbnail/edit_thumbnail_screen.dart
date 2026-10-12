@@ -4,7 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:bloc_presentation/bloc_presentation.dart';
 import 'package:beat_that/constants/app_colors.dart';
-import 'package:beat_that/models/sport.dart';
+import 'package:beat_that/models/category.dart';
 import 'package:beat_that/widgets/interactive_button.dart';
 import 'package:beat_that/widgets/custom_snackbar.dart';
 import 'package:beat_that/widgets/title_input_bottom_sheet.dart';
@@ -17,8 +17,9 @@ import 'widgets/upload_progress_overlay.dart';
 class EditThumbnailScreen extends StatelessWidget {
   final String videoPath;
   final Duration videoDuration;
-  final Sport sport;
+  final CategoryModel sport;
   final String? selectedSubcategory;
+  final String? customSportName;
 
   const EditThumbnailScreen({
     super.key,
@@ -26,6 +27,7 @@ class EditThumbnailScreen extends StatelessWidget {
     required this.videoDuration,
     required this.sport,
     this.selectedSubcategory,
+    this.customSportName,
   });
 
   @override
@@ -36,6 +38,7 @@ class EditThumbnailScreen extends StatelessWidget {
         videoDuration: videoDuration,
         sport: sport,
         selectedSubcategory: selectedSubcategory,
+        customSportName: customSportName,
       )..add(const InitialEvent()),
       child:
           BlocPresentationListener<
@@ -55,7 +58,6 @@ class EditThumbnailScreen extends StatelessWidget {
                   context.read<ProfileBloc>().add(const RefreshVideosEvent());
                   // Explicitly return to the profile root on successful upload.
                   if (context.mounted) context.goNamed('profile');
-                  
               }
             },
             child: BlocBuilder<EditThumbnailBloc, EditThumbnailState>(
@@ -74,14 +76,14 @@ class EditThumbnailScreen extends StatelessWidget {
                         centerTitle: true,
                         title: Text(
                           'Edit Thumbnail',
-                          style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: -0.5,
-                          ),
+                          style: Theme.of(context).textTheme.titleLarge
+                              ?.copyWith(
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: -0.5,
+                              ),
                         ),
                       ),
-                      body:
-                       _buildBody(
+                      body: _buildBody(
                         state,
                         onUpload: isSaving
                             ? null
@@ -139,14 +141,16 @@ class EditThumbnailScreen extends StatelessWidget {
         child: Column(
           children: [
             GridView.builder(
-              padding: const EdgeInsets.all(16),
+              // Extra bottom inset keeps the last tile clear of the Save FAB.
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: 2,
                 crossAxisSpacing: 16,
                 mainAxisSpacing: 16,
-                childAspectRatio: 1,
+                // Matches the portrait feed card crop.
+                childAspectRatio: 9 / 16,
               ),
               itemCount: state.thumbnails.length + 1,
               itemBuilder: (context, index) {

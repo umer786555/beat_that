@@ -21,7 +21,6 @@ final class ThumbnailSelectedEvent extends EditThumbnailEvent {
 }
 
 class CustomThumbnailSelectedEvent extends EditThumbnailEvent {
-
   const CustomThumbnailSelectedEvent();
 
   @override

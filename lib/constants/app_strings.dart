@@ -1,3 +1,5 @@
+import 'package:beat_that/constants/upload_limits.dart';
+
 /// Centralized strings for the Beat That application
 /// All UI strings should be defined here for easy localization and maintenance
 class AppStrings {
@@ -161,10 +163,21 @@ class AppStrings {
   static const String cancel = 'Cancel';
   static const String delete = 'Delete';
   static const String recordVideo = 'Record Video';
+  static const String videoTooShortTitle = 'Video too short';
+  static const String videoTooShort =
+      'Videos must be at least ${UploadLimits.minimumVideoSeconds} seconds long.';
+  static const String chooseAnotherVideo = 'Choose another';
 
   // Camera Permission Strings
   static const String cameraAccessRequired = 'Camera Access Required';
   static const String cameraPermissionBody =
       'To record videos, we need access to your camera. Please enable camera permissions in app settings.';
   static const String openSettings = 'Open Settings';
+
+  // Generic Errors
+  static const String somethingWentWrong = 'Something went wrong';
+  static const String pleaseRetry = 'Please try again';
+  static const String somethingWentWrongPleaseTryAgain =
+      'Something went wrong. Please try again.';
+  static const String tryAgainLater = 'Please try again later';
 }

@@ -1,9 +1,12 @@
 import 'dart:io';
+import 'package:beat_that/models/category.dart';
+import 'package:beat_that/models/explore_filter_source_row.dart';
+import 'package:beat_that/models/home_feed_cursor.dart';
 import 'package:beat_that/service_locator.dart';
 import 'package:beat_that/models/user_block.dart';
 import 'package:beat_that/models/user_personal_profile.dart';
 import 'package:beat_that/models/user_profile_summary.dart';
-import 'package:beat_that/models/sport_subcategory.dart';
+import 'package:beat_that/models/subcategory.dart';
 import 'package:beat_that/models/sport_video.dart';
 import 'package:beat_that/models/my_video.dart';
 import 'package:beat_that/models/video_rating.dart';
@@ -48,6 +51,79 @@ class SupabaseService {
   String? getCurrentUserEmail() {
     return client.auth.currentUser?.email;
   }
+
+  List<String> getCategoryImages() {
+    final bucket = client.storage.from('upload_categories');
+
+    return const <String>[
+      'gaming.png',
+      'sports.png',
+    ].map(bucket.getPublicUrl).toList(growable: false);
+  }
+
+  Future<List<CategoryModel>> fetchGames() async {
+    return _fetchCategoryRows(
+      tableName: 'gaming_games',
+      storageBucketName: 'gaming',
+    );
+  }
+
+  Future<List<ExploreFilterSourceRow>> getExploreFilters() async {
+    try {
+      final response = await client.rpc('get_explore_filters');
+      return (response as List<dynamic>)
+          .whereType<Map<String, dynamic>>()
+          .map(ExploreFilterSourceRow.fromMap)
+          .where((row) => row.name.isNotEmpty)
+          .toList(growable: false);
+    } catch (e) {
+      print('[ERROR] Failed to fetch explore filters from RPC: $e');
+      return const <ExploreFilterSourceRow>[];
+    }
+  }
+
+  Future<List<CategoryModel>> _fetchCategoryRows({
+    required String tableName,
+    required String storageBucketName,
+  }) async {
+    try {
+      final response = await client
+          .from(tableName)
+          .select('id, name, displayName, path_to_image')
+          .order('displayName', ascending: true);
+
+      final List<CategoryModel> categories = [];
+
+      for (final item in response as List<dynamic>) {
+        final data = item as Map<String, dynamic>;
+        final pathToImage = data['path_to_image'] as String?;
+
+        final imageUrl = pathToImage == null || pathToImage.isEmpty
+            ? null
+            : client.storage.from(storageBucketName).getPublicUrl(pathToImage);
+
+        categories.add(
+          CategoryModel(
+            id: data['id'].toString(),
+            name: data['name'] as String? ?? '',
+            displayName: data['displayName'] as String? ?? '',
+            pathToImage: imageUrl,
+            subcategories: const [],
+          ),
+        );
+      }
+
+      return categories;
+    } catch (e) {
+      print('[ERROR] Failed to fetch categories from $tableName: $e');
+      return [];
+    }
+  }
+
+  // final result = await client
+  //   .from('sports')
+  //   .select('id, name, displayName, path_to_image')
+  //   .order('name');
 
   /// Subscribe to real-time approval status changes for the current user's videos
   ///
@@ -133,7 +209,7 @@ class SupabaseService {
     String? sportId,
     int? subcategoryId,
     String? subcategoryName,
-    String? countryCode,
+    String? customOptionName,
     Function(int, int)? onVideoProgress,
   }) async {
     final userId = getCurrentUserId();
@@ -209,7 +285,7 @@ class SupabaseService {
               sportId: sportId,
               subcategoryId: subcategoryId,
               subcategoryName: subcategoryName,
-              countryCode: countryCode,
+              customOptionName: customOptionName,
             ),
           )
           .select();
@@ -994,6 +1070,72 @@ class SupabaseService {
   /// - `totalCount`: total matches across all pages
   /// - `hasMore`: whether another page exists
   /// - `nextOffset`: offset to use for the next page
+  Future<Map<String, dynamic>> getRandomExploreVideos({
+    int limit = 20,
+    String? seed,
+    String? afterId,
+    bool hasWrapped = false,
+  }) async {
+    final normalizedLimit = limit <= 0 ? 20 : limit;
+    final normalizedSeed = seed?.trim();
+    final normalizedAfterId = afterId?.trim();
+
+    try {
+      // The seed + cursor already prevent repeats, so no seen-ID list is sent.
+      final response = await client.rpc(
+        'get_random_explore_videos',
+        params: {
+          'p_limit': normalizedLimit,
+          'p_seed': normalizedSeed,
+          'p_after_id':
+              normalizedAfterId == null || normalizedAfterId.isEmpty
+              ? null
+              : normalizedAfterId,
+          'p_has_wrapped': hasWrapped,
+        },
+      );
+
+      final rpcResult = Map<String, dynamic>.from(response as Map);
+      final rawVideos = List<Map<String, dynamic>>.from(
+        (rpcResult['videos'] as List<dynamic>? ?? const <dynamic>[]).map(
+          (video) => Map<String, dynamic>.from(video as Map),
+        ),
+      );
+      final videos = await _buildSportVideosFromRows(rawVideos);
+      final rawNextCursor = rpcResult['nextCursor'];
+      final nextCursor = rawNextCursor is Map
+          ? Map<String, dynamic>.from(rawNextCursor)
+          : null;
+
+      return {
+        'videos': videos,
+        'hasMore': rpcResult['hasMore'] == true,
+        'nextCursor': nextCursor,
+        'seed': rpcResult['seed'] as String? ?? normalizedSeed,
+      };
+    } on PostgrestException catch (e) {
+      // 22023 is the RPC's bad-input signal for stale or malformed cursor data.
+      print('Error fetching random explore videos: ${e.code} ${e.message}');
+      return {
+        'videos': <SportVideo>[],
+        'hasMore': false,
+        'nextCursor': null,
+        'seed': normalizedSeed,
+        'error': e.message,
+        'errorCode': e.code,
+      };
+    } catch (e) {
+      print('Error fetching random explore videos: $e');
+      return {
+        'videos': <SportVideo>[],
+        'hasMore': false,
+        'nextCursor': null,
+        'seed': normalizedSeed,
+        'error': e.toString(),
+      };
+    }
+  }
+
   Future<Map<String, dynamic>> searchVideosByTitle(
     String query, {
     int limit = 20,
@@ -1760,17 +1902,6 @@ class SupabaseService {
     return '$bytes B';
   }
 
-  String _toPostgrestInList(Iterable<Object> values) {
-    return '(${values.map((value) {
-      if (value is num || value is bool) {
-        return value.toString();
-      }
-
-      final escapedValue = value.toString().replaceAll('"', r'\"');
-      return '"$escapedValue"';
-    }).join(',')})';
-  }
-
   // ==================== SPORT VIDEO OPERATIONS ====================
 
   /// Fetch all subcategories for a specific sport
@@ -1799,13 +1930,24 @@ class SupabaseService {
   //   }
   // }
 
+  /// Fetch all sports from the sports table (without subcategories)
+  ///
+  /// Returns a list of Category objects with empty subcategories.
+  /// Subcategories are fetched separately on-demand for better performance.
+  /// Image paths are converted to public Supabase Storage URLs.
+  ///
+  /// Returns: List<Category> (sports data only with public image URLs, lazy-load subcategories later)
+  Future<List<CategoryModel>> getAllSports() async {
+    return _fetchCategoryRows(tableName: 'sports', storageBucketName: 'sports');
+  }
+
   /// Fetch all sports with their subcategories from the database
   ///
   /// Returns a map where keys are sport IDs (e.g., 'basketball')
   /// and values are lists of subcategory names for that sport.
   ///
   /// Returns: Map<String, List<String>> (sportId -> [subcategory names])
-  Future<Map<String, List<SportSubcategory>>>
+  Future<Map<String, List<Subcategorys>>>
   getAllSportsWithSubcategories() async {
     try {
       final result = await client
@@ -1813,11 +1955,11 @@ class SupabaseService {
           .select('id, sport_id, name')
           .order('sport_id');
 
-      final Map<String, List<SportSubcategory>> sportMap = {};
+      final Map<String, List<Subcategorys>> sportMap = {};
 
       for (final item in result as List<dynamic>) {
         final data = item as Map<String, dynamic>;
-        final subcategory = SportSubcategory.fromJson(data);
+        final subcategory = Subcategorys.fromJson(data);
         final sportId = subcategory.sportId;
 
         if (!sportMap.containsKey(sportId)) {
@@ -1833,6 +1975,55 @@ class SupabaseService {
     }
   }
 
+  Future<List<Subcategorys>> getSubcategories(String sportId) async {
+    try {
+      final result = await client
+          .from('sport_subcategories')
+          .select('id, sport_id, name')
+          .eq('sport_id', sportId)
+          .order('id');
+
+      return (result as List<dynamic>)
+          .map((item) => Subcategorys.fromJson(item as Map<String, dynamic>))
+          .toList();
+    } catch (e) {
+      print('Error fetching sport subcategories: $e');
+      return [];
+    }
+  }
+
+  /// Fetch subcategories for a specific sport (lazy-load pattern)
+  ///
+  /// Called when user selects a sport to load only relevant subcategories.
+  /// More efficient than loading all subcategories upfront.
+  ///
+  /// Parameters:
+  /// - [sportId]: The sport ID string (e.g., '1', '2', etc. - matches sports.id)
+  ///
+  /// Returns: List<Subcategorys> for the selected sport
+  Future<List<Subcategorys>> getSubcategoriesBySportId(String sportId) async {
+    try {
+      final result = await client
+          .from('sport_subcategories')
+          .select('id, sport_id, name')
+          .eq('sport_id', sportId)
+          .order('name');
+
+      final List<Subcategorys> subcategories = [];
+
+      for (final item in result as List<dynamic>) {
+        final data = item as Map<String, dynamic>;
+        final subcategory = Subcategorys.fromJson(data);
+        subcategories.add(subcategory);
+      }
+
+      return subcategories;
+    } catch (e) {
+      print('Error fetching subcategories for sport $sportId: $e');
+      return [];
+    }
+  }
+
   /// Link a video to a sport subcategory
   ///
   /// Creates a link in the sport_videos table to make the video discoverable
@@ -1845,14 +2036,14 @@ class SupabaseService {
   /// Parameters:
   /// - [videoId]: UUID of the video in my_videos table
   /// - [sportId]: Sport ID string (e.g., "soccer", "basketball")
-  /// - [subcategoryId]: UUID of the subcategory (FK to sport_subcategories.id)
+  /// - [subcategoryId]: bigint id of the subcategory (FK to sport_subcategories.id)
   ///
   /// Returns: {success: true, message, linkedVideoId} on success
   /// Returns: {success: false, error} on failure
   Future<Map<String, dynamic>> linkVideoToSubcategory({
     required String videoId,
     required String sportId,
-    required String subcategoryId,
+    required int subcategoryId,
   }) async {
     try {
       final userId = getCurrentUserId();
@@ -1906,9 +2097,6 @@ class SupabaseService {
         'description': sourceVideo.description ?? '',
         'video_path': sourceVideo.videoPath,
         'thumbnail_path': sourceVideo.thumbnailPath,
-        'view_count': 0,
-        'created_at': DateTime.now().toIso8601String(),
-        'updated_at': DateTime.now().toIso8601String(),
       }).select();
 
       if (insertResponse.isEmpty) {
@@ -1936,7 +2124,7 @@ class SupabaseService {
   ///
   /// Parameters:
   /// - [sportId]: Sport ID (e.g., "soccer")
-  /// - [subcategoryId]: Subcategory ID UUID
+  /// - [subcategoryId]: Subcategory bigint id
   /// - [limit]: Maximum number of videos to return (default: 20)
   /// - [offset]: Pagination offset (default: 0)
   ///
@@ -1944,7 +2132,7 @@ class SupabaseService {
   /// Each video contains: {id, title, description, video_path, thumbnail_path, thumbnailUrl, view_count, username, created_at}
   Future<List<SportVideo>> getSportCategoryVideos({
     required String sportId,
-    required String subcategoryId,
+    required int subcategoryId,
     int limit = 20,
     int offset = 0,
   }) async {
@@ -1952,7 +2140,7 @@ class SupabaseService {
       final videos = await client
           .from('sport_videos')
           .select(
-            'id, user_id, user_video_id, sport_id, title, description, video_path, thumbnail_path, view_count, created_at, bayesian_score, total_ratings, average_rating, user_personal_profiles(username)',
+            'id, user_id, user_video_id, sport_id, subcategory_id, title, description, video_path, thumbnail_path, view_count, created_at, bayesian_score, total_ratings, average_rating, user_personal_profiles(username)',
           )
           .eq('sport_id', sportId)
           .eq('subcategory_id', subcategoryId)
@@ -1997,7 +2185,7 @@ class SupabaseService {
       final videos = await client
           .from('sport_videos')
           .select(
-            'id, user_id, user_video_id, sport_id, title, description, video_path, thumbnail_path, view_count, created_at, total_ratings, average_rating, bayesian_score',
+            'id, user_id, user_video_id, sport_id, subcategory_id, title, description, video_path, thumbnail_path, view_count, created_at, total_ratings, average_rating, bayesian_score',
           )
           .eq('user_id', userId)
           .order('created_at', ascending: false)
@@ -2867,386 +3055,68 @@ class SupabaseService {
     return videosWithUrls.map(SportVideo.fromMap).toList();
   }
 
-  /// Get videos from users that the current user follows (Following Feed)
-  ///
-  /// SECURITY: Uses auth.uid() server-side (not client-provided p_user_id)
-  /// This prevents users from querying other users' follow graphs.
-  ///
-  /// How it works:
-  /// 1. PostgreSQL function receives only limit + offset (no user ID parameter)
-  /// 2. Function uses auth.uid() to get current logged-in user
-  /// 3. Finds all users that auth.uid() is following
-  /// 4. Returns their videos sorted by newest first
-  /// 5. RLS on user_follows table restricts which rows the function can access
-  ///
-  /// Performance: ~20-50ms even with 100K+ follows
-  /// (Database optimizer handles the subquery efficiently)
-  ///
-  /// Parameters:
-  /// - [limit]: Videos per page (default: 50)
-  /// - [offset]: Pagination offset for "load more" (default: 0)
-  ///
-  /// Returns: List of videos with usernames (includes username field for attribution)
-  /// Each video: {id, title, description, video_path, thumbnail_path, thumbnailUrl, user_id,
-  ///             view_count, average_rating, bayesian_score, total_ratings,
-  ///             created_at, username}
-  ///
-  /// Security notes:
-  /// - Function uses auth.uid() (caller's identity), not a passed-in user_id
-  /// - RLS on user_follows restricts to only the caller's follows
-  /// - RLS on sport_videos allows authenticated users to view all videos
-  /// - RLS on user_personal_profiles allows authenticated users to view all usernames
-  Future<List<SportVideo>> getFollowingVideos({
-    int limit = 50,
-    int offset = 0,
+  /// Calls the keyset-paginated Home feed RPC and returns typed results:
+  /// `videos`, `nextCursor`, and `hasMoreContent`.
+  Future<Map<String, dynamic>> getHomeFeedPage({
+    HomeFeedCursor cursor = const HomeFeedCursor.initial(),
+    int limit = 24,
   }) async {
-    try {
-      final userId = getCurrentUserId();
-      if (userId == null) {
-        return [];
-      }
-
-      // Single RPC call to PostgreSQL function
-      // Function uses auth.uid() internally (secure pattern)
-      // Only pass limit + offset, not user_id
-      final videos = await client.rpc(
-        'get_following_videos',
-        params: {'p_limit': limit, 'p_offset': offset},
-      );
-
-      if (videos.isEmpty) {
-        print('✓ No videos from followed users yet');
-        return [];
-      }
-
-      // Convert paths to URLs (service layer transformation)
-      final videosWithUrls = await Future.wait(
-        (videos as List<dynamic>).map(
-          (v) => _convertVideoPathsToUrls(v as Map<String, dynamic>),
-        ),
-      );
-
-      print(
-        '✓ Fetched ${videosWithUrls.length} videos from followed users (RPC optimized)',
-      );
-      return videosWithUrls.map(SportVideo.fromMap).toList();
-    } catch (e) {
-      print('Error fetching following videos: $e');
-      return <SportVideo>[];
+    // The RPC freezes tracked subcategories in the cursor after the first page.
+    var trackedSubcategoryIds = const <int>[];
+    if (cursor.serverState.isEmpty) {
+      final topSubcategories = await locator<PreferencesService>()
+          .getTopSubcategories(limit: 5);
+      trackedSubcategoryIds = _parseTrackedSubcategoryIds(topSubcategories);
     }
+
+    final response = await client.rpc(
+      'get_home_feed_page_v2',
+      params: {
+        'p_limit': limit,
+        'p_tracked_subcategory_ids': trackedSubcategoryIds,
+        'p_cursor': cursor.toMap(),
+      },
+    );
+
+    final rpcResult = Map<String, dynamic>.from(response as Map);
+    // The RPC returns raw row maps; convert storage paths to public URLs and
+    // then hydrate strongly typed SportVideo models for the UI.
+    final rawVideos = List<Map<String, dynamic>>.from(
+      (rpcResult['videos'] as List<dynamic>? ?? const <dynamic>[]).map(
+        (video) => Map<String, dynamic>.from(video as Map),
+      ),
+    );
+    final videos = await _buildSportVideosFromRows(rawVideos);
+    final rawCursor = Map<String, dynamic>.from(
+      rpcResult['nextCursor'] as Map? ?? const <String, dynamic>{},
+    );
+
+    return {
+      'videos': videos,
+      // Keep bloc/session code working with a typed cursor instead of passing
+      // loosely-typed JSON maps through the app.
+      'nextCursor': HomeFeedCursor.fromMap(rawCursor),
+      'hasMoreContent': rpcResult['hasMoreContent'] == true,
+    };
   }
 
-  /// Fetch personalized videos based on user's watch history
-  ///
-  /// Returns videos from the user's top 5 engaged subcategories,
-  /// sorted by quality (bayesian_score) in descending order.
-  ///
-  /// Logic:
-  /// 1. Get top 5 subcategories from user's watch history (local storage)
-  /// 2. Query sport_videos WHERE subcategory_id IN (top 5)
-  /// 3. Order by bayesian_score DESC (best-rated videos first)
-  /// 4. Include username via JOIN with user_personal_profiles
-  /// 5. Apply pagination (limit, offset)
-  ///
-  /// Parameters:
-  /// - [limit]: Number of videos to fetch per page (default: 50)
-  /// - [offset]: Number of videos to skip for pagination (default: 0)
-  ///
-  /// Returns empty list if:
-  /// - User hasn't watched any videos yet (no engagement data)
-  /// - No videos exist in the user's engaged subcategories
-  /// - An error occurs during fetch
-  Future<List<SportVideo>> getPersonalizedVideos({
-    int limit = 50,
-    int offset = 0,
-  }) async {
-    try {
-      // Step 1: Get user's top 5 engaged subcategories from local storage
-      final preferencesService = locator<PreferencesService>();
-      final topSubcategories = await preferencesService.getTopSubcategories(
-        limit: 5,
-      );
+  List<int> _parseTrackedSubcategoryIds(
+    List<MapEntry<String, dynamic>> trackedSubcategories,
+  ) {
+    final parsedIds = <int>[];
 
-      if (topSubcategories.isEmpty) {
-        print(
-          '✓ No watched subcategories yet - personalized feed will be empty',
-        );
-        return [];
+    for (final entry in trackedSubcategories) {
+      final parsedId = int.tryParse(entry.key);
+      if (parsedId != null) {
+        parsedIds.add(parsedId);
+        continue;
       }
 
-      // Step 2: Extract subcategory IDs
-      final subcategoryIds = topSubcategories.map((e) => e.key).toList();
       print(
-        '📊 Personalized feed: fetching videos from subcategories: $subcategoryIds',
+        '⚠️ Ignoring non-numeric tracked subcategory id: ${entry.key}',
       );
-
-      // Step 3: Query videos WHERE subcategory_id IN (top 5 engaged categories)
-      // Now uses FK-based nested select for username in ONE query (no N+1!)
-      // Order by bayesian_score DESC (best-rated videos first)
-      // Use range(start, end) for pagination instead of limit + offset
-      // Use column projection to reduce network payload (~40% smaller)
-      final videos = await client
-          .from('sport_videos')
-          .select(
-            'id, user_id, user_video_id, title, thumbnail_path, video_path, average_rating, total_ratings, bayesian_score, view_count, sport_id, user_personal_profiles(username)',
-          )
-          .inFilter('subcategory_id', subcategoryIds)
-          .order('bayesian_score', ascending: false)
-          .range(offset, offset + limit - 1);
-
-      if (videos.isEmpty) {
-        print('✓ No videos in top subcategories yet');
-        return [];
-      }
-
-      final sportVideos = await _buildSportVideosFromRows(videos);
-
-      print(
-        '✓ Fetched ${sportVideos.length} personalized videos from top 5 engaged categories (bayesian_score sorted)',
-      );
-      return sportVideos;
-    } catch (e) {
-      print('Error fetching personalized videos: $e');
-      return <SportVideo>[];
     }
-  }
 
-  /// Fetch trending videos based on quality and recency
-  ///
-  /// Returns highest-rated videos from the last 7 days,
-  /// sorted by bayesian_score in descending order.
-  ///
-  /// Logic:
-  /// 1. Filter videos posted in the last 7 days (created_at > 7 days ago)
-  /// 2. Order by bayesian_score DESC (best-rated videos first)
-  /// 3. Include username via JOIN with user_personal_profiles
-  /// 4. Apply pagination (limit, offset)
-  ///
-  /// Parameters:
-  /// - [limit]: Number of videos to fetch per page (default: 50)
-  /// - [offset]: Number of videos to skip for pagination (default: 0)
-  ///
-  /// Returns empty list if:
-  /// - No videos exist in the last 7 days
-  /// - All videos have low/zero ratings
-  /// - An error occurs during fetch
-  ///
-  /// Performance:
-  /// - Optimized by idx_sport_videos_created_bayesian index
-  /// - Filters by created_at range first, then sorts by bayesian_score
-  Future<List<SportVideo>> getTrendingVideos({
-    int limit = 50,
-    int offset = 0,
-  }) async {
-    try {
-      // Calculate cutoff timestamp: 7 days ago in UTC
-      // Using UTC ensures consistency with Supabase PostgreSQL (always UTC)
-      // toIso8601String() format: "2026-06-04T14:30:00.000Z"
-      final sevenDaysAgo = DateTime.now()
-          .toUtc()
-          .subtract(Duration(days: 7))
-          .toIso8601String();
-
-      print(
-        '🔥 Trending feed: fetching videos from last 7 days (after $sevenDaysAgo)',
-      );
-
-      // Query videos posted in last 7 days
-      // Now uses FK-based nested select for username in ONE query (no N+1!)
-      // Order by bayesian_score DESC (best-rated videos first, not newest)
-      // Use column projection to reduce network payload (~40% smaller)
-      final videos = await client
-          .from('sport_videos')
-          .select(
-            'id, user_id, user_video_id, title, thumbnail_path, video_path, average_rating, total_ratings, bayesian_score, view_count, sport_id, user_personal_profiles(username)',
-          )
-          .gt('created_at', sevenDaysAgo) // created_at > 7 days ago
-          .order('bayesian_score', ascending: false) // Best-rated first
-          .range(offset, offset + limit - 1); // Pagination
-
-      if (videos.isEmpty) {
-        print('✓ No trending videos in the last 7 days');
-        return [];
-      }
-
-      final sportVideos = await _buildSportVideosFromRows(videos);
-
-      print(
-        '✓ Fetched ${sportVideos.length} trending videos from last 7 days (bayesian_score sorted)',
-      );
-      return sportVideos;
-    } catch (e) {
-      print('Error fetching trending videos: $e');
-      return <SportVideo>[];
-    }
-  }
-
-  /// Fetch random discovery videos from unwatched categories
-  ///
-  /// Returns random videos from subcategories the user has NOT watched,
-  /// enabling content discovery outside their comfort zone.
-  ///
-  /// Logic:
-  /// 1. Get user's top 5 engaged subcategories from local storage
-  /// 2. Query videos WHERE subcategory_id NOT IN (top 5)
-  /// 3. Shuffle in Dart for true randomness
-  /// 4. Include username via JOIN with user_personal_profiles
-  /// 5. Return limit videos (NO pagination - refresh for new random videos)
-  ///
-  /// Parameters:
-  /// - [limit]: Number of discovery videos to fetch (default: 50)
-  ///   No offset parameter - each call returns fresh random batch
-  ///
-  /// Returns empty list if:
-  /// - User hasn't watched any videos yet (all videos shown)
-  /// - No videos exist outside user's top 5 categories
-  /// - An error occurs during fetch
-  ///
-  /// UX Pattern:
-  /// - User swipes through all 50 videos
-  /// - Reaches bottom, taps "Load More" or pulls to refresh
-  /// - New random 50 videos returned (no duplicates from pagination)
-  /// - Matches TikTok/Instagram Explore pattern (refresh = new random)
-  ///
-  /// Note: Uses client-side shuffle (Dart List.shuffle()) instead of database
-  /// ORDER BY RANDOM() for compatibility with Supabase Dart v2.12.4
-  Future<List<SportVideo>> getDiscoveryVideos({
-    int limit = 50,
-    Set<String> excludedVideoIds = const <String>{},
-  }) async {
-    try {
-      final preferencesService = locator<PreferencesService>();
-      final topSubcategories = await preferencesService.getTopSubcategories(
-        limit: 5,
-      );
-
-      final excludedSubcategoryIds = topSubcategories
-          .map((entry) => int.tryParse(entry.key))
-          .whereType<int>()
-          .toList(growable: false);
-
-      if (topSubcategories.isNotEmpty && excludedSubcategoryIds.isEmpty) {
-        print(
-          '⚠️ Discovery RPC: top subcategory keys were not numeric, sending no subcategory exclusions: ${topSubcategories.map((entry) => entry.key).toList()}',
-        );
-      }
-
-      final response = await client.rpc(
-        'get_discovery_videos',
-        params: {
-          'p_limit': limit,
-          'p_seen_video_ids': excludedVideoIds.toList(growable: false),
-          'p_excluded_subcategory_ids': excludedSubcategoryIds,
-        },
-      );
-
-      final videos = List<dynamic>.from(response as List<dynamic>);
-
-      if (videos.isEmpty) {
-        print('✓ No deterministic discovery videos available');
-        return [];
-      }
-
-      final sportVideos = await _buildSportVideosFromRows(videos);
-
-      print(
-        '✓ Fetched ${sportVideos.length} deterministic discovery videos (excluded=${excludedVideoIds.length})',
-      );
-      return sportVideos;
-    } catch (e) {
-      print('Error fetching deterministic discovery videos: $e');
-      return <SportVideo>[];
-    }
-  }
-
-  Future<List<SportVideo>> getRandomDiscoveryVideos({int limit = 50}) async {
-    try {
-      // Step 1: Get user's top 5 engaged subcategories from local storage
-      final preferencesService = locator<PreferencesService>();
-      final topSubcategories = await preferencesService.getTopSubcategories(
-        limit: 5,
-      );
-
-      // Step 2a: If no watch history, show ALL videos (everything is new discovery)
-      if (topSubcategories.isEmpty) {
-        print(
-          '🎲 Discovery: No watch history - showing random videos from ALL categories',
-        );
-
-        // Fetch extra to ensure we have enough after shuffling
-        // Now uses FK-based nested select for username in ONE query (no N+1!)
-        // Use column projection to reduce network payload (~40% smaller)
-        final allVideos = await client
-            .from('sport_videos')
-            .select(
-              'id, user_id, user_video_id, title, thumbnail_path, video_path, average_rating, total_ratings, bayesian_score, view_count, sport_id, user_personal_profiles(username)',
-            )
-            .limit(limit * 2); // Fetch 2x limit for better randomness
-
-        if (allVideos.isEmpty) {
-          print('✓ No discovery videos available');
-          return [];
-        }
-
-        // Shuffle in Dart and take limit
-        (allVideos as List).shuffle();
-        final randomVideos = allVideos.take(limit).toList();
-
-        final sportVideos = await _buildSportVideosFromRows(randomVideos);
-
-        print(
-          '✓ Fetched ${sportVideos.length} random discovery videos from all categories',
-        );
-        return sportVideos;
-      }
-
-      // Step 2b: Extract subcategory IDs to exclude
-      final unwatchedSubcategoryIds = topSubcategories
-          .map((e) => e.key)
-          .toList();
-      print(
-        '🎲 Discovery: fetching random videos NOT from: $unwatchedSubcategoryIds',
-      );
-
-      // Step 3: Query videos NOT in user's top 5 categories
-      // Fetch extra to ensure we have enough after shuffling
-      // Each call returns different random batch via Dart's shuffle
-      // Now uses FK-based nested select for username in ONE query (no N+1!)
-      // Use column projection to reduce network payload (~40% smaller)
-      final allDiscoveryVideos = await client
-          .from('sport_videos')
-          .select(
-            'id, user_id, user_video_id, title, thumbnail_path, video_path, average_rating, total_ratings, bayesian_score, view_count, sport_id, user_personal_profiles(username)',
-          )
-          .not(
-            'subcategory_id',
-            'in',
-            _toPostgrestInList(List<Object>.from(unwatchedSubcategoryIds)),
-          )
-          .limit(limit * 2); // Fetch 2x limit for better randomness
-
-      if (allDiscoveryVideos.isEmpty) {
-        print(
-          '✓ No discovery videos available outside top categories (user has watched most sports)',
-        );
-        return [];
-      }
-
-      // Shuffle in Dart and take limit
-      (allDiscoveryVideos as List).shuffle();
-      final randomDiscoveryVideos = allDiscoveryVideos.take(limit).toList();
-
-      final sportVideos = await _buildSportVideosFromRows(
-        randomDiscoveryVideos,
-      );
-
-      print(
-        '✓ Fetched ${sportVideos.length} random discovery videos (new random batch each call)',
-      );
-      return sportVideos;
-    } catch (e) {
-      print('Error fetching discovery videos: $e');
-      return <SportVideo>[];
-    }
+    return parsedIds;
   }
 }

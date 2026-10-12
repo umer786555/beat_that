@@ -23,7 +23,6 @@ class MockAuthService extends Mock implements AuthService {}
 
 void main() {
   setUpAll(() {
-    registerFallbackValue(<String>{});
     registerFallbackValue(const HomeFeedCursor.initial());
   });
 
@@ -111,12 +110,11 @@ void main() {
       'loads the home feed for guests on InitialEvent',
       setUp: () {
         when(() => mockAuthService.hasFullAccountAccess()).thenReturn(false);
-        when(() => mockPreferencesService.clearUserProfile()).thenAnswer(
-          (_) async {},
-        );
+        when(
+          () => mockPreferencesService.clearUserProfile(),
+        ).thenAnswer((_) async {});
         when(
           () => mockHomeFeedService.getHomeFeedContinuation(
-            seenVideoIds: any(named: 'seenVideoIds'),
             cursor: any(named: 'cursor'),
             limit: any(named: 'limit'),
           ),
@@ -143,7 +141,6 @@ void main() {
         verifyNever(() => mockSupabaseService.fetchUserPersonalProfile());
         verify(
           () => mockHomeFeedService.getHomeFeedContinuation(
-            seenVideoIds: any(named: 'seenVideoIds'),
             cursor: any(named: 'cursor'),
             limit: 24,
           ),
@@ -156,18 +153,13 @@ void main() {
       setUp: () {
         when(
           () => mockHomeFeedService.getHomeFeedContinuation(
-            seenVideoIds: any(named: 'seenVideoIds'),
             cursor: any(named: 'cursor'),
             limit: any(named: 'limit'),
           ),
         ).thenAnswer(
           (_) async => {
             'videos': sampleVideos,
-            'nextCursor': const HomeFeedCursor(
-              personalizedOffset: 1,
-              followingOffset: 0,
-              trendingOffset: 1,
-            ),
+            'nextCursor': const HomeFeedCursor(hasMoreFollowing: false),
             'hasMoreContent': true,
           },
         );
@@ -185,13 +177,11 @@ void main() {
       verify: (_) {
         final captured = verify(
           () => mockHomeFeedService.getHomeFeedContinuation(
-            seenVideoIds: captureAny(named: 'seenVideoIds'),
             cursor: captureAny(named: 'cursor'),
             limit: 50,
           ),
         ).captured;
-        expect(captured[0] as Set<String>, isEmpty);
-        expect(captured[1], equals(const HomeFeedCursor.initial()));
+        expect(captured.single, equals(const HomeFeedCursor.initial()));
       },
     );
 
@@ -200,7 +190,6 @@ void main() {
       setUp: () {
         when(
           () => mockHomeFeedService.getHomeFeedContinuation(
-            seenVideoIds: any(named: 'seenVideoIds'),
             cursor: any(named: 'cursor'),
             limit: any(named: 'limit'),
           ),
@@ -225,7 +214,6 @@ void main() {
       setUp: () {
         when(
           () => mockHomeFeedService.getHomeFeedContinuation(
-            seenVideoIds: any(named: 'seenVideoIds'),
             cursor: any(named: 'cursor'),
             limit: any(named: 'limit'),
           ),
@@ -241,18 +229,13 @@ void main() {
       setUp: () {
         when(
           () => mockHomeFeedService.getHomeFeedContinuation(
-            seenVideoIds: any(named: 'seenVideoIds'),
             cursor: any(named: 'cursor'),
             limit: any(named: 'limit'),
           ),
         ).thenAnswer(
           (_) async => {
             'videos': sampleVideos,
-            'nextCursor': const HomeFeedCursor(
-              personalizedOffset: 1,
-              followingOffset: 0,
-              trendingOffset: 1,
-            ),
+            'nextCursor': const HomeFeedCursor(hasMoreFollowing: false),
             'hasMoreContent': true,
           },
         );
@@ -263,7 +246,6 @@ void main() {
       verify: (_) {
         verify(
           () => mockHomeFeedService.getHomeFeedContinuation(
-            seenVideoIds: any(named: 'seenVideoIds'),
             cursor: const HomeFeedCursor.initial(),
             limit: 24,
           ),
@@ -276,18 +258,13 @@ void main() {
       setUp: () {
         when(
           () => mockHomeFeedService.getHomeFeedContinuation(
-            seenVideoIds: any(named: 'seenVideoIds'),
             cursor: any(named: 'cursor'),
             limit: any(named: 'limit'),
           ),
         ).thenAnswer(
           (_) async => {
             'videos': sampleVideos,
-            'nextCursor': const HomeFeedCursor(
-              personalizedOffset: 1,
-              followingOffset: 0,
-              trendingOffset: 1,
-            ),
+            'nextCursor': const HomeFeedCursor(hasMoreFollowing: false),
             'hasMoreContent': true,
           },
         );
@@ -306,18 +283,13 @@ void main() {
       setUp: () {
         when(
           () => mockHomeFeedService.getHomeFeedContinuation(
-            seenVideoIds: any(named: 'seenVideoIds'),
             cursor: any(named: 'cursor'),
             limit: any(named: 'limit'),
           ),
         ).thenAnswer(
           (_) async => {
             'videos': sampleVideos,
-            'nextCursor': const HomeFeedCursor(
-              personalizedOffset: 1,
-              followingOffset: 0,
-              trendingOffset: 1,
-            ),
+            'nextCursor': const HomeFeedCursor(hasMoreFollowing: false),
             'hasMoreContent': true,
           },
         );
@@ -336,18 +308,13 @@ void main() {
       setUp: () {
         when(
           () => mockHomeFeedService.getHomeFeedContinuation(
-            seenVideoIds: any(named: 'seenVideoIds'),
             cursor: any(named: 'cursor'),
             limit: any(named: 'limit'),
           ),
         ).thenAnswer(
           (invocation) async => {
             'videos': sampleVideos,
-            'nextCursor': const HomeFeedCursor(
-              personalizedOffset: 1,
-              followingOffset: 0,
-              trendingOffset: 1,
-            ),
+            'nextCursor': const HomeFeedCursor(hasMoreFollowing: false),
             'hasMoreContent': true,
           },
         );
@@ -372,30 +339,20 @@ void main() {
 
         when(
           () => mockHomeFeedService.getHomeFeedContinuation(
-            seenVideoIds: any(named: 'seenVideoIds'),
             cursor: const HomeFeedCursor.initial(),
             limit: 2,
           ),
         ).thenAnswer(
           (_) async => {
             'videos': sampleVideos,
-            'nextCursor': const HomeFeedCursor(
-              personalizedOffset: 1,
-              followingOffset: 0,
-              trendingOffset: 1,
-            ),
+            'nextCursor': const HomeFeedCursor(hasMoreFollowing: false),
             'hasMoreContent': true,
           },
         );
 
-        const nextCursor = HomeFeedCursor(
-          personalizedOffset: 1,
-          followingOffset: 0,
-          trendingOffset: 1,
-        );
+        const nextCursor = HomeFeedCursor(hasMoreFollowing: false);
         when(
           () => mockHomeFeedService.getHomeFeedContinuation(
-            seenVideoIds: any(named: 'seenVideoIds'),
             cursor: nextCursor,
             limit: 24,
           ),
@@ -409,24 +366,18 @@ void main() {
 
         await untilCalled(
           () => mockHomeFeedService.getHomeFeedContinuation(
-            seenVideoIds: any(named: 'seenVideoIds'),
             cursor: nextCursor,
             limit: 24,
           ),
         );
         await Future<void>.delayed(Duration.zero);
 
-        final capturedSeenVideoIds = verify(
+        verify(
           () => mockHomeFeedService.getHomeFeedContinuation(
-            seenVideoIds: captureAny(named: 'seenVideoIds'),
             cursor: nextCursor,
             limit: 24,
           ),
-        );
-        expect(capturedSeenVideoIds.callCount, equals(1));
-        final seenVideoIds =
-            capturedSeenVideoIds.captured.single as Set<String>;
-        expect(seenVideoIds, equals({'video-1', 'video-2'}));
+        ).called(1);
 
         paginationCompleter.complete({
           'videos': [
@@ -438,11 +389,7 @@ void main() {
               source: 'following',
             ),
           ],
-          'nextCursor': const HomeFeedCursor(
-            personalizedOffset: 1,
-            followingOffset: 1,
-            trendingOffset: 1,
-          ),
+          'nextCursor': const HomeFeedCursor(hasMoreFollowing: false),
           'hasMoreContent': true,
         });
         await homeBloc.stream.firstWhere(
@@ -456,18 +403,13 @@ void main() {
       setUp: () {
         when(
           () => mockHomeFeedService.getHomeFeedContinuation(
-            seenVideoIds: any(named: 'seenVideoIds'),
             cursor: any(named: 'cursor'),
             limit: 50,
           ),
         ).thenAnswer(
           (_) async => {
             'videos': sampleVideos,
-            'nextCursor': const HomeFeedCursor(
-              personalizedOffset: 25,
-              followingOffset: 25,
-              trendingOffset: 25,
-            ),
+            'nextCursor': const HomeFeedCursor(hasMoreFollowing: false),
             'hasMoreContent': true,
           },
         );
@@ -477,7 +419,6 @@ void main() {
       verify: (bloc) {
         verify(
           () => mockHomeFeedService.getHomeFeedContinuation(
-            seenVideoIds: any(named: 'seenVideoIds'),
             cursor: const HomeFeedCursor.initial(),
             limit: 50,
           ),
@@ -501,18 +442,13 @@ void main() {
         );
         when(
           () => mockHomeFeedService.getHomeFeedContinuation(
-            seenVideoIds: any(named: 'seenVideoIds'),
             cursor: any(named: 'cursor'),
             limit: any(named: 'limit'),
           ),
         ).thenAnswer(
           (_) async => {
             'videos': largeBatch,
-            'nextCursor': const HomeFeedCursor(
-              personalizedOffset: 34,
-              followingOffset: 33,
-              trendingOffset: 33,
-            ),
+            'nextCursor': const HomeFeedCursor(hasMoreFollowing: false),
             'hasMoreContent': true,
           },
         );
@@ -525,6 +461,103 @@ void main() {
         expect(state.videos[0].id, equals('video-0'));
         expect(state.videos[99].id, equals('video-99'));
       },
+    );
+  });
+
+  group('merging the full-screen feed session', () {
+    const sessionCursor = HomeFeedCursor(
+      hasMoreFollowing: false,
+      serverState: {'pagination': 'keyset'},
+    );
+
+    List<String> idsOf(FeedLoaded state) =>
+        state.videos.map((video) => video.id).toList();
+
+    setUp(() {
+      when(
+        () => mockHomeFeedService.getHomeFeedContinuation(
+          cursor: any(named: 'cursor'),
+          limit: any(named: 'limit'),
+        ),
+      ).thenAnswer(
+        (_) async => {
+          'videos': sampleVideos,
+          'nextCursor': const HomeFeedCursor.initial(),
+          'hasMoreContent': true,
+        },
+      );
+    });
+
+    Future<void> loadFirstPage(HomeBloc bloc) async {
+      bloc.add(const FetchFeedEvent(limit: 24, offset: 0));
+      await bloc.stream.firstWhere((state) => state is FeedLoaded);
+    }
+
+    blocTest<HomeBloc, HomeState>(
+      'adds videos loaded in the full-screen feed to the grid',
+      build: () => homeBloc,
+      act: (bloc) async {
+        await loadFirstPage(bloc);
+        bloc.add(
+          MergeVideoFeedSessionEvent(
+            videos: [...sampleVideos, makeVideo('video-3')],
+            nextCursor: sessionCursor,
+            hasMoreContent: false,
+          ),
+        );
+      },
+      skip: 2,
+      expect: () => [
+        isA<FeedLoaded>()
+            .having(idsOf, 'video ids', ['video-1', 'video-2', 'video-3'])
+            .having((state) => state.offset, 'offset', 2)
+            .having((state) => state.nextCursor, 'nextCursor', sessionCursor)
+            .having((state) => state.hasMoreContent, 'hasMoreContent', false),
+      ],
+    );
+
+    blocTest<HomeBloc, HomeState>(
+      'continues paging from the merged session cursor',
+      build: () => homeBloc,
+      act: (bloc) async {
+        await loadFirstPage(bloc);
+        bloc.add(
+          MergeVideoFeedSessionEvent(
+            videos: [...sampleVideos, makeVideo('video-3')],
+            nextCursor: sessionCursor,
+            hasMoreContent: true,
+          ),
+        );
+        await bloc.stream.firstWhere(
+          (state) => state is FeedLoaded && state.videos.length == 3,
+        );
+        bloc.add(const LoadMoreFeedEvent());
+      },
+      verify: (_) {
+        verify(
+          () => mockHomeFeedService.getHomeFeedContinuation(
+            cursor: sessionCursor,
+            limit: 24,
+          ),
+        ).called(1);
+      },
+    );
+
+    blocTest<HomeBloc, HomeState>(
+      'ignores a session that does not continue the grid list',
+      build: () => homeBloc,
+      act: (bloc) async {
+        await loadFirstPage(bloc);
+        bloc.add(
+          MergeVideoFeedSessionEvent(
+            videos: [makeVideo('other'), sampleVideos[1], makeVideo('video-3')],
+            nextCursor: sessionCursor,
+            hasMoreContent: false,
+          ),
+        );
+      },
+      skip: 2,
+      expect: () => <HomeState>[],
     );
   });
 }

@@ -1,14 +1,17 @@
+import 'package:beat_that/constants/app_strings.dart';
+import 'package:beat_that/constants/upload_limits.dart';
 import 'package:beat_that/service_locator.dart';
 import 'package:beat_that/services/preferences_service.dart';
 import 'package:beat_that/services/supabase_service.dart';
 import 'package:beat_that/services/video_picker_service.dart';
-import 'package:beat_that/models/sport.dart';
+import 'package:beat_that/models/category.dart';
 import 'package:bloc_presentation/bloc_presentation.dart';
 import 'package:equatable/equatable.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:flutter/material.dart';
+import 'package:mime/mime.dart';
+import 'package:path/path.dart' as p;
 import 'package:video_thumbnail/video_thumbnail.dart';
-import 'dart:typed_data';
 import 'dart:math';
 import 'dart:io';
 
@@ -28,15 +31,17 @@ class EditThumbnailBloc extends Bloc<EditThumbnailEvent, EditThumbnailState>
 
   static const int _numberOfThumbnails = 5;
 
-  static const int _thumbnailMaxWidth = 720;
-  static const int _imageQuality = 100;
+  static const int _frameJpegQuality = 90;
+  static const double _frameEdgeTrimFraction = 0.05;
+  static const double _customPhotoMaxDimension = 1920;
+  static const int _customPhotoQuality = 90;
   static const int _thumbnailBatchSize = 2;
-  static const Duration _minimumUploadDuration = Duration(seconds: 10);
 
   final String videoPath;
   final Duration videoDuration;
-  final Sport sport;
+  final CategoryModel sport;
   final String? selectedSubcategory;
+  final String? customSportName;
   Uint8List? selectedThumbnail;
 
   EditThumbnailBloc({
@@ -44,6 +49,7 @@ class EditThumbnailBloc extends Bloc<EditThumbnailEvent, EditThumbnailState>
     required this.videoDuration,
     required this.sport,
     this.selectedSubcategory,
+    this.customSportName,
   }) : super(EditThumbnailInitial()) {
     on<InitialEvent>(_onInitialEvent);
     on<ThumbnailSelectedEvent>(_onThumbnailSelected);
@@ -55,6 +61,12 @@ class EditThumbnailBloc extends Bloc<EditThumbnailEvent, EditThumbnailState>
     InitialEvent event,
     Emitter<EditThumbnailState> emit,
   ) async {
+    // The Edit Video screen blocks this; guards restored routes.
+    if (videoDuration < UploadLimits.minimumVideoDuration) {
+      emitPresentation(VideoTooShortEvent(message: AppStrings.videoTooShort));
+      return;
+    }
+
     try {
       // Emit loading state with placeholder thumbnails to show shimmer
       emit(
@@ -64,13 +76,7 @@ class EditThumbnailBloc extends Bloc<EditThumbnailEvent, EditThumbnailState>
         ),
       );
 
-      final int durationMilliseconds = videoDuration.inMilliseconds;
-      final random = Random();
-
-      final timeIntervals = List.generate(
-        _numberOfThumbnails,
-        (_) => random.nextInt(durationMilliseconds),
-      )..sort(); // Sort for better UX (chronological order)
+      final timeIntervals = frameTimestamps(videoDuration.inMilliseconds);
 
       final thumbnails = <Uint8List?>[];
       for (
@@ -123,13 +129,28 @@ class EditThumbnailBloc extends Bloc<EditThumbnailEvent, EditThumbnailState>
     }
   }
 
+  // Skips the first/last 5%, where fades and black frames are common.
+  @visibleForTesting
+  static List<int> frameTimestamps(int durationMilliseconds, {Random? random}) {
+    final rng = random ?? Random();
+    final start = durationMilliseconds * _frameEdgeTrimFraction;
+    final segment =
+        durationMilliseconds *
+        (1 - 2 * _frameEdgeTrimFraction) /
+        _numberOfThumbnails;
+    return List.generate(
+      _numberOfThumbnails,
+      (i) => (start + segment * (i + 0.25 + rng.nextDouble() * 0.5)).round(),
+    );
+  }
+
+  // Full-res on purpose: upload downscales; passing both max dims distorts on Android.
   Future<Uint8List?> _generateThumbnail(int timeMilliseconds) {
     return VideoThumbnail.thumbnailData(
       video: videoPath,
-      imageFormat: ImageFormat.PNG,
-      maxWidth: _thumbnailMaxWidth,
+      imageFormat: ImageFormat.JPEG,
       timeMs: timeMilliseconds,
-      quality: _imageQuality,
+      quality: _frameJpegQuality,
     );
   }
 
@@ -138,7 +159,10 @@ class EditThumbnailBloc extends Bloc<EditThumbnailEvent, EditThumbnailState>
     Emitter<EditThumbnailState> emit,
   ) async {
     try {
-      final selectedPhoto = await videoPickerService.pickGalleryPhoto();
+      final selectedPhoto = await videoPickerService.pickGalleryPhoto(
+        maxDimension: _customPhotoMaxDimension,
+        imageQuality: _customPhotoQuality,
+      );
 
       if (selectedPhoto != null) {
         final currentState = state;
@@ -176,18 +200,20 @@ class EditThumbnailBloc extends Bloc<EditThumbnailEvent, EditThumbnailState>
     print('SaveEvent triggered with title: ${event.title}');
     print('Selected subcategory: $selectedSubcategory');
     print('sport: ${sport.displayName} (ID: ${sport.id})');
+    Directory? thumbnailTempDir;
     try {
-      if (videoDuration < _minimumUploadDuration) {
-        emitPresentation(
-          VideoTooShortEvent(
-            message: 'Video must be at least 10 seconds long.',
-          ),
-        );
+      if (selectedThumbnail == null) {
+        emitPresentation(ThumbnailErrorEvent(message: 'No thumbnail selected'));
         return;
       }
 
-      if (selectedThumbnail == null) {
-        emitPresentation(ThumbnailErrorEvent(message: 'No thumbnail selected'));
+      final categoryKey = sport.name.trim();
+      if (categoryKey.isEmpty) {
+        emitPresentation(
+          ThumbnailErrorEvent(
+            message: 'Unable to save video: category name is missing.',
+          ),
+        );
         return;
       }
 
@@ -201,19 +227,23 @@ class EditThumbnailBloc extends Bloc<EditThumbnailEvent, EditThumbnailState>
         return;
       }
 
-      // Convert thumbnail bytes to temporary File
-      final tempDir = await Directory.systemTemp.createTemp();
-      final thumbnailFile = File('${tempDir.path}/thumbnail.png');
-      await thumbnailFile.writeAsBytes(selectedThumbnail!);
-
-      // Get user's device locale
-      String? countryCode;
-      try {
-        final platformLocale = WidgetsBinding.instance.platformDispatcher.locale;
-        countryCode = platformLocale.countryCode;
-      } catch (e) {
-        print('Warning: Could not retrieve platform locale: $e');
-      }
+      // Extension must match the bytes: the uploader derives MIME type from it.
+      final thumbnailBytes = selectedThumbnail!;
+      final thumbnailExtension = switch (lookupMimeType(
+        '',
+        headerBytes: thumbnailBytes,
+      )) {
+        'image/png' => 'png',
+        'image/gif' => 'gif',
+        'image/webp' => 'webp',
+        'image/heic' => 'heic',
+        _ => 'jpg',
+      };
+      thumbnailTempDir = await Directory.systemTemp.createTemp('thumbnail_');
+      final thumbnailFile = File(
+        p.join(thumbnailTempDir.path, 'thumbnail.$thumbnailExtension'),
+      );
+      await thumbnailFile.writeAsBytes(thumbnailBytes);
 
       // Call Supabase service to upload video and thumbnail WITH PROGRESS TRACKING
       final result = await supabaseService.uploadVideoWithThumbnail(
@@ -221,7 +251,7 @@ class EditThumbnailBloc extends Bloc<EditThumbnailEvent, EditThumbnailState>
         thumbnailFile: thumbnailFile,
         title: event.title,
         description: '', // Optional: add description if available
-        sportId: sport.id,
+        sportId: categoryKey,
         subcategoryId:
             selectedSubcategory != null && selectedSubcategory!.isNotEmpty
             ? sport.subcategories
@@ -234,7 +264,7 @@ class EditThumbnailBloc extends Bloc<EditThumbnailEvent, EditThumbnailState>
                   .id
             : null,
         subcategoryName: selectedSubcategory,
-        countryCode: countryCode,
+        customOptionName: customSportName,
         // Progress callback for video upload
         onVideoProgress: (sent, total) {
           final progressPercent = (sent / total * 100).toStringAsFixed(0);
@@ -252,9 +282,6 @@ class EditThumbnailBloc extends Bloc<EditThumbnailEvent, EditThumbnailState>
           );
         },
       );
-
-      // Clean up temporary file
-      await thumbnailFile.delete();
 
       if (result['success'] as bool) {
         // Reset to initial state to hide overlay
@@ -276,6 +303,12 @@ class EditThumbnailBloc extends Bloc<EditThumbnailEvent, EditThumbnailState>
       }
     } catch (e) {
       emitPresentation(ThumbnailErrorEvent(message: 'Failed to save: $e'));
+    } finally {
+      try {
+        await thumbnailTempDir?.delete(recursive: true);
+      } on FileSystemException catch (e) {
+        print('Failed to delete thumbnail temp dir: $e');
+      }
     }
   }
 }

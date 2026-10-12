@@ -1,9 +1,8 @@
 import 'dart:convert';
 
-import 'package:beat_that/models/sport.dart';
+import 'package:beat_that/models/category.dart';
 import 'package:beat_that/models/sport_video.dart';
-import 'package:beat_that/models/sport_subcategory.dart';
-import 'package:beat_that/constants/sports_data.dart';
+import 'package:beat_that/models/subcategory.dart';
 import 'package:beat_that/screens/explore/video_feed/explore_video_feed_route_extra.dart';
 import 'package:beat_that/screens/explore/video_feed/explore_video_feed_screen.dart';
 import 'package:beat_that/screens/play_uploaded_video.dart/play_uploaded_video_screen.dart';
@@ -11,7 +10,10 @@ import 'package:beat_that/screens/edit_thumbnail/edit_thumbnail_screen.dart';
 import 'package:beat_that/screens/home/video_feed/models/home_video_feed_route_extra.dart';
 import 'package:beat_that/screens/home/video_feed/presentation/home_video_feed_screen.dart';
 import 'package:beat_that/screens/profile/rejected_video_guidance_screen.dart';
-import 'package:beat_that/screens/sports_hub/sport_details_screen.dart';
+import 'package:beat_that/screens/upload_category/bloc/upload_category_bloc.dart';
+import 'package:beat_that/screens/upload_category/bloc/upload_category_event.dart';
+import 'package:beat_that/screens/upload_category/upload_category_screen.dart';
+import 'package:beat_that/screens/sports_hub/category_details_screen.dart';
 import 'package:beat_that/screens/username_setup/username_setup_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -22,6 +24,7 @@ import 'package:beat_that/screens/navigation_shell.dart';
 import 'package:beat_that/screens/home/home_screen.dart';
 import 'package:beat_that/screens/home/bloc/home_bloc.dart';
 import 'package:beat_that/screens/explore/explore_screen.dart';
+import 'package:beat_that/screens/gaming_hub/gaming_hub_screen.dart';
 import 'package:beat_that/screens/sports_hub/sports_hub_screen.dart';
 import 'package:beat_that/screens/profile/profile_screen.dart';
 import 'package:beat_that/screens/profile/bloc/profile_bloc.dart';
@@ -39,14 +42,16 @@ import 'package:beat_that/screens/auth/signup_screen.dart';
 class PlayUploadedVideoExtra {
   final String videoPath;
   final bool shouldShowEditButtons;
-  final Sport? sport;
+  final CategoryModel? sport;
   final String? selectedSubcategory;
+  final String? customSportName;
 
   PlayUploadedVideoExtra({
     required this.videoPath,
     required this.shouldShowEditButtons,
     this.sport,
     this.selectedSubcategory,
+    this.customSportName,
   });
 }
 
@@ -54,20 +59,22 @@ class PlayUploadedVideoExtra {
 class EditThumbnailExtra {
   final String videoPath;
   final Duration videoDuration;
-  final Sport sport;
+  final CategoryModel sport;
   final String? selectedSubcategory;
+  final String? customSportName;
 
   EditThumbnailExtra({
     required this.videoPath,
     required this.videoDuration,
     required this.sport,
     this.selectedSubcategory,
+    this.customSportName,
   });
 }
 
 /// Extra data for SportDetails route
 class SportDetailsExtra {
-  final Sport sport;
+  final CategoryModel sport;
 
   SportDetailsExtra({required this.sport});
 }
@@ -116,7 +123,11 @@ class _RouteExtraEncoder extends Converter<Object?, Object?> {
           input.videoPath,
           input.shouldShowEditButtons,
           input.sport?.id,
+          input.sport?.name,
+          input.sport?.displayName,
+          input.sport?.pathToImage,
           input.selectedSubcategory,
+          input.customSportName,
         ];
       case EditThumbnailExtra _:
         return <Object?>[
@@ -124,12 +135,19 @@ class _RouteExtraEncoder extends Converter<Object?, Object?> {
           input.videoPath,
           input.videoDuration.inMilliseconds,
           input.sport.id,
+          input.sport.name,
+          input.sport.displayName,
+          input.sport.pathToImage,
           input.selectedSubcategory,
+          input.customSportName,
         ];
       case SportDetailsExtra _:
         return <Object?>[
           'SportDetailsExtra',
           input.sport.id,
+          input.sport.name,
+          input.sport.displayName,
+          input.sport.pathToImage,
           jsonEncode(input.sport.subcategories.map((s) => s.toJson()).toList()),
         ];
       case HomeVideoFeedExtra _:
@@ -147,6 +165,10 @@ class _RouteExtraEncoder extends Converter<Object?, Object?> {
           input.selectedSportId,
           input.nextOffset,
           input.hasMoreContent,
+          input.isRandomFeed,
+          input.randomSeed,
+          input.randomAfterId,
+          input.randomHasWrapped,
         ];
       case ProfileConnectionsExtra _:
         return <Object?>['ProfileConnectionsExtra', input.connectionType];
@@ -171,54 +193,57 @@ class _RouteExtraDecoder extends Converter<Object?, Object?> {
     final inputAsList = input as List<Object?>;
     if (inputAsList[0] == 'PlayUploadedVideoExtra') {
       final sportId = inputAsList[3] as String?;
-      final selectedSubcategory = inputAsList[4] as String?;
+      final selectedSubcategory = inputAsList[7] as String?;
+      final customSportName = inputAsList.length > 8
+          ? inputAsList[8] as String?
+          : null;
       return PlayUploadedVideoExtra(
         videoPath: inputAsList[1]! as String,
         shouldShowEditButtons: inputAsList[2]! as bool,
         sport: sportId != null
-            ? Sport(
+            ? CategoryModel(
                 id: sportId,
-                name: sportId,
-                displayName: getDisplayNameForSport(sportId),
-                icon: getIconForSport(sportId),
-                imageAssetPath: getImageAssetPathForSport(sportId),
+                name: inputAsList[4]! as String,
+                displayName: inputAsList[5]! as String,
+                pathToImage: inputAsList[6] as String?,
                 subcategories: [],
               )
             : null,
         selectedSubcategory: selectedSubcategory,
+        customSportName: customSportName,
       );
     }
     if (inputAsList[0] == 'EditThumbnailExtra') {
       final sportId = inputAsList[3] as String;
-      final selectedSubcategory = inputAsList[4] as String?;
+      final selectedSubcategory = inputAsList[7] as String?;
+      final customSportName = inputAsList.length > 8
+          ? inputAsList[8] as String?
+          : null;
       return EditThumbnailExtra(
         videoPath: inputAsList[1]! as String,
         videoDuration: Duration(milliseconds: inputAsList[2]! as int),
-        sport: Sport(
+        sport: CategoryModel(
           id: sportId,
-          name: sportId,
-          displayName: getDisplayNameForSport(sportId),
-          icon: getIconForSport(sportId),
-          imageAssetPath: getImageAssetPathForSport(sportId),
+          name: inputAsList[4]! as String,
+          displayName: inputAsList[5]! as String,
+          pathToImage: inputAsList[6] as String?,
           subcategories: [],
         ),
         selectedSubcategory: selectedSubcategory,
+        customSportName: customSportName,
       );
     }
     if (inputAsList[0] == 'SportDetailsExtra') {
       final sportId = inputAsList[1] as String;
-      final subcategoriesJson = inputAsList[2] as String;
+      final subcategoriesJson = inputAsList[5] as String;
       final subcategories = (jsonDecode(subcategoriesJson) as List<dynamic>)
-          .map(
-            (item) => SportSubcategory.fromJson(item as Map<String, dynamic>),
-          )
+          .map((item) => Subcategorys.fromJson(item as Map<String, dynamic>))
           .toList();
-      final sport = Sport(
+      final sport = CategoryModel(
         id: sportId,
-        name: sportId,
-        displayName: getDisplayNameForSport(sportId),
-        icon: getIconForSport(sportId),
-        imageAssetPath: getImageAssetPathForSport(sportId),
+        name: inputAsList[2]! as String,
+        displayName: inputAsList[3]! as String,
+        pathToImage: inputAsList[4] as String?,
         subcategories: subcategories,
       );
       return SportDetailsExtra(sport: sport);
@@ -244,6 +269,14 @@ class _RouteExtraDecoder extends Converter<Object?, Object?> {
         selectedSportId: inputAsList[4] as String?,
         nextOffset: inputAsList[5] as int,
         hasMoreContent: inputAsList[6] as bool,
+        isRandomFeed: inputAsList.length > 7 ? inputAsList[7] as bool : false,
+        randomSeed: inputAsList.length > 8 ? inputAsList[8] as String? : null,
+        randomAfterId: inputAsList.length > 9
+            ? inputAsList[9] as String?
+            : null,
+        randomHasWrapped: inputAsList.length > 10
+            ? inputAsList[10] as bool
+            : false,
       );
     }
     if (inputAsList[0] == 'ProfileConnectionsExtra') {
@@ -285,6 +318,7 @@ class AppRoutes {
   // Profile routes
   static const String editUploadedVideo = '/profile/edit-uploaded-video';
   static const String editThumbnail = '/profile/edit-thumbnail';
+  static const String uploadCategory = '/profile/upload-category';
   static const String rejectedVideoGuidance =
       '/profile/rejected-video-guidance';
   static const String settings = '/profile/settings';
@@ -606,6 +640,7 @@ class AppRouter {
                 shouldShowEditButtons: extra.shouldShowEditButtons,
                 sport: extra.sport,
                 selectedSubcategory: extra.selectedSubcategory,
+                customSportName: extra.customSportName,
               ),
               transitionsBuilder:
                   (context, animation, secondaryAnimation, child) {
@@ -701,7 +736,12 @@ class AppRouter {
                                 child: const SettingsScreen(),
                               ),
                               transitionsBuilder:
-                                  (context, animation, secondaryAnimation, child) {
+                                  (
+                                    context,
+                                    animation,
+                                    secondaryAnimation,
+                                    child,
+                                  ) {
                                     const begin = Offset(1.0, 0.0);
                                     const end = Offset.zero;
                                     final tween = Tween(begin: begin, end: end);
@@ -725,8 +765,46 @@ class AppRouter {
                               key: state.pageKey,
                               child: const BlockedUsersScreen(),
                               transitionsBuilder:
-                                  (context, animation, secondaryAnimation, child) {
+                                  (
+                                    context,
+                                    animation,
+                                    secondaryAnimation,
+                                    child,
+                                  ) {
                                     const begin = Offset(1.0, 0.0);
+                                    const end = Offset.zero;
+                                    final tween = Tween(begin: begin, end: end);
+                                    final curvedAnimation = CurvedAnimation(
+                                      parent: animation,
+                                      curve: Curves.easeInOut,
+                                    );
+                                    return SlideTransition(
+                                      position: tween.animate(curvedAnimation),
+                                      child: child,
+                                    );
+                                  },
+                            );
+                          },
+                        ),
+                        GoRoute(
+                          path: 'upload-category',
+                          name: 'upload-category',
+                          pageBuilder: (context, state) {
+                            return CustomTransitionPage(
+                              key: state.pageKey,
+                              child: BlocProvider(
+                                create: (context) => UploadCategoryBloc()
+                                  ..add(const FetchUploadCategoryImagesEvent()),
+                                child: const UploadCategoryScreen(),
+                              ),
+                              transitionsBuilder:
+                                  (
+                                    context,
+                                    animation,
+                                    secondaryAnimation,
+                                    child,
+                                  ) {
+                                    const begin = Offset(0.0, 1.0);
                                     const end = Offset.zero;
                                     final tween = Tween(begin: begin, end: end);
                                     final curvedAnimation = CurvedAnimation(
@@ -752,12 +830,19 @@ class AppRouter {
                               key: state.pageKey,
                               child: PlayUploadedVideoScreen(
                                 videoPath: extra.videoPath,
-                                shouldShowEditButtons: extra.shouldShowEditButtons,
+                                shouldShowEditButtons:
+                                    extra.shouldShowEditButtons,
                                 sport: extra.sport,
                                 selectedSubcategory: extra.selectedSubcategory,
+                                customSportName: extra.customSportName,
                               ),
                               transitionsBuilder:
-                                  (context, animation, secondaryAnimation, child) {
+                                  (
+                                    context,
+                                    animation,
+                                    secondaryAnimation,
+                                    child,
+                                  ) {
                                     const begin = Offset(0.0, 1.0);
                                     const end = Offset.zero;
                                     final tween = Tween(begin: begin, end: end);
@@ -787,9 +872,15 @@ class AppRouter {
                                 videoDuration: extra.videoDuration,
                                 sport: extra.sport,
                                 selectedSubcategory: extra.selectedSubcategory,
+                                customSportName: extra.customSportName,
                               ),
                               transitionsBuilder:
-                                  (context, animation, secondaryAnimation, child) {
+                                  (
+                                    context,
+                                    animation,
+                                    secondaryAnimation,
+                                    child,
+                                  ) {
                                     const begin = Offset(0.0, 1.0);
                                     const end = Offset.zero;
                                     final tween = Tween(begin: begin, end: end);
@@ -810,14 +901,20 @@ class AppRouter {
                           path: 'rejected-video-guidance',
                           name: 'rejected-video-guidance',
                           pageBuilder: (context, state) {
-                            final extra = state.extra as RejectedVideoGuidanceExtra;
+                            final extra =
+                                state.extra as RejectedVideoGuidanceExtra;
                             return CustomTransitionPage(
                               key: state.pageKey,
                               child: RejectedVideoGuidanceScreen(
                                 videoTitle: extra.videoTitle,
                               ),
                               transitionsBuilder:
-                                  (context, animation, secondaryAnimation, child) {
+                                  (
+                                    context,
+                                    animation,
+                                    secondaryAnimation,
+                                    child,
+                                  ) {
                                     const begin = Offset(1.0, 0.0);
                                     const end = Offset.zero;
                                     final tween = Tween(begin: begin, end: end);
@@ -836,6 +933,36 @@ class AppRouter {
 
                         /// Sports Hub Child Route
                         GoRoute(
+                          path: 'gaming-hub',
+                          name: 'gaming-hub',
+                          pageBuilder: (context, state) {
+                            return CustomTransitionPage(
+                              key: state.pageKey,
+                              child: const GamingHubScreen(),
+                              transitionsBuilder:
+                                  (
+                                    context,
+                                    animation,
+                                    secondaryAnimation,
+                                    child,
+                                  ) {
+                                    const begin = Offset(0.0, 1.0);
+                                    const end = Offset.zero;
+                                    final tween = Tween(begin: begin, end: end);
+                                    final curvedAnimation = CurvedAnimation(
+                                      parent: animation,
+                                      curve: Curves.easeInOut,
+                                    );
+                                    return SlideTransition(
+                                      position: tween.animate(curvedAnimation),
+                                      child: child,
+                                    );
+                                  },
+                            );
+                          },
+                        ),
+
+                        GoRoute(
                           path: 'sports-hub',
                           name: 'sports-hub',
                           pageBuilder: (context, state) {
@@ -843,7 +970,12 @@ class AppRouter {
                               key: state.pageKey,
                               child: const SportsHubScreen(),
                               transitionsBuilder:
-                                  (context, animation, secondaryAnimation, child) {
+                                  (
+                                    context,
+                                    animation,
+                                    secondaryAnimation,
+                                    child,
+                                  ) {
                                     const begin = Offset(0.0, 1.0);
                                     const end = Offset.zero;
                                     final tween = Tween(begin: begin, end: end);
@@ -869,7 +1001,9 @@ class AppRouter {
                                 final sport = sportDetailsExtra.sport;
                                 return CustomTransitionPage(
                                   key: state.pageKey,
-                                  child: SportDetailsScreen(sport: sport),
+                                  child: CategoryDetailsScreen(
+                                    categoryModel: sport,
+                                  ),
                                   transitionsBuilder:
                                       (
                                         context,
@@ -879,13 +1013,18 @@ class AppRouter {
                                       ) {
                                         const begin = Offset(0.0, 1.0);
                                         const end = Offset.zero;
-                                        final tween = Tween(begin: begin, end: end);
+                                        final tween = Tween(
+                                          begin: begin,
+                                          end: end,
+                                        );
                                         final curvedAnimation = CurvedAnimation(
                                           parent: animation,
                                           curve: Curves.easeInOut,
                                         );
                                         return SlideTransition(
-                                          position: tween.animate(curvedAnimation),
+                                          position: tween.animate(
+                                            curvedAnimation,
+                                          ),
                                           child: child,
                                         );
                                       },
@@ -912,13 +1051,18 @@ class AppRouter {
                                       ) {
                                         const begin = Offset(1.0, 0.0);
                                         const end = Offset.zero;
-                                        final tween = Tween(begin: begin, end: end);
+                                        final tween = Tween(
+                                          begin: begin,
+                                          end: end,
+                                        );
                                         final curvedAnimation = CurvedAnimation(
                                           parent: animation,
                                           curve: Curves.easeInOut,
                                         );
                                         return SlideTransition(
-                                          position: tween.animate(curvedAnimation),
+                                          position: tween.animate(
+                                            curvedAnimation,
+                                          ),
                                           child: child,
                                         );
                                       },

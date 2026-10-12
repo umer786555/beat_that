@@ -1,15 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:shimmer/shimmer.dart';
+import 'package:beat_that/widgets/beat_shimmer.dart';
 
 /// Shimmer skeleton loading widget for video feed grid
 /// Shows loading state with YouTube/Instagram-style shimmer effect
 class ShimmerLoading extends StatelessWidget {
   final int cardCount;
 
-  const ShimmerLoading({
-    super.key,
-    this.cardCount = 6,
-  });
+  const ShimmerLoading({super.key, this.cardCount = 6});
 
   @override
   Widget build(BuildContext context) {
@@ -25,23 +22,9 @@ class ShimmerLoading extends StatelessWidget {
       physics: const NeverScrollableScrollPhysics(),
       shrinkWrap: true,
       itemBuilder: (context, index) {
-        return Shimmer.fromColors(
-          baseColor: Colors.grey[300]!,
-          highlightColor: Colors.grey[100]!,
-          period: const Duration(milliseconds: 1500),
-          child: Column(
-            children: [
-              /// Shimmer thumbnail placeholder
-              Expanded(
-                child: Container(
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(12),
-                    color: Colors.grey[300],
-                  ),
-                ),
-              ),
-            ],
-          ),
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(12),
+          child: const BeatShimmerFill(),
         );
       },
     );
@@ -73,16 +56,9 @@ class ShimmerLoadingIndicator extends StatelessWidget {
               physics: const NeverScrollableScrollPhysics(),
               shrinkWrap: true,
               itemBuilder: (context, index) {
-                return Shimmer.fromColors(
-                  baseColor: Colors.grey[300]!,
-                  highlightColor: Colors.grey[100]!,
-                  period: const Duration(milliseconds: 1500),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(12),
-                      color: Colors.grey[300],
-                    ),
-                  ),
+                return ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: const BeatShimmerFill(),
                 );
               },
             ),

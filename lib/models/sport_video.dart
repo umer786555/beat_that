@@ -12,6 +12,7 @@ class SportVideo extends Equatable {
     this.thumbnailUrl,
     this.username,
     this.sportId,
+    this.subcategoryId,
     this.createdAt,
     this.viewCount = 0,
     this.averageRating = 0,
@@ -32,6 +33,7 @@ class SportVideo extends Equatable {
   final String? thumbnailUrl;
   final String? username;
   final String? sportId;
+  final int? subcategoryId;
   final String? createdAt;
   final int viewCount;
   final double averageRating;
@@ -61,6 +63,7 @@ class SportVideo extends Equatable {
       thumbnailUrl: map['thumbnailUrl'] as String?,
       username: _readUsername(map),
       sportId: map['sport_id'] as String?,
+      subcategoryId: (map['subcategory_id'] as num?)?.toInt(),
       createdAt: map['created_at'] as String?,
       viewCount: (map['view_count'] as num?)?.toInt() ?? 0,
       averageRating: (map['average_rating'] as num?)?.toDouble() ?? 0,
@@ -98,6 +101,7 @@ class SportVideo extends Equatable {
       'thumbnailUrl': thumbnailUrl,
       'username': username,
       'sport_id': sportId,
+      'subcategory_id': subcategoryId,
       'created_at': createdAt,
       'view_count': viewCount,
       'average_rating': averageRating,
@@ -120,6 +124,7 @@ class SportVideo extends Equatable {
     String? thumbnailUrl,
     String? username,
     String? sportId,
+    int? subcategoryId,
     String? createdAt,
     int? viewCount,
     double? averageRating,
@@ -140,6 +145,7 @@ class SportVideo extends Equatable {
       thumbnailUrl: thumbnailUrl ?? this.thumbnailUrl,
       username: username ?? this.username,
       sportId: sportId ?? this.sportId,
+      subcategoryId: subcategoryId ?? this.subcategoryId,
       createdAt: createdAt ?? this.createdAt,
       viewCount: viewCount ?? this.viewCount,
       averageRating: averageRating ?? this.averageRating,
@@ -163,6 +169,7 @@ class SportVideo extends Equatable {
     thumbnailUrl,
     username,
     sportId,
+    subcategoryId,
     createdAt,
     viewCount,
     averageRating,

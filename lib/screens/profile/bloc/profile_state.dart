@@ -7,6 +7,8 @@ sealed class ProfileState extends Equatable {
   List<Object> get props => [];
 }
 
+const Object _deletingVideoIdUnset = Object();
+
 final class ProfileInitial extends ProfileState {}
 
 final class ProfileLoaded extends ProfileState {
@@ -15,7 +17,9 @@ final class ProfileLoaded extends ProfileState {
   final List<MyVideo> myVideo;
   final String? username;
   final String? profileUrl;
-  final bool isDeletingVideo;
+  final String? deletingVideoId;
+
+  bool get isDeletingVideo => deletingVideoId != null;
 
   const ProfileLoaded({
     required this.cameraPermissionEnabled,
@@ -23,7 +27,7 @@ final class ProfileLoaded extends ProfileState {
     this.myVideo = const [],
     this.username,
     this.profileUrl,
-    this.isDeletingVideo = false,
+    this.deletingVideoId,
   });
 
   @override
@@ -33,7 +37,7 @@ final class ProfileLoaded extends ProfileState {
     myVideo,
     username ?? '',
     profileUrl ?? '',
-    isDeletingVideo,
+    deletingVideoId ?? '',
   ];
 
   ProfileLoaded copyWith({
@@ -43,17 +47,19 @@ final class ProfileLoaded extends ProfileState {
     List<MyVideo>? thumbnails,
     String? username,
     String? profileUrl,
-    bool? isDeletingVideo,
+    Object? nextDeletingVideoId = _deletingVideoIdUnset,
   }) {
     return ProfileLoaded(
       cameraPermissionEnabled:
           cameraPermissionEnabled ?? this.cameraPermissionEnabled,
       galleryPermissionEnabled:
           galleryPermissionEnabled ?? this.galleryPermissionEnabled,
-      myVideo: thumbnails ?? this.myVideo,
+      myVideo: thumbnails ?? myVideo,
       username: username ?? this.username,
       profileUrl: profileUrl ?? this.profileUrl,
-      isDeletingVideo: isDeletingVideo ?? this.isDeletingVideo,
+      deletingVideoId: identical(nextDeletingVideoId, _deletingVideoIdUnset)
+          ? deletingVideoId
+          : nextDeletingVideoId as String?,
     );
   }
 }

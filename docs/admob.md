@@ -122,7 +122,7 @@ Current behavior:
 
 ## Sport Details Placement
 
-- Sport details screen lives in [lib/screens/sports_hub/sport_details_screen.dart](/Users/umermalik/beat_that/lib/screens/sports_hub/sport_details_screen.dart).
+- Sport details screen lives in [lib/screens/sports_hub/category_details_details_screen.dart](/Users/umermalik/beat_that/lib/screens/sports_hub/sport_details_screen.dart).
 - This placement uses a single native ad inside the list flow rather than an interstitial.
 - Sport details native ad rendering uses [lib/widgets/sport_details_native_ad_card.dart](/Users/umermalik/beat_that/lib/widgets/sport_details_native_ad_card.dart), which reuses the shared [lib/widgets/feed_native_ad_card.dart](/Users/umermalik/beat_that/lib/widgets/feed_native_ad_card.dart) implementation.
 

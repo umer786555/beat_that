@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
 
 /// Sport ordering preferences by locale
 /// Extracted as constants to reduce duplication and improve maintainability
@@ -305,14 +305,12 @@ List<String> getOrderedSportIdsForLocale(Locale? locale) {
       sportOrderByLocale['en']!;
 }
 
-/// Get the display name for a sport based on its ID
-/// Converts snake_case IDs to readable titles (e.g., 'american_football' → 'American Football')
+/// Fallback display name for a sport key when backend `displayName` is unavailable.
+/// Converts snake_case IDs to readable titles (e.g., 'american_football' -> 'American Football').
 String getDisplayNameForSport(String sportId) {
   switch (sportId) {
     case 'mma':
       return 'MMA';
-    case 'mixed_martial_arts':
-      return 'Mixed Martial Arts';
     default:
       break;
   }
@@ -321,70 +319,4 @@ String getDisplayNameForSport(String sportId) {
       .split('_')
       .map((word) => word[0].toUpperCase() + word.substring(1))
       .join(' ');
-}
-
-/// Get the icon for a sport based on its ID
-/// Maps sport IDs to Material Design sport icons
-IconData getIconForSport(String sportId) {
-  switch (sportId) {
-    case 'american_football':
-      return Icons.sports_football;
-    case 'basketball':
-      return Icons.sports_basketball;
-    case 'baseball':
-      return Icons.sports_baseball;
-    case 'ice_hockey':
-      return Icons.sports_hockey;
-    case 'soccer':
-      return Icons.sports_soccer;
-    case 'tennis':
-      return Icons.sports_tennis;
-    case 'badminton':
-      return Icons.sports_tennis;
-    case 'cricket':
-      return Icons.sports_baseball;
-    case 'pool':
-      return Icons.circle;
-    case 'snooker':
-      return Icons.grain;
-    case 'weightlifting':
-      return Icons.fitness_center;
-    default:
-      return Icons.sports;
-  }
-}
-
-/// Get the bundled image asset for a sport when one exists.
-String? getImageAssetPathForSport(String sportId) {
-  switch (sportId) {
-    case 'american_football':
-      return 'assets/american_football_male.jpg';
-    case 'badminton':
-      return 'assets/badmington.png';
-    case 'baseball':
-      return 'assets/baseball_male.jpg';
-    case 'basketball':
-      return 'assets/basketball_male.jpg';
-    case 'boxing':
-      return 'assets/boxing_male.jpg';
-    case 'cricket':
-      return 'assets/cricket_male.jpg';
-    case 'ice_hockey':
-      return 'assets/ice_hockey_male.jpg';
-    case 'mma':
-    case 'mixed_martial_arts':
-      return 'assets/mma_male.png';
-    case 'pool':
-      return 'assets/pool_male.jpg';
-    case 'soccer':
-      return 'assets/soccer_male.jpg';
-    case 'snooker':
-      return 'assets/snooker_male.jpg';
-    case 'tennis':
-      return 'assets/tennis_male.jpg';
-    case 'weightlifting':
-      return 'assets/weightlifting_male.jpg';
-    default:
-      return null;
-  }
 }
