@@ -127,7 +127,8 @@ class SupabaseService {
 
   /// Subscribe to real-time approval status changes for the current user's videos
   ///
-  /// Returns a RealtimeChannel that listens for UPDATE events on the my_videos table.
+  /// Returns a RealtimeChannel that listens for UPDATE events on the current
+  /// user's rows in the my_videos table, or null when no user is signed in.
   /// The callback receives the updated video record when the approved field changes.
   ///
   /// The channel should be unsubscribed when no longer needed to avoid memory leaks.
@@ -146,15 +147,25 @@ class SupabaseService {
   /// );
   /// // Later: await channel.unsubscribe();
   /// ```
-  RealtimeChannel subscribeToVideoApprovalChanges({
+  RealtimeChannel? subscribeToVideoApprovalChanges({
     required Function(String videoId, bool? approvalStatus) onApprovalChanged,
   }) {
+    final userId = getCurrentUserId();
+    if (userId == null) {
+      return null;
+    }
+
     return client
-        .channel('my-videos-approval-changes')
+        .channel('my-videos-approval-changes-$userId')
         .onPostgresChanges(
           event: PostgresChangeEvent.update,
           schema: 'public',
           table: 'my_videos',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'user_id',
+            value: userId,
+          ),
           callback: (payload) {
             try {
               final newRecord = payload.newRecord;

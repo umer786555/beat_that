@@ -1,40 +1,40 @@
-import 'package:beat_that/models/user_personal_profile.dart';
-import 'package:beat_that/models/my_video.dart';
-import 'package:beat_that/service_locator.dart';
-import 'package:equatable/equatable.dart';
 import 'dart:io';
-import 'package:beat_that/constants/app_enums.dart';
 
 import 'package:beat_that/constants/app_strings.dart';
-import 'package:beat_that/services/auth_service.dart';
+import 'package:beat_that/models/my_video.dart';
+import 'package:beat_that/models/user_personal_profile.dart';
+import 'package:beat_that/service_locator.dart';
 import 'package:beat_that/services/permission_service.dart';
 import 'package:beat_that/services/preferences_service.dart';
 import 'package:beat_that/services/supabase_service.dart';
 import 'package:beat_that/services/video_picker_service.dart';
 import 'package:bloc_presentation/bloc_presentation.dart';
+import 'package:equatable/equatable.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' show RealtimeChannel;
+
 part 'profile_event.dart';
 part 'profile_presentation_event.dart';
 part 'profile_state.dart';
 
+/// Handlers run concurrently, so every handler re-reads [state] after an
+/// `await` (via [_updateLoaded]) instead of reusing a snapshot taken before it.
+/// Otherwise one handler would overwrite changes made by another.
 class ProfileBloc extends Bloc<ProfileEvent, ProfileState>
     with BlocPresentationMixin<ProfileState, ProfilePresentationEvent> {
-  final permissionService = locator<PermissionService>();
-  final supabaseService = locator<SupabaseService>();
-  final authService = locator<AuthService>();
-  final preferencesService = locator<PreferencesService>();
-  final videoPickerService = locator<VideoPickerService>();
-
-  // Cache user profile at block level for access across all handlers
-  late UserPersonalProfile? userProfile;
-
-  // Realtime channel for listening to video approval changes
-  // Stored at bloc level to enable proper cleanup on close()
-  RealtimeChannel? _approvalChannel;
-
-  ProfileBloc() : super(ProfileInitial()) {
+  ProfileBloc({
+    SupabaseService? supabaseService,
+    PreferencesService? preferencesService,
+    PermissionService? permissionService,
+    VideoPickerService? videoPickerService,
+  }) : _supabaseService = supabaseService ?? locator<SupabaseService>(),
+       _preferencesService =
+           preferencesService ?? locator<PreferencesService>(),
+       _permissionService = permissionService ?? locator<PermissionService>(),
+       _videoPickerService =
+           videoPickerService ?? locator<VideoPickerService>(),
+       super(const ProfileInitial()) {
     on<LoadProfileEvent>(_onLoadProfile);
     on<AddProfileImageEvent>(_onAddProfileImage);
     on<DeleteVideoEvent>(_onDeleteVideo);
@@ -42,70 +42,287 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState>
     on<VideoApprovalUpdatedEvent>(_onVideoApprovalUpdated);
   }
 
-  /// Load profile data and fetch thumbnail URLs
+  final SupabaseService _supabaseService;
+  final PreferencesService _preferencesService;
+  final PermissionService _permissionService;
+  final VideoPickerService _videoPickerService;
+
+  /// Cached so the profile image upload can use the username.
+  UserPersonalProfile? _userProfile;
+
+  /// Guards the whole photo flow, including the permission prompt and picker,
+  /// which run before [ProfileLoaded.isUploadingProfileImage] is set.
+  bool _isUpdatingProfileImage = false;
+
+  /// Listens for approval changes while any video is pending review.
+  RealtimeChannel? _approvalChannel;
+
+  /// Loads the profile and videos.
   ///
-  /// This event performs three sequential operations:
-  /// 1. Check camera and gallery permssions
-  /// 2. Fetch all thumbnail URLs for the current user's videos
-  /// 3. Fetch the username from preferences
+  /// The first load shows [ProfileLoading]. Later loads (pull-to-refresh) keep
+  /// the current profile on screen, flag [ProfileLoaded.isRefreshing], and
+  /// report failures as a snackbar instead of replacing the screen.
   Future<void> _onLoadProfile(
     LoadProfileEvent event,
     Emitter<ProfileState> emit,
   ) async {
+    if (state is ProfileLoaded) {
+      _updateLoaded(emit, (loaded) => loaded.copyWith(isRefreshing: true));
+    } else {
+      emit(const ProfileLoading());
+    }
+
     try {
-      emit(ProfileLoading());
+      final myVideos = await _supabaseService.getMyVideo();
+      final userProfile = await _preferencesService.fetchUserProfile();
+      _userProfile = userProfile;
 
-      // Step 1: Check if camera and gallery permissions are enabled
-      final cameraPermissionEnabled = await permissionService
-          .checkCameraPermissionOnLoad();
-      final galleryPermissionEnabled = await permissionService
-          .checkPhotosPermissionOnLoad();
-
-      // Step 2: Fetch all thumbnail URLs for the current user's videos from Supabase
-      final myVideos = await supabaseService.getMyVideo();
-
-      // Step 3: Fetch the username from preferences and cache at block level
-      userProfile = await preferencesService.fetchUserProfile();
+      final latestState = state;
+      if (latestState is ProfileLoaded) {
+        emit(
+          latestState.copyWith(
+            myVideos: myVideos,
+            username: userProfile?.username,
+            profileUrl: userProfile?.profileUrl,
+            isRefreshing: false,
+          ),
+        );
+      } else {
+        emit(
+          ProfileLoaded(
+            myVideos: myVideos,
+            username: userProfile?.username,
+            profileUrl: userProfile?.profileUrl,
+          ),
+        );
+      }
 
       await _syncApprovalSubscription(myVideos);
-
-      // Initialize with permissions, thumbnails, and cached profile data.
-      emit(
-        ProfileLoaded(
-          cameraPermissionEnabled: cameraPermissionEnabled,
-          galleryPermissionEnabled: galleryPermissionEnabled,
-          myVideo: myVideos,
-          username: userProfile?.username,
-          profileUrl: userProfile?.profileUrl,
-        ),
-      );
     } catch (e) {
-      emit(ProfileError(message: '${AppStrings.failedToLoadProfile}: $e'));
+      debugPrint('[PROFILE] Failed to load profile: $e');
+
+      // Checks the latest state: a concurrent load may have succeeded meanwhile.
+      if (state is ProfileLoaded) {
+        _updateLoaded(emit, (loaded) => loaded.copyWith(isRefreshing: false));
+        emitPresentation(
+          const ProfileErrorMessageEvent(
+            message: AppStrings.failedToRefreshProfile,
+          ),
+        );
+      } else {
+        emit(const ProfileError(message: AppStrings.failedToLoadProfile));
+      }
     }
   }
 
-  Future<void> _syncApprovalSubscription(List<MyVideo> videos) async {
-    final hasPendingApproval = videos.any((video) => video.approved == null);
-
-    if (hasPendingApproval) {
-      if (_approvalChannel == null) {
-        _subscribeToApprovalChanges();
-      }
+  /// Asks for photo access, lets the user pick a photo, and uploads it.
+  ///
+  /// The profile stays on screen during the upload;
+  /// [ProfileLoaded.isUploadingProfileImage] drives the in-place indicator.
+  Future<void> _onAddProfileImage(
+    AddProfileImageEvent event,
+    Emitter<ProfileState> emit,
+  ) async {
+    if (state is! ProfileLoaded || _isUpdatingProfileImage) {
       return;
     }
 
-    await _unsubscribeFromApprovalChanges();
+    _isUpdatingProfileImage = true;
+    try {
+      final hasAccess = await _permissionService.requestPhotosAccess();
+      if (!hasAccess) {
+        emitPresentation(
+          const ProfileErrorMessageEvent(
+            message: AppStrings.photoAccessRequired,
+          ),
+        );
+        return;
+      }
+
+      final selectedPhoto = await _videoPickerService.pickGalleryPhoto();
+      if (selectedPhoto == null) {
+        return;
+      }
+
+      _updateLoaded(
+        emit,
+        (loaded) => loaded.copyWith(isUploadingProfileImage: true),
+      );
+
+      final uploadResult = await _supabaseService.uploadAndSaveProfileImage(
+        File(selectedPhoto.path),
+        _userProfile?.username ?? '',
+      );
+      if (uploadResult['success'] != true) {
+        throw Exception(uploadResult['error']);
+      }
+
+      final updatedProfile = await _supabaseService.fetchUserPersonalProfile();
+      if (updatedProfile != null) {
+        _userProfile = updatedProfile;
+        await _preferencesService.saveUserProfile(updatedProfile);
+      }
+
+      _updateLoaded(
+        emit,
+        (loaded) => loaded.copyWith(
+          profileUrl: updatedProfile?.profileUrl,
+          isUploadingProfileImage: false,
+        ),
+      );
+    } catch (e) {
+      debugPrint('[PROFILE] Failed to update profile image: $e');
+      _updateLoaded(
+        emit,
+        (loaded) => loaded.copyWith(isUploadingProfileImage: false),
+      );
+      emitPresentation(
+        const ProfileErrorMessageEvent(
+          message: AppStrings.failedToUpdateProfilePhoto,
+        ),
+      );
+    } finally {
+      _isUpdatingProfileImage = false;
+    }
   }
 
-  /// Subscribe to real-time approval status changes
+  /// Deletes a video through the Supabase Edge Function.
   ///
-  /// Sets up a Supabase realtime channel to listen for UPDATE events on the
-  /// my_videos table. When the approved field changes, emits VideoApprovalUpdatedEvent.
-  void _subscribeToApprovalChanges() {
+  /// Only one delete runs at a time; requests made while one is in flight are
+  /// ignored.
+  Future<void> _onDeleteVideo(
+    DeleteVideoEvent event,
+    Emitter<ProfileState> emit,
+  ) async {
+    final currentState = state;
+    if (currentState is! ProfileLoaded || currentState.isDeletingVideo) {
+      return;
+    }
+
+    emit(currentState.copyWith(nextDeletingVideoId: event.videoId));
+
     try {
-      _approvalChannel = supabaseService.subscribeToVideoApprovalChanges(
+      final deleteResult = await _supabaseService.deleteMyVideoViaEdgeFunction(
+        videoId: event.videoId,
+      );
+      if (deleteResult['success'] != true) {
+        throw Exception(deleteResult['error']);
+      }
+
+      _updateLoaded(
+        emit,
+        (loaded) => loaded.copyWith(
+          myVideos: loaded.myVideos
+              .where((video) => video.id != event.videoId)
+              .toList(),
+          nextDeletingVideoId: null,
+        ),
+      );
+      emitPresentation(
+        const ProfileSuccessMessageEvent(message: AppStrings.videoDeleted),
+      );
+
+      final latestState = state;
+      if (latestState is ProfileLoaded) {
+        await _syncApprovalSubscription(latestState.myVideos);
+      }
+    } catch (e) {
+      debugPrint('[PROFILE] Failed to delete video ${event.videoId}: $e');
+      _updateLoaded(
+        emit,
+        (loaded) => loaded.copyWith(nextDeletingVideoId: null),
+      );
+      emitPresentation(
+        const ProfileErrorMessageEvent(message: AppStrings.failedToDeleteVideo),
+      );
+    }
+  }
+
+  /// Re-fetches only the videos, e.g. after an upload.
+  ///
+  /// Falls back to a full load when no profile is on screen yet.
+  Future<void> _onRefreshVideos(
+    RefreshVideosEvent event,
+    Emitter<ProfileState> emit,
+  ) async {
+    if (state is! ProfileLoaded) {
+      add(const LoadProfileEvent());
+      return;
+    }
+
+    try {
+      final myVideos = await _supabaseService.getMyVideo();
+      _updateLoaded(emit, (loaded) => loaded.copyWith(myVideos: myVideos));
+      await _syncApprovalSubscription(myVideos);
+    } catch (e) {
+      debugPrint('[PROFILE] Failed to refresh videos: $e');
+      emitPresentation(
+        const ProfileErrorMessageEvent(
+          message: AppStrings.failedToRefreshVideos,
+        ),
+      );
+    }
+  }
+
+  /// Applies a realtime approval change to the matching video.
+  ///
+  /// Updates for videos not in the list are ignored: the list is refreshed
+  /// after every upload, and the next load picks up anything missed.
+  Future<void> _onVideoApprovalUpdated(
+    VideoApprovalUpdatedEvent event,
+    Emitter<ProfileState> emit,
+  ) async {
+    final currentState = state;
+    if (currentState is! ProfileLoaded) {
+      return;
+    }
+
+    final videoIndex = currentState.myVideos.indexWhere(
+      (video) => video.id == event.videoId,
+    );
+    if (videoIndex == -1) {
+      return;
+    }
+
+    final updatedVideos = List<MyVideo>.of(currentState.myVideos);
+    updatedVideos[videoIndex] = updatedVideos[videoIndex].copyWith(
+      approved: event.approvalStatus,
+    );
+
+    emit(currentState.copyWith(myVideos: updatedVideos));
+    await _syncApprovalSubscription(updatedVideos);
+  }
+
+  /// Emits [update] applied to the latest state, if a profile is on screen.
+  void _updateLoaded(
+    Emitter<ProfileState> emit,
+    ProfileLoaded Function(ProfileLoaded loaded) update,
+  ) {
+    final latestState = state;
+    if (latestState is ProfileLoaded) {
+      emit(update(latestState));
+    }
+  }
+
+  /// Keeps the realtime channel open only while a video awaits approval.
+  Future<void> _syncApprovalSubscription(List<MyVideo> videos) async {
+    final hasPendingApproval = videos.any((video) => video.approved == null);
+
+    if (!hasPendingApproval) {
+      await _unsubscribeFromApprovalChanges();
+      return;
+    }
+
+    if (_approvalChannel != null || isClosed) {
+      return;
+    }
+
+    try {
+      _approvalChannel = _supabaseService.subscribeToVideoApprovalChanges(
         onApprovalChanged: (videoId, approvalStatus) {
-          // Emit event to handle the approval status change
+          if (isClosed) {
+            return;
+          }
           add(
             VideoApprovalUpdatedEvent(
               videoId: videoId,
@@ -115,381 +332,30 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState>
         },
       );
     } catch (e) {
-      print('[ERROR] Failed to subscribe to approval changes: $e');
+      debugPrint('[PROFILE] Failed to subscribe to approval changes: $e');
     }
   }
 
   Future<void> _unsubscribeFromApprovalChanges() async {
-    if (_approvalChannel == null) {
+    final channel = _approvalChannel;
+    if (channel == null) {
       return;
     }
 
+    // Cleared before awaiting so a concurrent sync can open a fresh channel.
+    _approvalChannel = null;
     try {
-      await _approvalChannel!.unsubscribe();
-      _approvalChannel = null;
+      await channel.unsubscribe();
     } catch (e) {
-      print('[ERROR] Failed to unsubscribe from approval changes: $e');
+      debugPrint('[PROFILE] Failed to unsubscribe from approval changes: $e');
     }
   }
 
-  /// Handle adding a profile image
-  /// Checks photos permission, requests if needed, opens gallery picker, and uploads to Supabase
-  Future<void> _onAddProfileImage(
-    AddProfileImageEvent event,
-    Emitter<ProfileState> emit,
-  ) async {
-    try {
-      // Check current photos permission status
-      final currentStatus = await Permission.photos.status;
-
-      bool hasPermission = currentStatus.isGranted;
-
-      // If permission is not granted, request it
-      if (!hasPermission) {
-        final permissionGranted =
-            await PermissionService.requestPhotosPermission();
-
-        if (!permissionGranted) {
-          // Permission denied or restricted - cannot proceed
-          return;
-        }
-        hasPermission = true;
-      }
-
-      // If we have permission, open the gallery picker
-      if (hasPermission) {
-        final selectedPhoto = await videoPickerService.pickGalleryPhoto();
-
-        if (selectedPhoto != null) {
-          print('Profile photo selected: ${selectedPhoto.path}');
-
-          // Save current state before emitting loading
-          final previousState = state;
-
-          // ==================== Upload to Supabase ====================
-          emit(ProfileLoading());
-
-          // Convert XFile to File
-          final photoFile = _xfileToFile(selectedPhoto);
-
-          // Use cached username from block level
-          final username = userProfile?.username ?? '';
-
-          final uploadResult = await supabaseService.uploadAndSaveProfileImage(
-            photoFile,
-            username,
-          );
-
-          if (uploadResult['success']) {
-            print('✓ Profile image uploaded successfully!');
-
-            // Fetch updated profile to cache locally
-            final updatedProfile = await supabaseService
-                .fetchUserPersonalProfile();
-
-            if (updatedProfile != null) {
-              // Update class-level cache with new profile
-              userProfile = updatedProfile;
-
-              // Save updated profile to preferences
-              await preferencesService.saveUserProfile(updatedProfile);
-
-              // Emit success - restore to ProfileLoaded state with updated profileUrl
-              if (previousState is ProfileLoaded) {
-                emit(
-                  previousState.copyWith(profileUrl: updatedProfile.profileUrl),
-                );
-              }
-            }
-          } else {
-            emit(
-              ProfileError(
-                message:
-                    'Failed to upload profile image: ${uploadResult['error']}',
-              ),
-            );
-          }
-        }
-      }
-    } catch (e) {
-      emit(ProfileError(message: 'Failed to add profile image: $e'));
-    }
-  }
-
-  /// Convert XFile to File
-  /// XFile is returned by image_picker, but Supabase service expects File
-  File _xfileToFile(dynamic xfile) {
-    return File(xfile.path);
-  }
-
-  /// Handle deleting a video
-  /// Deletes a video through the Supabase Edge Function.
-  Future<void> _onDeleteVideo(
-    DeleteVideoEvent event,
-    Emitter<ProfileState> emit,
-  ) async {
-    print('Attempting to delete video with ID: ${event.videoId}');
-
-    final currentState = state;
-
-    if (currentState is! ProfileLoaded) {
-      return;
-    }
-
-    if (currentState.deletingVideoId != null) {
-      return;
-    }
-
-    try {
-      emit(currentState.copyWith(nextDeletingVideoId: event.videoId));
-
-      // Call Supabase service to delete the video
-      final deleteResult = await supabaseService.deleteMyVideoViaEdgeFunction(
-        videoId: event.videoId,
-      );
-
-      if (deleteResult['success']) {
-        print('✓ Video deleted successfully!');
-
-        // Fetch updated thumbnails after deletion
-        final updatedThumbnails = await supabaseService.getMyVideo();
-        await _syncApprovalSubscription(updatedThumbnails);
-
-        _emitLatestLoadedState(
-          emit,
-          thumbnails: updatedThumbnails,
-          clearDeletingVideo: true,
-        );
-        emitPresentation(
-          ProfileDeleteVideoSuccessEvent(message: 'Video deleted.'),
-        );
-      } else {
-        _emitLatestLoadedState(emit, clearDeletingVideo: true);
-        emitPresentation(
-          ProfileDeleteVideoErrorEvent(
-            message: 'Failed to delete video: ${deleteResult['error']}',
-          ),
-        );
-      }
-    } catch (e) {
-      _emitLatestLoadedState(emit, clearDeletingVideo: true);
-      emitPresentation(
-        ProfileDeleteVideoErrorEvent(message: 'Failed to delete video: $e'),
-      );
-    }
-  }
-
-  void _emitLatestLoadedState(
-    Emitter<ProfileState> emit, {
-    List<MyVideo>? thumbnails,
-    bool clearDeletingVideo = false,
-  }) {
-    final latestState = state;
-
-    if (latestState is ProfileLoaded) {
-      emit(
-        latestState.copyWith(
-          thumbnails: thumbnails,
-          nextDeletingVideoId: clearDeletingVideo
-              ? null
-              : _deletingVideoIdUnset,
-        ),
-      );
-      return;
-    }
-
-    if (!isClosed) {
-      add(const LoadProfileEvent());
-    }
-  }
-
-  /// Refresh videos list by fetching updated thumbnails
-  /// Lightweight refresh that only updates the thumbnails list without reloading permissions
-  /// Used when a video is uploaded or modified
-  Future<void> _onRefreshVideos(
-    RefreshVideosEvent event,
-    Emitter<ProfileState> emit,
-  ) async {
-    try {
-      final previousState = state;
-
-      // Keep the current profile content visible during video-only refreshes.
-      if (previousState is! ProfileLoaded) {
-        emit(ProfileLoading());
-      }
-
-      // Fetch updated thumbnails
-      final updatedThumbnails = await supabaseService.getMyVideo();
-      await _syncApprovalSubscription(updatedThumbnails);
-
-      // Emit success with updated thumbnails
-      if (previousState is ProfileLoaded) {
-        emit(previousState.copyWith(thumbnails: updatedThumbnails));
-      } else {
-        // Fallback: just trigger full profile load
-        add(LoadProfileEvent());
-      }
-    } catch (e) {
-      emit(ProfileError(message: 'Failed to refresh videos: $e'));
-    }
-  }
-
-  /// Handle real-time video approval status updates
-  ///
-  /// When a video's approval status changes in Supabase, this handler:
-  /// 1. Finds the video in the current state by ID
-  /// 2. Updates the video's approved field with the new value
-  /// 3. Emits a new ProfileLoaded state with the updated videos
-  ///
-  /// This maintains the reactive nature of the bloc while only updating the
-  /// specific video that changed, rather than refreshing all videos.
-  Future<void> _onVideoApprovalUpdated(
-    VideoApprovalUpdatedEvent event,
-    Emitter<ProfileState> emit,
-  ) async {
-    try {
-      final currentState = state;
-
-      if (currentState is! ProfileLoaded) {
-        add(const RefreshVideosEvent());
-        return;
-      }
-
-      // Find the video that was updated
-      final videoIndex = currentState.myVideo.indexWhere(
-        (video) => video.id == event.videoId,
-      );
-
-      if (videoIndex == -1) {
-        add(const RefreshVideosEvent());
-        return;
-      }
-
-      // Create updated video with new approval status
-      final updatedVideo = currentState.myVideo[videoIndex].copyWith(
-        approved: event.approvalStatus,
-      );
-
-      // Create new videos list with updated video
-      final updatedVideos = List<MyVideo>.from(currentState.myVideo);
-      updatedVideos[videoIndex] = updatedVideo;
-
-      await _syncApprovalSubscription(updatedVideos);
-
-      print(
-        '[PROFILE] Updated video approval: ${event.videoId} -> ${event.approvalStatus}',
-      );
-
-      // Emit updated state with modified videos list
-      emit(currentState.copyWith(thumbnails: updatedVideos));
-    } catch (e) {
-      print('[ERROR] Failed to handle approval update: $e');
-    }
-  }
-
-  /// Clean up resources when the bloc is closed
-  ///
-  /// Unsubscribes from the realtime channel to prevent memory leaks
-  /// and stop receiving approval change updates.
   @override
   Future<void> close() async {
+    // Closing first sets isClosed, so a handler still in flight can't open a
+    // new channel while the old one is unsubscribing.
+    await super.close();
     await _unsubscribeFromApprovalChanges();
-    return super.close();
   }
-
-  /// Handle logout
-  // Future<void> _onLogout(LogoutEvent event, Emitter<ProfileState> emit) async {
-  //   try {
-  //     emit(ProfileLoading());
-  //     await authService.logout();
-  //   } catch (e) {
-  //     emit(ProfileError(message: '${AppStrings.logoutFailed}: $e'));
-  //   }
-  // }
-
-  /// Handle camera permission request
-  // Future<void> _onRequestCameraPermission(
-  //   RequestCameraPermissionEvent event,
-  //   Emitter<ProfileState> emit,
-  // ) async {
-  //   try {
-  //     // Check current permission status
-  //     final status = await Permission.camera.status;
-
-  //     if (status.isGranted) {
-  //       // Permission already granted - update ProfileLoaded state
-  //       emit((state as ProfileLoaded).copyWith(cameraPermissionEnabled: true));
-  //       return;
-  //     }
-
-  //     // Request permission
-  //     final permissionGranted =
-  //         await PermissionService.requestCameraPermission();
-
-  //     if (permissionGranted) {
-  //       // Permission granted after request - update ProfileLoaded state
-  //       emit((state as ProfileLoaded).copyWith(cameraPermissionEnabled: true));
-  //     } else {
-  //       // Permission denied - show permission denied state
-  //       final finalStatus = await Permission.camera.status;
-  //       emit(
-  //         CameraPermissionDenied(
-  //           isPermanentlyDenied: finalStatus.isPermanentlyDenied,
-  //         ),
-  //       );
-  //     }
-  //   } catch (e) {
-  //     emit(ProfileError(message: 'Failed to request camera permission: $e'));
-  //   }
-  // }
-
-  /// Handle gallery permission request
-  // Future<void> _onRequestGalleryPermission(
-  //   RequestGalleryPermissionEvent event,
-  //   Emitter<ProfileState> emit,
-  // ) async {
-  //   try {
-  //     // Check current permission status
-  //     final status = await Permission.photos.status;
-
-  //     if (status.isGranted) {
-  //       // Permission already granted - update ProfileLoaded state
-  //       emit((state as ProfileLoaded).copyWith(galleryPermissionEnabled: true));
-  //       return;
-  //     }
-
-  //     // Request permission
-  //     final permissionGranted =
-  //         await PermissionService.requestPhotosPermission();
-
-  //     if (permissionGranted) {
-  //       // Permission granted after request - update ProfileLoaded state
-  //       emit((state as ProfileLoaded).copyWith(galleryPermissionEnabled: true));
-  //     } else {
-  //       // Permission denied - show permission denied state
-  //       emit(
-  //         (state as ProfileLoaded).copyWith(galleryPermissionEnabled: false),
-  //       );
-  //     }
-  //   } catch (e) {
-  //     emit(ProfileError(message: 'Failed to request gallery permission: $e'));
-  //   }
 }
-
-  /// Handle record video selected
-  // Future<void> _onRecordVideoSelected(
-  //   RecordVideoSelected event,
-  //   Emitter<ProfileState> emit,
-  // ) async {
-  //   emit(const RecordVideoMode());
-  // }
-
-  // /// Handle upload from gallery selected
-  // Future<void> _onUploadFromGallerySelected(
-  //   UploadFromGallerySelected event,
-  //   Emitter<ProfileState> emit,
-  // ) async {
-  //   emit(const UploadFromGalleryMode());
-  // }
-
-

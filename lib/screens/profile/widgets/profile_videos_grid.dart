@@ -16,9 +16,8 @@ import 'package:beat_that/routes/app_router.dart';
 /// Usage:
 /// ```dart
 /// ProfileVideosGrid(
-///   videos: state.myVideo,
+///   videos: state.myVideos,
 ///   isDark: isDark,
-///   onVideoOpen: (videoPath) { /* handle open */ },
 ///   onVideoDeleteConfirmed: (videoId) { /* handle delete */ },
 /// )
 /// ```
@@ -32,9 +31,6 @@ class ProfileVideosGrid extends StatelessWidget {
   /// The id of the tile currently being deleted.
   final String? deletingVideoId;
 
-  /// Callback when a video is opened
-  final Function(String videoPath) onVideoOpen;
-
   /// Callback when a video is confirmed for deletion
   final Function(String videoId) onVideoDeleteConfirmed;
 
@@ -43,7 +39,6 @@ class ProfileVideosGrid extends StatelessWidget {
     required this.videos,
     required this.isDark,
     required this.deletingVideoId,
-    required this.onVideoOpen,
     required this.onVideoDeleteConfirmed,
   });
 

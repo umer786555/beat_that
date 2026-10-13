@@ -39,18 +39,11 @@ class PermissionService {
     return status.isGranted;
   }
 
-  /// Check camera permission status on screen load
-  /// Returns: true if camera permission is enabled, false otherwise
-  Future<bool> checkCameraPermissionOnLoad() async {
-    final status = await Permission.camera.status;
-    return status.isGranted;
-  }
-
-  /// Check photos permission status on screen load
-  /// Returns: true if photos permission is enabled, false otherwise
-  Future<bool> checkPhotosPermissionOnLoad() async {
-    final status = await Permission.photos.status;
-    return status.isGranted;
+  /// Request photos access for picking an image from the gallery.
+  /// Returns: true if full or limited (iOS) access is granted, false otherwise
+  Future<bool> requestPhotosAccess() async {
+    final status = await Permission.photos.request();
+    return status.isGranted || status.isLimited;
   }
 
   /// Check current microphone permission status without requesting

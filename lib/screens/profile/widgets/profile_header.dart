@@ -5,6 +5,7 @@ import 'package:beat_that/bloc/follow_counts_cubit.dart';
 import 'package:beat_that/constants/app_colors.dart';
 import 'package:beat_that/services/app_onboarding.dart';
 import 'package:beat_that/services/onboarding_service.dart';
+import 'package:beat_that/widgets/beat_shimmer.dart';
 import 'package:beat_that/screens/profile/widgets/profile_stat_tile.dart';
 
 /// A reusable profile header widget displaying user info, profile picture, and stats.
@@ -47,6 +48,9 @@ class ProfileHeader extends StatelessWidget {
   /// Callback triggered when "Followers" stat is tapped
   final VoidCallback onFollowersTap;
 
+  /// Whether a new profile picture is being uploaded
+  final bool isUploadingProfileImage;
+
   /// Optional onboarding step for profile picture
   final OnboardingStepData? profilePictureOnboardingStep;
 
@@ -61,6 +65,7 @@ class ProfileHeader extends StatelessWidget {
     required this.onProfilePictureTap,
     required this.onFollowingTap,
     required this.onFollowersTap,
+    this.isUploadingProfileImage = false,
     this.profilePictureOnboardingStep,
     this.statsOnboardingStep,
   });
@@ -68,10 +73,12 @@ class ProfileHeader extends StatelessWidget {
   /// Builds the profile picture widget with a solid outer ring
   Widget _buildProfilePicture() {
     final picture = GestureDetector(
-      onTap: () {
-        HapticFeedback.mediumImpact();
-        onProfilePictureTap();
-      },
+      onTap: isUploadingProfileImage
+          ? null
+          : () {
+              HapticFeedback.mediumImpact();
+              onProfilePictureTap();
+            },
       child: Container(
         width: 72,
         height: 72,
@@ -101,6 +108,11 @@ class ProfileHeader extends StatelessWidget {
                       child: Image.network(
                         profileUrl!,
                         fit: BoxFit.cover,
+                        loadingBuilder: (context, child, loadingProgress) {
+                          if (loadingProgress == null) return child;
+
+                          return const BeatShimmerFill();
+                        },
                         errorBuilder: (context, error, stackTrace) {
                           return Icon(
                             Icons.error_outline,
@@ -142,6 +154,14 @@ class ProfileHeader extends StatelessWidget {
                       ),
                     ),
             ),
+            if (isUploadingProfileImage)
+              const ClipOval(
+                child: SizedBox(
+                  width: 68,
+                  height: 68,
+                  child: BeatShimmerFill(),
+                ),
+              ),
           ],
         ),
       ),
