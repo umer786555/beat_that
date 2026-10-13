@@ -134,14 +134,7 @@ void main() {
           sportId: sportId,
         ),
       ).thenAnswer((_) async => result);
-      when(
-        () => mockSupabaseService.getRandomExploreVideos(
-          limit: 20,
-          seed: any(named: 'seed'),
-          afterId: null,
-          hasWrapped: false,
-        ),
-      ).thenAnswer((_) async => buildRandomExploreResult());
+      stubFirstRandomPage(() async => buildRandomExploreResult());
 
       await tester.pumpWidget(buildTestApp());
       await tester.tap(find.text(sportLabel).first);
@@ -195,14 +188,7 @@ void main() {
         sportId: null,
       ),
     ).thenAnswer((_) async => emptyResult);
-    when(
-      () => mockSupabaseService.getRandomExploreVideos(
-        limit: 20,
-        seed: any(named: 'seed'),
-        afterId: null,
-        hasWrapped: false,
-      ),
-    ).thenAnswer((_) async => buildRandomExploreResult());
+    stubFirstRandomPage(() async => buildRandomExploreResult());
 
     await tester.pumpWidget(buildTestApp());
     await tester.tap(find.text('Search'));

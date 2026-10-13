@@ -1,5 +1,6 @@
 import 'package:beat_that/constants/app_colors.dart';
 import 'package:beat_that/widgets/beat_shimmer.dart';
+import 'package:beat_that/widgets/feed_grid_geometry.dart';
 import 'package:flutter/material.dart';
 
 /// Reusable video feed card component for displaying videos in grid
@@ -51,9 +52,9 @@ class VideoFeedCard extends StatelessWidget {
         onLongPress: onLongPress,
         splashFactory: NoSplash.splashFactory,
         overlayColor: WidgetStateProperty.all(Colors.transparent),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(kFeedCardRadius),
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(kFeedCardRadius),
           child: Stack(
             fit: StackFit.expand,
             children: [
@@ -66,6 +67,11 @@ class VideoFeedCard extends StatelessWidget {
                   if (wasSynchronouslyLoaded) return child;
                   return AnimatedSwitcher(
                     duration: const Duration(milliseconds: 200),
+                    // The default layout loosens constraints; keep the fill.
+                    layoutBuilder: (current, previous) => Stack(
+                      fit: StackFit.expand,
+                      children: [...previous, ?current],
+                    ),
                     child: frame == null
                         ? const BeatShimmerFill(
                             key: ValueKey('thumb-placeholder'),

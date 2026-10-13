@@ -136,6 +136,16 @@ void main() {
 
     expect(find.byType(VideoFeedCard), findsNWidgets(2));
     expect(find.text('user1'), findsOneWidget);
+
+    // The builder picks up the pagination state on the next frame.
+    await tester.pump();
+
+    expect(find.byType(VideoFeedCard), findsNWidgets(2));
+    // The skeleton row sits below the two loaded cards, outside the viewport.
+    final skeleton = tester.widget<FeedGridSkeletonSliver>(
+      find.byType(FeedGridSkeletonSliver, skipOffstage: false),
+    );
+    expect(skeleton.itemCount, 2);
   });
 
   testWidgets(

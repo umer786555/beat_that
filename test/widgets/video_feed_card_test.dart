@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:beat_that/widgets/beat_shimmer.dart';
 import 'package:beat_that/widgets/video_feed_card.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -28,14 +29,14 @@ class _FailingHttpClient extends Fake implements HttpClient {
 
 void main() {
   final theme = ThemeData(colorSchemeSeed: Colors.pink);
+  const cardSize = Size(180, 280);
 
   Widget buildCard(String thumbnailUrl) {
     return MaterialApp(
       theme: theme,
       home: Center(
-        child: SizedBox(
-          width: 180,
-          height: 280,
+        child: SizedBox.fromSize(
+          size: cardSize,
           child: VideoFeedCard(
             videoId: 'video-1',
             thumbnailUrl: thumbnailUrl,
@@ -67,7 +68,52 @@ void main() {
       }
 
       expect(find.byType(BeatShimmerFill), findsOneWidget);
+      expect(tester.getSize(find.byType(BeatShimmerFill)), cardSize);
       expect(find.byIcon(Icons.video_library_outlined), findsNothing);
+    });
+
+    testWidgets('fades the loaded thumbnail in to fill the card', (
+      tester,
+    ) async {
+      const url = 'https://example.com/loaded.jpg';
+      final image = await tester.runAsync(
+        () => createTestImage(width: 100, height: 100),
+      );
+      final pendingInfo = Completer<ImageInfo>();
+      imageCache.putIfAbsent(
+        const NetworkImage(url),
+        () => OneFrameImageStreamCompleter(pendingInfo.future),
+      );
+
+      await tester.pumpWidget(buildCard(url));
+      expect(find.byType(BeatShimmerFill), findsOneWidget);
+
+      pendingInfo.complete(ImageInfo(image: image!));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(BeatShimmerFill), findsNothing);
+      expect(tester.getSize(find.byType(RawImage)), cardSize);
+    });
+
+    testWidgets('shows a cached thumbnail without shimmer or fade', (
+      tester,
+    ) async {
+      const url = 'https://example.com/cached.jpg';
+      final image = await tester.runAsync(
+        () => createTestImage(width: 100, height: 100),
+      );
+      imageCache.putIfAbsent(
+        const NetworkImage(url),
+        () => OneFrameImageStreamCompleter(
+          SynchronousFuture(ImageInfo(image: image!)),
+        ),
+      );
+
+      await tester.pumpWidget(buildCard(url));
+
+      expect(find.byType(BeatShimmerFill), findsNothing);
+      expect(find.byType(AnimatedSwitcher), findsNothing);
+      expect(tester.getSize(find.byType(RawImage)), cardSize);
     });
 
     testWidgets('shows a themed error tile when the thumbnail fails', (

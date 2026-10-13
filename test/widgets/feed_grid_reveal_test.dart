@@ -103,8 +103,12 @@ void main() {
       }
     });
 
-    test('index 0 starts at the top without a header', () {
-      expect(estimateFeedGridOffset(index: 0, gridWidth: 400), 0);
+    test('index 2 starts one card row plus spacing down', () {
+      // Card width (400 - 3 * 6) / 2 = 191; row = 191 / 0.64 + 6.
+      expect(
+        estimateFeedGridOffset(index: 2, gridWidth: 400),
+        closeTo(304.4375, 1e-9),
+      );
     });
   });
 }

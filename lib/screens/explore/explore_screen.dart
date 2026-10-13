@@ -52,9 +52,6 @@ class _ExploreViewState extends State<_ExploreView> {
   /// Header height used until the first post-frame measurement.
   static const double _fallbackHeaderExtent = 58;
 
-  /// Approximate height of the results line shown above search results.
-  static const double _resultsLineExtent = 40;
-
   final TextEditingController _searchController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   Timer? _debounce;
@@ -107,12 +104,6 @@ class _ExploreViewState extends State<_ExploreView> {
       if (height == null || (height - _headerExtent).abs() <= 0.5) return;
       setState(() => _headerExtent = height);
     });
-  }
-
-  void _scrollToTop() {
-    if (_scrollController.hasClients && _scrollController.position.pixels > 0) {
-      _scrollController.jumpTo(0);
-    }
   }
 
   void _onQueryChanged(String value) {
@@ -192,7 +183,12 @@ class _ExploreViewState extends State<_ExploreView> {
       body: SafeArea(
         child: BlocListener<ExploreBloc, ExploreState>(
           listenWhen: (_, state) => state is ExploreLoading,
-          listener: (_, _) => _scrollToTop(),
+          listener: (_, _) {
+            if (_scrollController.hasClients &&
+                _scrollController.position.pixels > 0) {
+              _scrollController.jumpTo(0);
+            }
+          },
           child: RefreshIndicator(
             onRefresh: _onRefresh,
             edgeOffset: _headerExtent,
@@ -277,7 +273,14 @@ class _ExploreViewState extends State<_ExploreView> {
       case ExploreLoaded():
         final sections = _buildFeedSections(state.videos);
         return [
-          if (!state.isRandomFeed) _ResultsCountSliver(state: state),
+          if (!state.isRandomFeed)
+            _ResultsCountSliver(
+              totalCount: state.totalCount,
+              query: state.query,
+              filterLabel: state.selectedFilterId == null
+                  ? null
+                  : state.filterCatalog.labelFor(state.selectedFilterId),
+            ),
           for (
             var sectionIndex = 0;
             sectionIndex < sections.length;
@@ -298,12 +301,7 @@ class _ExploreViewState extends State<_ExploreView> {
           if (state.isLoadingMore)
             const FeedGridSkeletonSliver(
               itemCount: 2,
-              padding: EdgeInsets.fromLTRB(
-                kFeedGridSpacing,
-                12,
-                kFeedGridSpacing,
-                0,
-              ),
+              padding: kFeedGridLoadMorePadding,
             ),
           if (state.loadMoreFailed) const _LoadMoreRetrySliver(),
           const SliverToBoxAdapter(child: SizedBox(height: 24)),
@@ -367,12 +365,15 @@ class _ExploreViewState extends State<_ExploreView> {
         index: index,
         gridWidth: MediaQuery.sizeOf(context).width,
         headerOffset:
-            _headerExtent + (showsResultsLine ? _resultsLineExtent : 0),
+            _headerExtent +
+            (showsResultsLine ? _ResultsCountSliver.estimatedExtent : 0),
       ),
       // Stop if the merge was skipped and the grid doesn't contain this video.
       shouldContinue: () {
-        final state = exploreBloc.state;
-        return mounted && state is ExploreLoaded && index < state.videos.length;
+        final current = exploreBloc.state;
+        return mounted &&
+            current is ExploreLoaded &&
+            index < current.videos.length;
       },
     );
   }
@@ -404,27 +405,36 @@ class _ExploreViewState extends State<_ExploreView> {
 }
 
 class _ResultsCountSliver extends StatelessWidget {
-  const _ResultsCountSliver({required this.state});
+  const _ResultsCountSliver({
+    required this.totalCount,
+    required this.query,
+    required this.filterLabel,
+  });
 
-  final ExploreLoaded state;
+  /// Padding (8 + 12) plus one text line. Only feeds the reveal estimate;
+  /// `Scrollable.ensureVisible` does the final alignment.
+  static const double estimatedExtent = 40;
+
+  final int totalCount;
+  final String query;
+
+  /// Label of the selected filter, or null when no filter is selected.
+  final String? filterLabel;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final selectedFilterLabel = state.filterCatalog.labelFor(
-      state.selectedFilterId,
-    );
-    final filterLabel = state.selectedFilterId == null
-        ? state.query
-        : state.query.isEmpty
-        ? selectedFilterLabel
-        : '${state.query} in $selectedFilterLabel';
+    final searchLabel = filterLabel == null
+        ? query
+        : query.isEmpty
+        ? filterLabel
+        : '$query in $filterLabel';
 
     return SliverToBoxAdapter(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
         child: Text(
-          '${state.totalCount} result${state.totalCount == 1 ? '' : 's'} for "$filterLabel"',
+          '$totalCount result${totalCount == 1 ? '' : 's'} for "$searchLabel"',
           style: theme.textTheme.bodyMedium?.copyWith(
             color: theme.colorScheme.onSurfaceVariant,
             fontWeight: FontWeight.w600,

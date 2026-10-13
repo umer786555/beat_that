@@ -78,6 +78,23 @@ void main() {
       },
     );
 
+    testWidgets('keeps each chip\'s own state when the selection changes', (
+      tester,
+    ) async {
+      final lastChip = find.ancestor(
+        of: find.text(filterCatalog.allOptions.last.label),
+        matching: find.byType(RawChip),
+      );
+
+      await tester.pumpWidget(buildSubject());
+      final stateBefore = tester.state(lastChip);
+
+      await tester.pumpWidget(buildSubject(selectedFilterId: lastOptionId));
+      await tester.pumpAndSettle();
+
+      expect(tester.state(lastChip), same(stateBefore));
+    });
+
     testWidgets('scrolls back to the All chip when the filter is cleared', (
       tester,
     ) async {

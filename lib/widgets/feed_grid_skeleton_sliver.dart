@@ -29,7 +29,7 @@ class FeedGridSkeletonSliver extends StatelessWidget {
           gridDelegate: kFeedGridDelegate,
           delegate: SliverChildBuilderDelegate(
             (context, index) => ClipRRect(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(kFeedCardRadius),
               child: const BeatShimmerFill(),
             ),
             childCount: itemCount,

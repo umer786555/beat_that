@@ -261,12 +261,7 @@ class _HomeScreenState extends State<HomeScreen> {
           if (isLoading && videos.isNotEmpty)
             const FeedGridSkeletonSliver(
               itemCount: 2,
-              padding: EdgeInsets.fromLTRB(
-                kFeedGridSpacing,
-                12,
-                kFeedGridSpacing,
-                0,
-              ),
+              padding: kFeedGridLoadMorePadding,
             ),
           const SliverToBoxAdapter(child: SizedBox(height: 24)),
         ],

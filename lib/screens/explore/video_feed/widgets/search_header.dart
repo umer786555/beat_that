@@ -47,7 +47,9 @@ class _SearchHeaderState extends State<SearchHeader> {
   static const Duration _chipScrollDuration = Duration(milliseconds: 200);
 
   final ScrollController _chipScrollController = ScrollController();
-  final GlobalKey _selectedChipKey = GlobalKey();
+  // One stable key per chip id (null is "All"). Moving a single key between
+  // chips would hand one chip's state to another.
+  final Map<String?, GlobalKey> _chipKeys = {};
   late FocusNode _focusNode;
   late bool _isSearchOpen;
 
@@ -96,7 +98,8 @@ class _SearchHeaderState extends State<SearchHeader> {
   // ScrollPosition.ensureVisible scrolls only the chip row. Scrollable's
   // version would also scroll every ancestor, including the vertical grid.
   void _scrollSelectedChipIntoView() {
-    final chipObject = _selectedChipKey.currentContext?.findRenderObject();
+    final chipObject = _chipKeys[widget.selectedFilterId]?.currentContext
+        ?.findRenderObject();
     if (!mounted || chipObject == null || !_chipScrollController.hasClients) {
       return;
     }
@@ -209,9 +212,7 @@ class _SearchHeaderState extends State<SearchHeader> {
                   if (!_isSearchOpen)
                     SizedBox(width: widget.filterControlSpacing),
                   SportChip(
-                    key: widget.selectedFilterId == null
-                        ? _selectedChipKey
-                        : null,
+                    key: _chipKeys.putIfAbsent(null, GlobalKey.new),
                     label: 'All',
                     selected: widget.selectedFilterId == null,
                     onSelected: () => widget.onFilterChanged(null),
@@ -230,9 +231,7 @@ class _SearchHeaderState extends State<SearchHeader> {
                         left: widget.filterControlSpacing,
                       ),
                       child: SportChip(
-                        key: widget.selectedFilterId == option.id
-                            ? _selectedChipKey
-                            : null,
+                        key: _chipKeys.putIfAbsent(option.id, GlobalKey.new),
                         label: option.label,
                         selected: widget.selectedFilterId == option.id,
                         onSelected: () => widget.onFilterChanged(
