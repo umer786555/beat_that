@@ -5,6 +5,7 @@ import 'package:beat_that/bloc/follow_counts_cubit.dart';
 import 'package:beat_that/constants/app_colors.dart';
 import 'package:beat_that/services/app_onboarding.dart';
 import 'package:beat_that/services/onboarding_service.dart';
+import 'package:beat_that/widgets/beat_shimmer.dart';
 import 'package:beat_that/screens/profile/widgets/profile_stat_tile.dart';
 
 /// A reusable profile header widget displaying user info, profile picture, and stats.
@@ -107,6 +108,11 @@ class ProfileHeader extends StatelessWidget {
                       child: Image.network(
                         profileUrl!,
                         fit: BoxFit.cover,
+                        loadingBuilder: (context, child, loadingProgress) {
+                          if (loadingProgress == null) return child;
+
+                          return const BeatShimmerFill();
+                        },
                         errorBuilder: (context, error, stackTrace) {
                           return Icon(
                             Icons.error_outline,
@@ -149,22 +155,11 @@ class ProfileHeader extends StatelessWidget {
                     ),
             ),
             if (isUploadingProfileImage)
-              Container(
-                width: 68,
-                height: 68,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Colors.black.withValues(alpha: 0.45),
-                ),
-                child: const Center(
-                  child: SizedBox(
-                    width: 24,
-                    height: 24,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2.5,
-                      color: AppColors.white,
-                    ),
-                  ),
+              const ClipOval(
+                child: SizedBox(
+                  width: 68,
+                  height: 68,
+                  child: BeatShimmerFill(),
                 ),
               ),
           ],
