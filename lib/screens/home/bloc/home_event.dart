@@ -13,19 +13,6 @@ final class InitialEvent extends HomeEvent {
   const InitialEvent();
 }
 
-/// Fetch the next weighted home-feed continuation
-/// [limit] - number of videos to fetch
-/// [offset] - pagination offset (default: 0)
-final class FetchFeedEvent extends HomeEvent {
-  final int limit;
-  final int offset;
-
-  const FetchFeedEvent({required this.limit, this.offset = 0});
-
-  @override
-  List<Object> get props => [limit, offset];
-}
-
 /// Refresh the feed from the top (offset=0)
 final class RefreshFeedEvent extends HomeEvent {
   const RefreshFeedEvent();

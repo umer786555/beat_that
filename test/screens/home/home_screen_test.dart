@@ -115,7 +115,12 @@ void main() {
       offset: 0,
       hasMoreContent: true,
     );
-    const paginationLoadingState = FeedLoading(offset: 2, isFirstLoad: false);
+    const paginationLoadingState = FeedLoaded(
+      videos: loadedVideos,
+      offset: 0,
+      hasMoreContent: true,
+      isLoadingMore: true,
+    );
 
     when(() => homeBloc.state).thenReturn(loadedState);
     whenListen(
@@ -213,7 +218,7 @@ void main() {
     );
     expect(refreshCompleted, isFalse);
 
-    controller.add(const FeedLoading(offset: 0, isFirstLoad: true));
+    controller.add(const FeedLoading());
     await tester.pump();
     expect(refreshCompleted, isFalse);
 
@@ -223,6 +228,74 @@ void main() {
 
     await refreshFuture;
     expect(refreshCompleted, isTrue);
+  });
+
+  testWidgets('refresh does not complete while a page is loading more', (
+    tester,
+  ) async {
+    final controller = StreamController<HomeState>();
+    addTearDown(controller.close);
+
+    const loadedState = FeedLoaded(videos: loadedVideos, offset: 0);
+
+    when(() => homeBloc.state).thenReturn(loadedState);
+    whenListen(homeBloc, controller.stream, initialState: loadedState);
+
+    await tester.pumpWidget(buildTestApp(homeBloc));
+    await tester.pump();
+
+    final refreshIndicator = tester.widget<RefreshIndicator>(
+      find.byType(RefreshIndicator),
+    );
+
+    var refreshCompleted = false;
+    final refreshFuture = refreshIndicator.onRefresh().then((_) {
+      refreshCompleted = true;
+    });
+    await tester.pump();
+
+    controller.add(
+      const FeedLoaded(videos: loadedVideos, offset: 0, isLoadingMore: true),
+    );
+    await tester.pump();
+    expect(refreshCompleted, isFalse);
+
+    controller.add(const FeedLoaded(videos: loadedVideos, offset: 0));
+
+    await refreshFuture;
+    expect(refreshCompleted, isTrue);
+  });
+
+  testWidgets('starts home onboarding once across a load-more', (tester) async {
+    const firstPage = FeedLoaded(videos: loadedVideos, offset: 0);
+    const loadingMore = FeedLoaded(
+      videos: loadedVideos,
+      offset: 0,
+      isLoadingMore: true,
+    );
+    const secondPage = FeedLoaded(
+      videos: [...loadedVideos, ...loadedVideos],
+      offset: 2,
+    );
+
+    when(() => homeBloc.state).thenReturn(HomeInitial());
+    whenListen(
+      homeBloc,
+      Stream<HomeState>.fromIterable([firstPage, loadingMore, secondPage]),
+      initialState: HomeInitial(),
+    );
+
+    await tester.pumpWidget(buildTestApp(homeBloc));
+    await tester.pump();
+    await tester.pump();
+
+    verify(
+      () => onboardingService.startFlow(
+        any(),
+        any(),
+        beforeStart: any(named: 'beforeStart'),
+      ),
+    ).called(1);
   });
 
   testWidgets('shows pull-to-refresh on empty feed state', (tester) async {

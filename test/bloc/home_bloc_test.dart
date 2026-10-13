@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:beat_that/models/home_feed_cursor.dart';
 import 'package:beat_that/models/sport_video.dart';
+import 'package:beat_that/models/user_personal_profile.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:bloc_test/bloc_test.dart';
 import 'package:mocktail/mocktail.dart';
@@ -23,6 +24,7 @@ class MockAuthService extends Mock implements AuthService {}
 void main() {
   setUpAll(() {
     registerFallbackValue(const HomeFeedCursor.initial());
+    registerFallbackValue(UserPersonalProfile(username: 'fallback'));
   });
 
   late MockHomeFeedService mockHomeFeedService;
@@ -62,7 +64,44 @@ void main() {
     );
   }
 
+  Map<String, dynamic> page(
+    List<SportVideo> videos, {
+    HomeFeedCursor nextCursor = const HomeFeedCursor.initial(),
+    bool hasMoreContent = true,
+  }) => {
+    'videos': videos,
+    'nextCursor': nextCursor,
+    'hasMoreContent': hasMoreContent,
+  };
+
+  void stubFeed(Map<String, dynamic> result, {HomeFeedCursor? cursor}) {
+    when(
+      () => mockHomeFeedService.getHomeFeedContinuation(
+        cursor: cursor ?? any(named: 'cursor'),
+        limit: any(named: 'limit'),
+      ),
+    ).thenAnswer((_) async => result);
+  }
+
+  void stubFeedFuture(
+    HomeFeedCursor cursor,
+    Future<Map<String, dynamic>> Function() answer,
+  ) {
+    when(
+      () => mockHomeFeedService.getHomeFeedContinuation(
+        cursor: cursor,
+        limit: any(named: 'limit'),
+      ),
+    ).thenAnswer((_) => answer());
+  }
+
+  const seedCursor = HomeFeedCursor(
+    hasMoreFollowing: false,
+    serverState: {'page': 1},
+  );
+
   late List<SportVideo> sampleVideos;
+  late FeedLoaded seeded;
 
   setUp(() {
     mockHomeFeedService = MockHomeFeedService();
@@ -90,51 +129,42 @@ void main() {
         viewCount: 50,
       ),
     ];
+    seeded = FeedLoaded(videos: sampleVideos, nextCursor: seedCursor);
   });
 
-  group('HomeBloc', () {
-    test('initial state is HomeInitial', () {
-      final bloc = buildBloc();
-      addTearDown(bloc.close);
-      expect(bloc.state, isA<HomeInitial>());
+  test('initial state is HomeInitial', () {
+    final bloc = buildBloc();
+    addTearDown(bloc.close);
+    expect(bloc.state, isA<HomeInitial>());
+  });
+
+  group('InitialEvent', () {
+    final profile = UserPersonalProfile(username: 'tester');
+
+    setUp(() {
+      when(
+        () => mockPreferencesService.clearUserProfile(),
+      ).thenAnswer((_) async {});
+      when(
+        () => mockPreferencesService.saveUserProfile(any()),
+      ).thenAnswer((_) async {});
+      stubFeed(page(sampleVideos));
     });
 
     blocTest<HomeBloc, HomeState>(
-      'loads the home feed for guests on InitialEvent',
+      'loads the home feed for guests',
       setUp: () {
         when(() => mockAuthService.hasFullAccountAccess()).thenReturn(false);
-        when(
-          () => mockPreferencesService.clearUserProfile(),
-        ).thenAnswer((_) async {});
-        when(
-          () => mockHomeFeedService.getHomeFeedContinuation(
-            cursor: any(named: 'cursor'),
-            limit: any(named: 'limit'),
-          ),
-        ).thenAnswer(
-          (_) async => {
-            'videos': sampleVideos,
-            'nextCursor': const HomeFeedCursor.initial(),
-            'hasMoreContent': true,
-          },
-        );
       },
       build: buildBloc,
       act: (bloc) => bloc.add(const InitialEvent()),
-      expect: () => [
-        isA<FeedLoading>(),
-        isA<FeedLoaded>().having(
-          (state) => state.videos,
-          'videos',
-          equals(sampleVideos),
-        ),
-      ],
+      expect: () => [const FeedLoading(), FeedLoaded(videos: sampleVideos)],
       verify: (_) {
         verify(() => mockPreferencesService.clearUserProfile()).called(1);
         verifyNever(() => mockSupabaseService.fetchUserPersonalProfile());
         verify(
           () => mockHomeFeedService.getHomeFeedContinuation(
-            cursor: any(named: 'cursor'),
+            cursor: const HomeFeedCursor.initial(),
             limit: 24,
           ),
         ).called(1);
@@ -142,68 +172,80 @@ void main() {
     );
 
     blocTest<HomeBloc, HomeState>(
-      'emits [FeedLoading, FeedLoaded] when FetchFeedEvent succeeds',
+      'saves the profile and loads the feed when signed in',
       setUp: () {
+        when(() => mockAuthService.hasFullAccountAccess()).thenReturn(true);
         when(
+          () => mockSupabaseService.fetchUserPersonalProfile(),
+        ).thenAnswer((_) async => profile);
+      },
+      build: buildBloc,
+      act: (bloc) => bloc.add(const InitialEvent()),
+      expect: () => [const FeedLoading(), FeedLoaded(videos: sampleVideos)],
+      verify: (_) {
+        verify(() => mockPreferencesService.clearUserProfile()).called(1);
+        verify(() => mockPreferencesService.saveUserProfile(profile)).called(1);
+      },
+    );
+
+    blocTest<HomeBloc, HomeState>(
+      'emits NoUserProfile and skips the feed when signed in without one',
+      setUp: () {
+        when(() => mockAuthService.hasFullAccountAccess()).thenReturn(true);
+        when(
+          () => mockSupabaseService.fetchUserPersonalProfile(),
+        ).thenAnswer((_) async => null);
+      },
+      build: buildBloc,
+      act: (bloc) => bloc.add(const InitialEvent()),
+      expect: () => [const NoUserProfile()],
+      verify: (_) {
+        verify(() => mockPreferencesService.clearUserProfile()).called(1);
+        verifyNever(() => mockPreferencesService.saveUserProfile(any()));
+        verifyNever(
           () => mockHomeFeedService.getHomeFeedContinuation(
             cursor: any(named: 'cursor'),
             limit: any(named: 'limit'),
           ),
-        ).thenAnswer(
-          (_) async => {
-            'videos': sampleVideos,
-            'nextCursor': const HomeFeedCursor(hasMoreFollowing: false),
-            'hasMoreContent': true,
-          },
         );
       },
+    );
+  });
+
+  group('RefreshFeedEvent', () {
+    blocTest<HomeBloc, HomeState>(
+      'fetches the first page from the initial cursor',
+      setUp: () => stubFeed(page(sampleVideos, nextCursor: seedCursor)),
       build: buildBloc,
-      act: (bloc) => bloc.add(const FetchFeedEvent(limit: 50, offset: 0)),
+      seed: () => seeded,
+      act: (bloc) => bloc.add(const RefreshFeedEvent()),
       expect: () => [
-        isA<FeedLoading>(),
-        isA<FeedLoaded>().having(
-          (state) => state.videos,
-          'videos',
-          equals(sampleVideos),
-        ),
+        const FeedLoading(),
+        FeedLoaded(videos: sampleVideos, nextCursor: seedCursor),
       ],
       verify: (_) {
-        final captured = verify(
+        verify(
           () => mockHomeFeedService.getHomeFeedContinuation(
-            cursor: captureAny(named: 'cursor'),
-            limit: 50,
+            cursor: const HomeFeedCursor.initial(),
+            limit: 24,
           ),
-        ).captured;
-        expect(captured.single, equals(const HomeFeedCursor.initial()));
+        ).called(1);
       },
     );
 
     blocTest<HomeBloc, HomeState>(
-      'emits [FeedLoading, FeedLoaded] with empty videos',
-      setUp: () {
-        when(
-          () => mockHomeFeedService.getHomeFeedContinuation(
-            cursor: any(named: 'cursor'),
-            limit: any(named: 'limit'),
-          ),
-        ).thenAnswer(
-          (_) async => {
-            'videos': <SportVideo>[],
-            'nextCursor': const HomeFeedCursor.initial(),
-            'hasMoreContent': false,
-          },
-        );
-      },
+      'emits an empty FeedLoaded when the first page is empty',
+      setUp: () => stubFeed(page([], hasMoreContent: false)),
       build: buildBloc,
-      act: (bloc) => bloc.add(const FetchFeedEvent(limit: 50, offset: 0)),
+      act: (bloc) => bloc.add(const RefreshFeedEvent()),
       expect: () => [
-        isA<FeedLoading>(),
-        isA<FeedLoaded>().having((state) => state.videos, 'videos', isEmpty),
+        const FeedLoading(),
+        const FeedLoaded(videos: [], hasMoreContent: false),
       ],
     );
 
     blocTest<HomeBloc, HomeState>(
-      'emits [FeedLoading, FeedError] when continuation fetch throws',
+      'emits [FeedLoading, FeedError] when the fetch throws',
       setUp: () {
         when(
           () => mockHomeFeedService.getHomeFeedContinuation(
@@ -213,248 +255,330 @@ void main() {
         ).thenThrow(Exception('Network error'));
       },
       build: buildBloc,
-      act: (bloc) => bloc.add(const FetchFeedEvent(limit: 50, offset: 0)),
-      expect: () => [isA<FeedLoading>(), isA<FeedError>()],
+      act: (bloc) => bloc.add(const RefreshFeedEvent()),
+      expect: () => [const FeedLoading(), isA<FeedError>()],
     );
 
     blocTest<HomeBloc, HomeState>(
-      'reloads feed when RefreshFeedEvent is triggered',
-      setUp: () {
-        when(
-          () => mockHomeFeedService.getHomeFeedContinuation(
-            cursor: any(named: 'cursor'),
-            limit: any(named: 'limit'),
-          ),
-        ).thenAnswer(
-          (_) async => {
-            'videos': sampleVideos,
-            'nextCursor': const HomeFeedCursor(hasMoreFollowing: false),
-            'hasMoreContent': true,
-          },
-        );
-      },
+      'preserves video fields',
+      setUp: () => stubFeed(page(sampleVideos)),
       build: buildBloc,
       act: (bloc) => bloc.add(const RefreshFeedEvent()),
-      expect: () => [isA<FeedLoading>(), isA<FeedLoaded>()],
-      verify: (_) {
-        verify(
-          () => mockHomeFeedService.getHomeFeedContinuation(
-            cursor: const HomeFeedCursor.initial(),
-            limit: 24,
-          ),
-        ).called(1);
-      },
-    );
-
-    blocTest<HomeBloc, HomeState>(
-      'preserves source field in video data',
-      setUp: () {
-        when(
-          () => mockHomeFeedService.getHomeFeedContinuation(
-            cursor: any(named: 'cursor'),
-            limit: any(named: 'limit'),
-          ),
-        ).thenAnswer(
-          (_) async => {
-            'videos': sampleVideos,
-            'nextCursor': const HomeFeedCursor(hasMoreFollowing: false),
-            'hasMoreContent': true,
-          },
-        );
-      },
-      build: buildBloc,
-      act: (bloc) => bloc.add(const FetchFeedEvent(limit: 50, offset: 0)),
       verify: (bloc) {
         final state = bloc.state as FeedLoaded;
+        expect(state.videos[0].id, equals('video-1'));
+        expect(state.videos[0].username, equals('user1'));
         expect(state.videos[0].source, equals('personalized'));
         expect(state.videos[1].source, equals('trending'));
       },
     );
 
     blocTest<HomeBloc, HomeState>(
-      'preserves username field in video data',
-      setUp: () {
-        when(
-          () => mockHomeFeedService.getHomeFeedContinuation(
-            cursor: any(named: 'cursor'),
-            limit: any(named: 'limit'),
-          ),
-        ).thenAnswer(
-          (_) async => {
-            'videos': sampleVideos,
-            'nextCursor': const HomeFeedCursor(hasMoreFollowing: false),
-            'hasMoreContent': true,
-          },
-        );
-      },
-      build: buildBloc,
-      act: (bloc) => bloc.add(const FetchFeedEvent(limit: 50, offset: 0)),
-      verify: (bloc) {
-        final state = bloc.state as FeedLoaded;
-        expect(state.videos[0].username, equals('user1'));
-        expect(state.videos[0].id, equals('video-1'));
-      },
-    );
-
-    blocTest<HomeBloc, HomeState>(
-      'handles multiple FetchFeedEvents sequentially',
-      setUp: () {
-        when(
-          () => mockHomeFeedService.getHomeFeedContinuation(
-            cursor: any(named: 'cursor'),
-            limit: any(named: 'limit'),
-          ),
-        ).thenAnswer(
-          (invocation) async => {
-            'videos': sampleVideos,
-            'nextCursor': const HomeFeedCursor(hasMoreFollowing: false),
-            'hasMoreContent': true,
-          },
-        );
-      },
-      build: buildBloc,
-      act: (bloc) {
-        bloc.add(const FetchFeedEvent(limit: 50, offset: 0));
-        bloc.add(const FetchFeedEvent(limit: 50, offset: 50));
-      },
-      expect: () => [
-        isA<FeedLoading>(),
-        isA<FeedLoaded>(),
-        isA<FeedLoading>(),
-        isA<FeedLoaded>(),
-      ],
-    );
-
-    test(
-      'ignores duplicate LoadMoreFeedEvent while pagination is in flight',
-      () async {
-        final homeBloc = buildBloc();
-        addTearDown(homeBloc.close);
-        final paginationCompleter = Completer<Map<String, dynamic>>();
-
-        when(
-          () => mockHomeFeedService.getHomeFeedContinuation(
-            cursor: const HomeFeedCursor.initial(),
-            limit: 2,
-          ),
-        ).thenAnswer(
-          (_) async => {
-            'videos': sampleVideos,
-            'nextCursor': const HomeFeedCursor(hasMoreFollowing: false),
-            'hasMoreContent': true,
-          },
-        );
-
-        const nextCursor = HomeFeedCursor(hasMoreFollowing: false);
-        when(
-          () => mockHomeFeedService.getHomeFeedContinuation(
-            cursor: nextCursor,
-            limit: 24,
-          ),
-        ).thenAnswer((_) => paginationCompleter.future);
-
-        homeBloc.add(const FetchFeedEvent(limit: 2, offset: 0));
-        await homeBloc.stream.firstWhere((state) => state is FeedLoaded);
-
-        homeBloc.add(const LoadMoreFeedEvent());
-        homeBloc.add(const LoadMoreFeedEvent());
-
-        await untilCalled(
-          () => mockHomeFeedService.getHomeFeedContinuation(
-            cursor: nextCursor,
-            limit: 24,
-          ),
-        );
-        await Future<void>.delayed(Duration.zero);
-
-        verify(
-          () => mockHomeFeedService.getHomeFeedContinuation(
-            cursor: nextCursor,
-            limit: 24,
-          ),
-        ).called(1);
-
-        paginationCompleter.complete({
-          'videos': [
-            makeVideo(
-              'video-3',
-              userId: 'user-3',
-              title: 'Test Video 3',
-              username: 'user3',
-              source: 'following',
-            ),
-          ],
-          'nextCursor': const HomeFeedCursor(hasMoreFollowing: false),
-          'hasMoreContent': true,
-        });
-        await homeBloc.stream.firstWhere(
-          (state) => state is FeedLoaded && state.offset == 2,
-        );
-      },
-    );
-
-    blocTest<HomeBloc, HomeState>(
-      'calls continuation with correct parameters',
-      setUp: () {
-        when(
-          () => mockHomeFeedService.getHomeFeedContinuation(
-            cursor: any(named: 'cursor'),
-            limit: 50,
-          ),
-        ).thenAnswer(
-          (_) async => {
-            'videos': sampleVideos,
-            'nextCursor': const HomeFeedCursor(hasMoreFollowing: false),
-            'hasMoreContent': true,
-          },
-        );
-      },
-      build: buildBloc,
-      act: (bloc) => bloc.add(const FetchFeedEvent(limit: 50, offset: 25)),
-      verify: (bloc) {
-        verify(
-          () => mockHomeFeedService.getHomeFeedContinuation(
-            cursor: const HomeFeedCursor.initial(),
-            limit: 50,
-          ),
-        ).called(greaterThan(0));
-      },
-    );
-
-    blocTest<HomeBloc, HomeState>(
       'handles large video batches without errors',
       setUp: () {
-        final largeBatch = List.generate(
-          100,
-          (i) => makeVideo(
-            'video-$i',
-            userId: 'user-$i',
-            title: 'Test Video $i',
-            username: 'user$i',
-            source: 'discovery',
-            viewCount: 100 * i,
+        stubFeed(
+          page(
+            List.generate(
+              100,
+              (i) => makeVideo('video-$i', source: 'discovery'),
+            ),
           ),
-        );
-        when(
-          () => mockHomeFeedService.getHomeFeedContinuation(
-            cursor: any(named: 'cursor'),
-            limit: any(named: 'limit'),
-          ),
-        ).thenAnswer(
-          (_) async => {
-            'videos': largeBatch,
-            'nextCursor': const HomeFeedCursor(hasMoreFollowing: false),
-            'hasMoreContent': true,
-          },
         );
       },
       build: buildBloc,
-      act: (bloc) => bloc.add(const FetchFeedEvent(limit: 100, offset: 0)),
+      act: (bloc) => bloc.add(const RefreshFeedEvent()),
       verify: (bloc) {
         final state = bloc.state as FeedLoaded;
         expect(state.videos.length, equals(100));
         expect(state.videos[0].id, equals('video-0'));
         expect(state.videos[99].id, equals('video-99'));
+      },
+    );
+  });
+
+  group('LoadMoreFeedEvent', () {
+    final video3 = makeVideo('video-3');
+    const nextCursor = HomeFeedCursor(
+      hasMoreFollowing: false,
+      serverState: {'page': 2},
+    );
+
+    blocTest<HomeBloc, HomeState>(
+      'appends the next page fetched from the current cursor',
+      setUp: () => stubFeed(page([video3], nextCursor: nextCursor)),
+      build: buildBloc,
+      seed: () => seeded,
+      act: (bloc) => bloc.add(const LoadMoreFeedEvent()),
+      expect: () => [
+        FeedLoaded(
+          videos: sampleVideos,
+          nextCursor: seedCursor,
+          isLoadingMore: true,
+        ),
+        FeedLoaded(
+          videos: [...sampleVideos, video3],
+          offset: 2,
+          nextCursor: nextCursor,
+        ),
+      ],
+      verify: (_) {
+        verify(
+          () => mockHomeFeedService.getHomeFeedContinuation(
+            cursor: seedCursor,
+            limit: 24,
+          ),
+        ).called(1);
+      },
+    );
+
+    blocTest<HomeBloc, HomeState>(
+      'filters videos already in the grid',
+      setUp: () => stubFeed(page([sampleVideos[1], video3])),
+      build: buildBloc,
+      seed: () => seeded,
+      act: (bloc) => bloc.add(const LoadMoreFeedEvent()),
+      skip: 1,
+      expect: () => [
+        FeedLoaded(videos: [...sampleVideos, video3], offset: 2),
+      ],
+    );
+
+    blocTest<HomeBloc, HomeState>(
+      'clears isLoadingMore after an empty page',
+      setUp: () => stubFeed(page([], hasMoreContent: false)),
+      build: buildBloc,
+      seed: () => seeded,
+      act: (bloc) => bloc.add(const LoadMoreFeedEvent()),
+      skip: 1,
+      expect: () => [
+        FeedLoaded(videos: sampleVideos, offset: 2, hasMoreContent: false),
+      ],
+    );
+
+    blocTest<HomeBloc, HomeState>(
+      'clears isLoadingMore after an all-duplicate page',
+      setUp: () => stubFeed(page(sampleVideos)),
+      build: buildBloc,
+      seed: () => seeded,
+      act: (bloc) => bloc.add(const LoadMoreFeedEvent()),
+      skip: 1,
+      expect: () => [FeedLoaded(videos: sampleVideos, offset: 2)],
+    );
+
+    final ignoredSeeds = <String, HomeState Function()>{
+      'HomeInitial': HomeInitial.new,
+      'FeedLoading': () => const FeedLoading(),
+      'FeedError': () => const FeedError(message: 'failed'),
+      'no more content': () =>
+          FeedLoaded(videos: sampleVideos, hasMoreContent: false),
+      'already loading more': () =>
+          FeedLoaded(videos: sampleVideos, isLoadingMore: true),
+    };
+
+    for (final entry in ignoredSeeds.entries) {
+      blocTest<HomeBloc, HomeState>(
+        'is ignored when seeded with ${entry.key}',
+        build: buildBloc,
+        seed: entry.value,
+        act: (bloc) => bloc.add(const LoadMoreFeedEvent()),
+        expect: () => <HomeState>[],
+        verify: (_) {
+          verifyNever(
+            () => mockHomeFeedService.getHomeFeedContinuation(
+              cursor: any(named: 'cursor'),
+              limit: any(named: 'limit'),
+            ),
+          );
+        },
+      );
+    }
+
+    blocTest<HomeBloc, HomeState>(
+      'ignores a duplicate LoadMoreFeedEvent while a page is in flight',
+      build: buildBloc,
+      seed: () => seeded,
+      act: (bloc) async {
+        final pageCompleter = Completer<Map<String, dynamic>>();
+        stubFeedFuture(seedCursor, () => pageCompleter.future);
+
+        bloc
+          ..add(const LoadMoreFeedEvent())
+          ..add(const LoadMoreFeedEvent());
+        await untilCalled(
+          () => mockHomeFeedService.getHomeFeedContinuation(
+            cursor: seedCursor,
+            limit: 24,
+          ),
+        );
+        await Future<void>.delayed(Duration.zero);
+
+        pageCompleter.complete(page([video3]));
+      },
+      expect: () => [
+        FeedLoaded(
+          videos: sampleVideos,
+          nextCursor: seedCursor,
+          isLoadingMore: true,
+        ),
+        FeedLoaded(videos: [...sampleVideos, video3], offset: 2),
+      ],
+      verify: (_) {
+        verify(
+          () => mockHomeFeedService.getHomeFeedContinuation(
+            cursor: seedCursor,
+            limit: 24,
+          ),
+        ).called(1);
+      },
+    );
+
+    blocTest<HomeBloc, HomeState>(
+      'emits FeedError on failure and recovers on refresh',
+      build: buildBloc,
+      seed: () => seeded,
+      act: (bloc) async {
+        when(
+          () => mockHomeFeedService.getHomeFeedContinuation(
+            cursor: seedCursor,
+            limit: any(named: 'limit'),
+          ),
+        ).thenThrow(Exception('Network error'));
+        stubFeed(page(sampleVideos), cursor: const HomeFeedCursor.initial());
+
+        bloc.add(const LoadMoreFeedEvent());
+        await bloc.stream.firstWhere((state) => state is FeedError);
+        bloc.add(const RefreshFeedEvent());
+      },
+      expect: () => [
+        FeedLoaded(
+          videos: sampleVideos,
+          nextCursor: seedCursor,
+          isLoadingMore: true,
+        ),
+        isA<FeedError>(),
+        const FeedLoading(),
+        FeedLoaded(videos: sampleVideos),
+      ],
+    );
+  });
+
+  group('refresh during load-more', () {
+    const refreshedCursor = HomeFeedCursor(
+      hasMoreTrending: false,
+      serverState: {'page': 'refreshed'},
+    );
+    final stalePage = page([makeVideo('stale')]);
+    final refreshedVideos = [makeVideo('fresh-1'), makeVideo('fresh-2')];
+
+    late Completer<Map<String, dynamic>> staleCompleter;
+    late Completer<Map<String, dynamic>> refreshCompleter;
+
+    FeedLoaded loadingMore() => FeedLoaded(
+      videos: sampleVideos,
+      nextCursor: seedCursor,
+      isLoadingMore: true,
+    );
+    FeedLoaded refreshed() =>
+        FeedLoaded(videos: refreshedVideos, nextCursor: refreshedCursor);
+
+    setUp(() {
+      staleCompleter = Completer();
+      refreshCompleter = Completer();
+      stubFeedFuture(seedCursor, () => staleCompleter.future);
+      stubFeedFuture(
+        const HomeFeedCursor.initial(),
+        () => refreshCompleter.future,
+      );
+    });
+
+    Future<void> startLoadMoreThenRefresh(HomeBloc bloc) async {
+      bloc.add(const LoadMoreFeedEvent());
+      await untilCalled(
+        () => mockHomeFeedService.getHomeFeedContinuation(
+          cursor: seedCursor,
+          limit: 24,
+        ),
+      );
+      bloc.add(const RefreshFeedEvent());
+      await untilCalled(
+        () => mockHomeFeedService.getHomeFeedContinuation(
+          cursor: const HomeFeedCursor.initial(),
+          limit: 24,
+        ),
+      );
+    }
+
+    blocTest<HomeBloc, HomeState>(
+      'drops a stale page that completes before the refresh',
+      build: buildBloc,
+      seed: () => seeded,
+      act: (bloc) async {
+        await startLoadMoreThenRefresh(bloc);
+        staleCompleter.complete(stalePage);
+        await Future<void>.delayed(Duration.zero);
+        refreshCompleter.complete(
+          page(refreshedVideos, nextCursor: refreshedCursor),
+        );
+      },
+      expect: () => [loadingMore(), const FeedLoading(), refreshed()],
+    );
+
+    blocTest<HomeBloc, HomeState>(
+      'drops a stale page that completes after the refresh',
+      build: buildBloc,
+      seed: () => seeded,
+      act: (bloc) async {
+        await startLoadMoreThenRefresh(bloc);
+        refreshCompleter.complete(
+          page(refreshedVideos, nextCursor: refreshedCursor),
+        );
+        await bloc.stream.firstWhere((state) => state == refreshed());
+        staleCompleter.complete(stalePage);
+        await Future<void>.delayed(Duration.zero);
+      },
+      expect: () => [loadingMore(), const FeedLoading(), refreshed()],
+    );
+
+    blocTest<HomeBloc, HomeState>(
+      'loads more from the refreshed cursor after the refresh',
+      build: buildBloc,
+      seed: () => seeded,
+      act: (bloc) async {
+        stubFeed(page([makeVideo('fresh-3')]), cursor: refreshedCursor);
+
+        await startLoadMoreThenRefresh(bloc);
+        refreshCompleter.complete(
+          page(refreshedVideos, nextCursor: refreshedCursor),
+        );
+        await bloc.stream.firstWhere((state) => state == refreshed());
+
+        bloc.add(const LoadMoreFeedEvent());
+        await bloc.stream.firstWhere(
+          (state) => state is FeedLoaded && state.videos.length == 3,
+        );
+        staleCompleter.complete(stalePage);
+        await Future<void>.delayed(Duration.zero);
+      },
+      expect: () => [
+        loadingMore(),
+        const FeedLoading(),
+        refreshed(),
+        FeedLoaded(
+          videos: refreshedVideos,
+          nextCursor: refreshedCursor,
+          isLoadingMore: true,
+        ),
+        isA<FeedLoaded>()
+            .having((state) => state.videos.last.id, 'last id', 'fresh-3')
+            .having((state) => state.offset, 'offset', 2),
+      ],
+      verify: (_) {
+        verify(
+          () => mockHomeFeedService.getHomeFeedContinuation(
+            cursor: refreshedCursor,
+            limit: 24,
+          ),
+        ).called(1);
       },
     );
   });
@@ -468,40 +592,17 @@ void main() {
     List<String> idsOf(FeedLoaded state) =>
         state.videos.map((video) => video.id).toList();
 
-    setUp(() {
-      when(
-        () => mockHomeFeedService.getHomeFeedContinuation(
-          cursor: any(named: 'cursor'),
-          limit: any(named: 'limit'),
-        ),
-      ).thenAnswer(
-        (_) async => {
-          'videos': sampleVideos,
-          'nextCursor': const HomeFeedCursor.initial(),
-          'hasMoreContent': true,
-        },
-      );
-    });
-
-    Future<void> loadFirstPage(HomeBloc bloc) async {
-      bloc.add(const FetchFeedEvent(limit: 24, offset: 0));
-      await bloc.stream.firstWhere((state) => state is FeedLoaded);
-    }
-
     blocTest<HomeBloc, HomeState>(
       'adds videos loaded in the full-screen feed to the grid',
       build: buildBloc,
-      act: (bloc) async {
-        await loadFirstPage(bloc);
-        bloc.add(
-          MergeVideoFeedSessionEvent(
-            videos: [...sampleVideos, makeVideo('video-3')],
-            nextCursor: sessionCursor,
-            hasMoreContent: false,
-          ),
-        );
-      },
-      skip: 2,
+      seed: () => seeded,
+      act: (bloc) => bloc.add(
+        MergeVideoFeedSessionEvent(
+          videos: [...sampleVideos, makeVideo('video-3')],
+          nextCursor: sessionCursor,
+          hasMoreContent: false,
+        ),
+      ),
       expect: () => [
         isA<FeedLoaded>()
             .having(idsOf, 'video ids', ['video-1', 'video-2', 'video-3'])
@@ -513,9 +614,10 @@ void main() {
 
     blocTest<HomeBloc, HomeState>(
       'continues paging from the merged session cursor',
+      setUp: () => stubFeed(page([])),
       build: buildBloc,
+      seed: () => seeded,
       act: (bloc) async {
-        await loadFirstPage(bloc);
         bloc.add(
           MergeVideoFeedSessionEvent(
             videos: [...sampleVideos, makeVideo('video-3')],
@@ -541,17 +643,28 @@ void main() {
     blocTest<HomeBloc, HomeState>(
       'ignores a session that does not continue the grid list',
       build: buildBloc,
-      act: (bloc) async {
-        await loadFirstPage(bloc);
-        bloc.add(
-          MergeVideoFeedSessionEvent(
-            videos: [makeVideo('other'), sampleVideos[1], makeVideo('video-3')],
-            nextCursor: sessionCursor,
-            hasMoreContent: false,
-          ),
-        );
-      },
-      skip: 2,
+      seed: () => seeded,
+      act: (bloc) => bloc.add(
+        MergeVideoFeedSessionEvent(
+          videos: [makeVideo('other'), sampleVideos[1], makeVideo('video-3')],
+          nextCursor: sessionCursor,
+          hasMoreContent: false,
+        ),
+      ),
+      expect: () => <HomeState>[],
+    );
+
+    blocTest<HomeBloc, HomeState>(
+      'ignores a session while the next page is loading',
+      build: buildBloc,
+      seed: () => FeedLoaded(videos: sampleVideos, isLoadingMore: true),
+      act: (bloc) => bloc.add(
+        MergeVideoFeedSessionEvent(
+          videos: [...sampleVideos, makeVideo('video-3')],
+          nextCursor: sessionCursor,
+          hasMoreContent: false,
+        ),
+      ),
       expect: () => <HomeState>[],
     );
   });

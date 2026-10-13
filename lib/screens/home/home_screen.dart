@@ -33,9 +33,6 @@ class _HomeScreenState extends State<HomeScreen> {
   static const double _scrollTriggerDistance = 500;
   final OnboardingService _onboardingService = locator<OnboardingService>();
   final GlobalKey _firstVideoCardOnboardingKey = GlobalKey();
-  List<SportVideo> _lastLoadedVideos = const [];
-  HomeFeedCursor _lastCursor = const HomeFeedCursor.initial();
-  bool _lastHasMoreContent = true;
   bool _hasAttemptedHomeOnboarding = false;
   final GlobalKey _revealKey = GlobalKey();
   int? _revealIndex;
@@ -57,7 +54,6 @@ class _HomeScreenState extends State<HomeScreen> {
   /// Handle scroll events for infinite scroll pagination
   void _onScroll() {
     if (!_scrollController.hasClients) return;
-    if (!_lastHasMoreContent) return;
 
     final maxScroll = _scrollController.position.maxScrollExtent;
     final currentScroll = _scrollController.position.pixels;
@@ -76,7 +72,9 @@ class _HomeScreenState extends State<HomeScreen> {
     final homeBloc = context.read<HomeBloc>();
     final refreshCompletion = homeBloc.stream.firstWhere(
       (state) =>
-          state is FeedLoaded || state is FeedError || state is NoUserProfile,
+          (state is FeedLoaded && !state.isLoadingMore) ||
+          state is FeedError ||
+          state is NoUserProfile,
     );
 
     HapticFeedback.mediumImpact();
@@ -144,21 +142,17 @@ class _HomeScreenState extends State<HomeScreen> {
             context.go('/username-setup');
           }
 
-          if (state is FeedLoaded) {
-            _lastLoadedVideos = List<SportVideo>.from(state.videos);
-            _lastCursor = state.nextCursor;
-            _lastHasMoreContent = state.hasMoreContent;
-
-            if (state.offset == 0) {
-              _maybePresentHomeOnboarding(state.videos);
-            }
+          if (state is FeedLoaded &&
+              state.offset == 0 &&
+              !state.isLoadingMore) {
+            _maybePresentHomeOnboarding(state.videos);
           }
         },
 
         /// Builder: Render UI based on state
         builder: (context, state) {
-          // Initial state - not ready yet
-          if (state is HomeInitial) {
+          // Initial state or first-page load - show full shimmer
+          if (state is HomeInitial || state is FeedLoading) {
             return const _FirstLoadSkeleton();
           }
 
@@ -184,21 +178,6 @@ class _HomeScreenState extends State<HomeScreen> {
             );
           }
 
-          // Loading state (first load or pagination)
-          if (state is FeedLoading) {
-            if (state.isFirstLoad) {
-              // First load - show full shimmer
-              return const _FirstLoadSkeleton();
-            } else {
-              return _buildFeedGrid(
-                _lastLoadedVideos,
-                hasMoreContent: _lastHasMoreContent,
-                nextCursor: _lastCursor,
-                isLoading: true,
-              );
-            }
-          }
-
           // Error state
           if (state is FeedError) {
             return _buildRefreshableBody(
@@ -216,7 +195,7 @@ class _HomeScreenState extends State<HomeScreen> {
               state.videos,
               hasMoreContent: state.hasMoreContent,
               nextCursor: state.nextCursor,
-              isLoading: false,
+              isLoading: state.isLoadingMore,
             );
           }
 
@@ -357,7 +336,10 @@ class _HomeScreenState extends State<HomeScreen> {
       // Stop if the merge was skipped and the grid doesn't contain this video.
       shouldContinue: () {
         final state = homeBloc.state;
-        return mounted && state is FeedLoaded && index < state.videos.length;
+        return mounted &&
+            state is FeedLoaded &&
+            !state.isLoadingMore &&
+            index < state.videos.length;
       },
     );
   }
