@@ -7,7 +7,7 @@ import 'package:beat_that/screens/home/home_screen.dart';
 import 'package:beat_that/service_locator.dart';
 import 'package:beat_that/services/app_onboarding.dart';
 import 'package:beat_that/services/onboarding_service.dart';
-import 'package:beat_that/widgets/shimmer_loading.dart';
+import 'package:beat_that/widgets/feed_grid_skeleton_sliver.dart';
 import 'package:beat_that/widgets/video_feed_card.dart';
 import 'package:bloc_test/bloc_test.dart';
 import 'package:flutter/material.dart';
@@ -130,12 +130,22 @@ void main() {
 
     expect(find.byType(VideoFeedCard), findsNWidgets(2));
     expect(find.text('user1'), findsOneWidget);
-    expect(find.byType(ShimmerLoading), findsNothing);
+    expect(find.byType(FeedGridSkeletonSliver), findsNothing);
 
     await tester.pump();
 
     expect(find.byType(VideoFeedCard), findsNWidgets(2));
     expect(find.text('user1'), findsOneWidget);
+
+    // The builder picks up the pagination state on the next frame.
+    await tester.pump();
+
+    expect(find.byType(VideoFeedCard), findsNWidgets(2));
+    // The skeleton row sits below the two loaded cards, outside the viewport.
+    final skeleton = tester.widget<FeedGridSkeletonSliver>(
+      find.byType(FeedGridSkeletonSliver, skipOffstage: false),
+    );
+    expect(skeleton.itemCount, 2);
   });
 
   testWidgets(
@@ -155,7 +165,7 @@ void main() {
       await tester.pumpWidget(buildTestApp(homeBloc));
       await tester.pump();
 
-      expect(find.byType(ShimmerLoading), findsOneWidget);
+      expect(find.byType(FeedGridSkeletonSliver), findsOneWidget);
       expect(find.byType(VideoFeedCard), findsNothing);
     },
   );

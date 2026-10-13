@@ -24,8 +24,9 @@ class ExploreEmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final defaultIconColor =
-        isDark ? AppColors.cyan : AppColors.electricMagenta;
+    final defaultIconColor = isDark
+        ? AppColors.cyan
+        : AppColors.electricMagenta;
     final defaultBgColor = isDark
         ? AppColors.cyan.withValues(alpha: 0.14)
         : AppColors.electricMagenta.withValues(alpha: 0.10);

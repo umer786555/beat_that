@@ -7,11 +7,14 @@ class BeatShimmerFill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final fill = ColoredBox(color: colorScheme.surfaceContainerHighest);
+
+    if (MediaQuery.disableAnimationsOf(context)) return fill;
 
     return Shimmer.fromColors(
       baseColor: colorScheme.surfaceContainerHighest,
       highlightColor: colorScheme.surface,
-      child: ColoredBox(color: colorScheme.surfaceContainerHighest),
+      child: fill,
     );
   }
 }

@@ -1,4 +1,6 @@
 import 'package:beat_that/constants/app_colors.dart';
+import 'package:beat_that/widgets/beat_shimmer.dart';
+import 'package:beat_that/widgets/feed_grid_geometry.dart';
 import 'package:flutter/material.dart';
 
 /// Reusable video feed card component for displaying videos in grid
@@ -50,9 +52,9 @@ class VideoFeedCard extends StatelessWidget {
         onLongPress: onLongPress,
         splashFactory: NoSplash.splashFactory,
         overlayColor: WidgetStateProperty.all(Colors.transparent),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(kFeedCardRadius),
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(kFeedCardRadius),
           child: Stack(
             fit: StackFit.expand,
             children: [
@@ -60,21 +62,38 @@ class VideoFeedCard extends StatelessWidget {
               Image.network(
                 thumbnailUrl,
                 fit: BoxFit.cover,
+                frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+                  // Cache hit: no shimmer and no fade.
+                  if (wasSynchronouslyLoaded) return child;
+                  return AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 200),
+                    // The default layout loosens constraints; keep the fill.
+                    layoutBuilder: (current, previous) => Stack(
+                      fit: StackFit.expand,
+                      children: [...previous, ?current],
+                    ),
+                    child: frame == null
+                        ? const BeatShimmerFill(
+                            key: ValueKey('thumb-placeholder'),
+                          )
+                        : KeyedSubtree(
+                            key: const ValueKey('thumb-image'),
+                            child: child,
+                          ),
+                  );
+                },
                 errorBuilder: (context, error, stackTrace) {
-                  return Container(
-                    color: const Color(0xFF323846),
-                    child: const Center(
+                  final colorScheme = Theme.of(context).colorScheme;
+                  return ColoredBox(
+                    color: colorScheme.surfaceContainerHighest,
+                    child: Center(
                       child: Icon(
                         Icons.video_library_outlined,
-                        color: Colors.white70,
+                        color: colorScheme.onSurfaceVariant,
                         size: 36,
                       ),
                     ),
                   );
-                },
-                loadingBuilder: (context, child, loadingProgress) {
-                  if (loadingProgress == null) return child;
-                  return Container(color: const Color(0xFFCDD3DD));
                 },
               ),
               // Modern gradient overlay - inspired by Instagram/TikTok
@@ -111,8 +130,6 @@ class VideoFeedCard extends StatelessWidget {
     );
   }
 }
-
-
 
 /// Modern bottom overlay showing creator info and engagement metrics
 class _BottomContentOverlay extends StatelessWidget {

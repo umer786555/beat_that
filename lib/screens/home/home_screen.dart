@@ -10,11 +10,11 @@ import 'package:beat_that/screens/home/video_feed/models/home_video_feed_route_e
 import 'package:beat_that/services/app_onboarding.dart';
 import 'package:beat_that/services/home_video_feed_session_store.dart';
 import 'package:beat_that/services/onboarding_service.dart';
-import 'package:beat_that/widgets/beat_shimmer.dart';
+import 'package:beat_that/widgets/feed_grid_geometry.dart';
 import 'package:beat_that/widgets/feed_grid_reveal.dart';
+import 'package:beat_that/widgets/feed_grid_skeleton_sliver.dart';
 import 'package:beat_that/widgets/home_feed_native_ad_card.dart';
 import 'package:beat_that/widgets/video_feed_card.dart';
-import 'package:beat_that/widgets/shimmer_loading.dart';
 
 /// Home screen displayed when user is logged in
 /// Shows personalized video feed
@@ -158,12 +158,8 @@ class _HomeScreenState extends State<HomeScreen> {
         /// Builder: Render UI based on state
         builder: (context, state) {
           // Initial state - not ready yet
-          if (state is HomeInitial) {
-            return const ShimmerLoading(cardCount: 8);
-          }
-
-          if (state is UserProfileLoaded) {
-            return ShimmerLoading(cardCount: 8);
+          if (state is HomeInitial || state is UserProfileLoaded) {
+            return const _FirstLoadSkeleton();
           }
 
           // No user profile state
@@ -192,7 +188,7 @@ class _HomeScreenState extends State<HomeScreen> {
           if (state is FeedLoading) {
             if (state.isFirstLoad) {
               // First load - show full shimmer
-              return ShimmerLoading(cardCount: 8);
+              return const _FirstLoadSkeleton();
             } else {
               return _buildFeedGrid(
                 _lastLoadedVideos,
@@ -262,7 +258,11 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: HomeFeedNativeAdCard(slotIndex: sectionIndex),
               ),
           ],
-          if (isLoading && videos.isNotEmpty) _buildLoadingSliver(),
+          if (isLoading && videos.isNotEmpty)
+            const FeedGridSkeletonSliver(
+              itemCount: 2,
+              padding: kFeedGridLoadMorePadding,
+            ),
           const SliverToBoxAdapter(child: SizedBox(height: 24)),
         ],
       ),
@@ -277,18 +277,13 @@ class _HomeScreenState extends State<HomeScreen> {
   }) {
     return SliverPadding(
       padding: EdgeInsets.fromLTRB(
-        6,
-        section.startVideoIndex == 0 ? 6 : 0,
-        6,
+        kFeedGridSpacing,
+        section.startVideoIndex == 0 ? kFeedGridSpacing : 0,
+        kFeedGridSpacing,
         0,
       ),
       sliver: SliverGrid(
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 2,
-          crossAxisSpacing: 6,
-          mainAxisSpacing: 6,
-          childAspectRatio: 0.64,
-        ),
+        gridDelegate: kFeedGridDelegate,
         delegate: SliverChildBuilderDelegate((context, localIndex) {
           final globalIndex = section.startVideoIndex + localIndex;
           final video = section.videos[localIndex];
@@ -364,26 +359,6 @@ class _HomeScreenState extends State<HomeScreen> {
         final state = homeBloc.state;
         return mounted && state is FeedLoaded && index < state.videos.length;
       },
-    );
-  }
-
-  SliverPadding _buildLoadingSliver() {
-    return SliverPadding(
-      padding: const EdgeInsets.fromLTRB(6, 12, 6, 0),
-      sliver: SliverGrid(
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 2,
-          crossAxisSpacing: 6,
-          mainAxisSpacing: 6,
-          childAspectRatio: 0.64,
-        ),
-        delegate: SliverChildBuilderDelegate((context, index) {
-          return ClipRRect(
-            borderRadius: BorderRadius.circular(12),
-            child: const BeatShimmerFill(),
-          );
-        }, childCount: 2),
-      ),
     );
   }
 
@@ -491,6 +466,18 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _FirstLoadSkeleton extends StatelessWidget {
+  const _FirstLoadSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return const CustomScrollView(
+      physics: NeverScrollableScrollPhysics(),
+      slivers: [FeedGridSkeletonSliver(itemCount: 8)],
     );
   }
 }
