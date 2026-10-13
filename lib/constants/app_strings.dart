@@ -180,6 +180,33 @@ class AppStrings {
   static const String sportsHub = 'Sports Hub';
   static const String browseSports = 'Browse Sports';
 
+  // Upload Category Screen
+  static const String chooseACategory = 'Choose a category';
+  static const String uploadCategorySubtitle =
+      'What kind of clip are you uploading?';
+  static const String noUploadCategories =
+      'No upload categories are available right now.';
+  static const String sports = 'Sports';
+  static const String sportsCategoryDescription = 'Show us what you can do.';
+  static const String gaming = 'Gaming';
+  static const String gamingCategoryDescription =
+      'Share your best gaming moments.';
+  static const String goBack = 'Go Back';
+
+  // Sports & Gaming Hubs
+  static const String chooseASport = 'Choose a sport';
+  static const String sportsHubOnboardingTitle = 'Choose a sport first';
+  static const String sportsHubOnboardingDescription =
+      'Tap a sport to open its techniques. Next, choose the exact move, like '
+      'a three-point shot or dunk, and attach your video.';
+  static const String sportsHubDescription =
+      'Pick the sport, then the exact technique for your clip before you '
+      'upload and compete.';
+  static const String chooseAGame = 'Choose a game';
+  static const String gamingHubDescription =
+      'Pick the game, then the exact technique for your clip before you '
+      'upload and compete.';
+
   // Profile Onboarding
   static const String profileOnboardingIntroTitle = 'This is your profile';
   static const String profileOnboardingIntroDescription =

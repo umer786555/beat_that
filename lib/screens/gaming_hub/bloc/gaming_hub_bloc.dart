@@ -1,3 +1,4 @@
+import 'package:beat_that/constants/app_strings.dart';
 import 'package:beat_that/models/category.dart';
 import 'package:beat_that/service_locator.dart';
 import 'package:beat_that/services/supabase_service.dart';
@@ -11,18 +12,18 @@ class GamingHubBloc extends Bloc<GamingHubEvent, GamingHubState> {
   final SupabaseService _supabaseService = locator<SupabaseService>();
 
   GamingHubBloc() : super(GamingHubInitial()) {
-    on<GamingHubEvent>((event, emit) {});
     on<LoadGamingHubEvent>((event, emit) async {
       emit(GamingHubLoading());
       try {
         final games = await _supabaseService.fetchGames();
-        
+
         // Sort games alphabetically with "Other Games" at the bottom
         final sortedGames = _sortGamesWithOtherLast(games);
-        
+
         emit(GamingHubLoaded(sortedGames));
-      } catch (e) {
-        emit(GamingHubError(e.toString()));
+      } catch (error, stackTrace) {
+        addError(error, stackTrace);
+        emit(const GamingHubError(AppStrings.somethingWentWrongPleaseTryAgain));
       }
     });
   }
@@ -41,9 +42,10 @@ class GamingHubBloc extends Bloc<GamingHubEvent, GamingHubState> {
     }
 
     // Sort alphabetically by displayName
-    notOther.sort((a, b) => a.displayName.toLowerCase().compareTo(
-      b.displayName.toLowerCase(),
-    ));
+    notOther.sort(
+      (a, b) =>
+          a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase()),
+    );
 
     // Add "Other Games" at the end if it exists
     if (otherGames != null) {
