@@ -23,7 +23,7 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
        _supabaseService = supabaseService ?? locator<SupabaseService>(),
        _homeFeedService = homeFeedService ?? locator<HomeFeedService>(),
        _authService = authService ?? locator<AuthService>(),
-       super(HomeInitial()) {
+       super(const HomeInitial()) {
     on<InitialEvent>(_onInitial);
     on<RefreshFeedEvent>(_onRefreshFeed);
     on<LoadMoreFeedEvent>(_onLoadMoreFeed);
@@ -117,9 +117,11 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
 
       final existing = appendTo?.videos ?? const <SportVideo>[];
       final existingIds = {for (final video in existing) video.id};
+      final pageVideos = (feedResult['videos'] as List<dynamic>)
+          .cast<SportVideo>();
       final newVideos = [
-        for (final video in feedResult['videos'] as List<dynamic>)
-          if (!existingIds.contains((video as SportVideo).id)) video,
+        for (final video in pageVideos)
+          if (!existingIds.contains(video.id)) video,
       ];
 
       emit(

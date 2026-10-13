@@ -8,7 +8,9 @@ sealed class HomeState extends Equatable {
 }
 
 /// Initial state
-final class HomeInitial extends HomeState {}
+final class HomeInitial extends HomeState {
+  const HomeInitial();
+}
 
 /// No user profile found
 final class NoUserProfile extends HomeState {

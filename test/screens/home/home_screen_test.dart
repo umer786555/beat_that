@@ -4,11 +4,13 @@ import 'package:beat_that/models/home_feed_cursor.dart';
 import 'package:beat_that/models/sport_video.dart';
 import 'package:beat_that/screens/home/bloc/home_bloc.dart';
 import 'package:beat_that/screens/home/home_screen.dart';
+import 'package:beat_that/screens/home/video_feed/models/home_video_feed_route_extra.dart';
 import 'package:beat_that/service_locator.dart';
 import 'package:beat_that/services/ad_mob_consent_service.dart';
 import 'package:beat_that/services/app_onboarding.dart';
 import 'package:beat_that/services/auth_service.dart';
 import 'package:beat_that/services/home_feed_service.dart';
+import 'package:beat_that/services/home_video_feed_session_store.dart';
 import 'package:beat_that/services/onboarding_service.dart';
 import 'package:beat_that/services/preferences_service.dart';
 import 'package:beat_that/services/supabase_service.dart';
@@ -49,6 +51,7 @@ void main() {
     registerFallbackValue(FakeBuildContext());
     registerFallbackValue(FakeOnboardingFlowRequest());
     registerFallbackValue(const HomeFeedCursor.initial());
+    registerFallbackValue(const RefreshFeedEvent());
   });
 
   const loadedVideos = <SportVideo>[
@@ -83,6 +86,7 @@ void main() {
   ];
 
   late GoRouter router;
+  HomeVideoFeedExtra? pushedFeedExtra;
 
   Widget buildApp(Widget home) {
     router = GoRouter(
@@ -90,6 +94,14 @@ void main() {
         GoRoute(
           path: '/',
           builder: (context, state) => AppOnboarding(child: home),
+        ),
+        GoRoute(
+          path: '/home-video-feed',
+          name: 'home-video-feed',
+          builder: (context, state) {
+            pushedFeedExtra = state.extra as HomeVideoFeedExtra?;
+            return const SizedBox.shrink();
+          },
         ),
         GoRoute(
           path: '/username-setup',
@@ -211,7 +223,7 @@ void main() {
   });
 
   testWidgets('shows the skeleton in HomeInitial', (tester) async {
-    final initialState = HomeInitial();
+    const initialState = HomeInitial();
 
     when(() => homeBloc.state).thenReturn(initialState);
     whenListen(
@@ -319,11 +331,11 @@ void main() {
       offset: 2,
     );
 
-    when(() => homeBloc.state).thenReturn(HomeInitial());
+    when(() => homeBloc.state).thenReturn(const HomeInitial());
     whenListen(
       homeBloc,
       Stream<HomeState>.fromIterable([firstPage, loadingMore, secondPage]),
-      initialState: HomeInitial(),
+      initialState: const HomeInitial(),
     );
 
     await tester.pumpWidget(buildTestApp(homeBloc));
@@ -397,7 +409,7 @@ void main() {
 
   group('visible copy', () {
     testWidgets('shows the Home app bar title', (tester) async {
-      await pumpInState(tester, HomeInitial());
+      await pumpInState(tester, const HomeInitial());
 
       expect(find.text('Home'), findsOneWidget);
     });
@@ -443,13 +455,13 @@ void main() {
     testWidgets('passes the first video step copy to onboarding', (
       tester,
     ) async {
-      when(() => homeBloc.state).thenReturn(HomeInitial());
+      when(() => homeBloc.state).thenReturn(const HomeInitial());
       whenListen(
         homeBloc,
         Stream<HomeState>.value(
           const FeedLoaded(videos: loadedVideos, offset: 0),
         ),
-        initialState: HomeInitial(),
+        initialState: const HomeInitial(),
       );
 
       await tester.pumpWidget(buildTestApp(homeBloc));
@@ -491,13 +503,151 @@ void main() {
     });
   });
 
+  testWidgets('does not start onboarding while a page is loading more', (
+    tester,
+  ) async {
+    when(() => homeBloc.state).thenReturn(const HomeInitial());
+    whenListen(
+      homeBloc,
+      Stream<HomeState>.value(
+        const FeedLoaded(videos: loadedVideos, offset: 0, isLoadingMore: true),
+      ),
+      initialState: const HomeInitial(),
+    );
+
+    await tester.pumpWidget(buildTestApp(homeBloc));
+    await tester.pump();
+
+    verifyNever(
+      () => onboardingService.startFlow(
+        any(),
+        any(),
+        beforeStart: any(named: 'beforeStart'),
+      ),
+    );
+  });
+
+  testWidgets('starts onboarding with no steps for an empty first page', (
+    tester,
+  ) async {
+    when(() => homeBloc.state).thenReturn(const HomeInitial());
+    whenListen(
+      homeBloc,
+      Stream<HomeState>.value(
+        const FeedLoaded(videos: [], offset: 0, hasMoreContent: false),
+      ),
+      initialState: const HomeInitial(),
+    );
+
+    await tester.pumpWidget(buildTestApp(homeBloc));
+    await tester.pump();
+
+    final request =
+        verify(
+              () => onboardingService.startFlow(
+                any(),
+                captureAny(),
+                beforeStart: any(named: 'beforeStart'),
+              ),
+            ).captured.single
+            as OnboardingFlowRequest;
+    expect(request.steps, isEmpty);
+  });
+
+  group('video tap handoff', () {
+    const feedCursor = HomeFeedCursor(
+      hasMoreFollowing: false,
+      serverState: {'page': 1},
+    );
+    const sessionCursor = HomeFeedCursor(
+      hasMoreTrending: false,
+      serverState: {'page': 2},
+    );
+    late HomeVideoFeedSessionStore sessionStore;
+
+    setUp(() {
+      pushedFeedExtra = null;
+      when(() => homeBloc.isClosed).thenReturn(false);
+      sessionStore = HomeVideoFeedSessionStore();
+      locator.registerSingleton<HomeVideoFeedSessionStore>(sessionStore);
+    });
+
+    Future<void> tapSecondVideo(WidgetTester tester) async {
+      await pumpInState(
+        tester,
+        const FeedLoaded(videos: loadedVideos, nextCursor: feedCursor),
+      );
+      await tester.tap(find.byType(VideoFeedCard).at(1));
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+    }
+
+    Future<void> popFeed(WidgetTester tester) async {
+      router.pop();
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+    }
+
+    testWidgets('opens the feed with a session of the grid state', (
+      tester,
+    ) async {
+      await tapSecondVideo(tester);
+
+      final extra = pushedFeedExtra!;
+      expect(extra.initialIndex, 1);
+      final session = sessionStore.getSession(extra.sessionId)!;
+      expect(session.videos, loadedVideos);
+      expect(session.nextCursor, feedCursor);
+      expect(session.hasMoreContent, isTrue);
+      expect(session.currentIndex, 1);
+    });
+
+    testWidgets('merges the session back into the grid on return', (
+      tester,
+    ) async {
+      final video3 = loadedVideos[0].copyWith(id: 'video-3');
+      await tapSecondVideo(tester);
+      final sessionId = pushedFeedExtra!.sessionId;
+      sessionStore.appendVideos(
+        sessionId: sessionId,
+        videos: [video3],
+        nextCursor: sessionCursor,
+        hasMoreContent: false,
+      );
+
+      await popFeed(tester);
+
+      verify(
+        () => homeBloc.add(
+          MergeVideoFeedSessionEvent(
+            videos: [...loadedVideos, video3],
+            nextCursor: sessionCursor,
+            hasMoreContent: false,
+          ),
+        ),
+      ).called(1);
+      expect(sessionStore.getSession(sessionId), isNull);
+    });
+
+    testWidgets('skips the merge when the session is gone', (tester) async {
+      await tapSecondVideo(tester);
+      sessionStore.takeSession(pushedFeedExtra!.sessionId);
+
+      await popFeed(tester);
+
+      verifyNever(
+        () => homeBloc.add(any(that: isA<MergeVideoFeedSessionEvent>())),
+      );
+    });
+  });
+
   group('NoUserProfile', () {
     testWidgets('navigates to username setup when emitted', (tester) async {
-      when(() => homeBloc.state).thenReturn(HomeInitial());
+      when(() => homeBloc.state).thenReturn(const HomeInitial());
       whenListen(
         homeBloc,
         Stream<HomeState>.value(const NoUserProfile()),
-        initialState: HomeInitial(),
+        initialState: const HomeInitial(),
       );
 
       await tester.pumpWidget(buildTestApp(homeBloc));
@@ -574,18 +724,28 @@ void main() {
     });
   });
 
-  testWidgets('scrolling near the bottom adds LoadMoreFeedEvent', (
+  testWidgets('scrolling within 500px of the bottom adds LoadMoreFeedEvent', (
     tester,
   ) async {
     await pumpInState(tester, FeedLoaded(videos: buildVideos(13)));
+    final position = tester
+        .state<ScrollableState>(
+          find
+              .descendant(
+                of: find.byType(CustomScrollView),
+                matching: find.byType(Scrollable),
+              )
+              .first,
+        )
+        .position;
+
+    position.jumpTo(position.maxScrollExtent - 501);
+    await tester.pump();
     verifyNever(() => homeBloc.add(const LoadMoreFeedEvent()));
 
-    await tester.drag(find.byType(CustomScrollView), const Offset(0, -10000));
+    position.jumpTo(position.maxScrollExtent - 499);
     await tester.pump();
-
-    verify(
-      () => homeBloc.add(const LoadMoreFeedEvent()),
-    ).called(greaterThan(0));
+    verify(() => homeBloc.add(const LoadMoreFeedEvent())).called(1);
   });
 
   testWidgets('Retry adds RefreshFeedEvent with haptics', (tester) async {

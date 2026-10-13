@@ -361,7 +361,7 @@ class _HomeFeedGrid extends StatelessWidget {
                 child: HomeFeedNativeAdCard(slotIndex: sectionIndex),
               ),
           ],
-          if (feed.isLoadingMore && feed.videos.isNotEmpty)
+          if (feed.isLoadingMore)
             const FeedGridSkeletonSliver(
               itemCount: 2,
               padding: kFeedGridLoadMorePadding,

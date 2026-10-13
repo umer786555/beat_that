@@ -281,6 +281,32 @@ void main() {
     );
 
     blocTest<HomeBloc, HomeState>(
+      'drops an older first page superseded by a newer refresh',
+      build: buildBloc,
+      act: (bloc) async {
+        final olderCompleter = Completer<Map<String, dynamic>>();
+        final newerCompleter = Completer<Map<String, dynamic>>();
+        final pending = [olderCompleter, newerCompleter];
+        stubFeedFuture(
+          const HomeFeedCursor.initial(),
+          () => pending.removeAt(0).future,
+        );
+
+        bloc.add(const RefreshFeedEvent());
+        await Future<void>.delayed(Duration.zero);
+        bloc.add(const RefreshFeedEvent());
+        await Future<void>.delayed(Duration.zero);
+
+        newerCompleter.complete(page(sampleVideos));
+        await bloc.stream.firstWhere((state) => state is FeedLoaded);
+        olderCompleter.complete(page([makeVideo('older')]));
+        await Future<void>.delayed(Duration.zero);
+      },
+      // The second FeedLoading equals the first, so the bloc drops it.
+      expect: () => [const FeedLoading(), FeedLoaded(videos: sampleVideos)],
+    );
+
+    blocTest<HomeBloc, HomeState>(
       'preserves video fields',
       setUp: () => stubFeed(page(sampleVideos)),
       build: buildBloc,
@@ -387,7 +413,7 @@ void main() {
     );
 
     final ignoredSeeds = <String, HomeState Function()>{
-      'HomeInitial': HomeInitial.new,
+      'HomeInitial': () => const HomeInitial(),
       'FeedLoading': () => const FeedLoading(),
       'FeedError': () => const FeedError(),
       'no more content': () =>
@@ -503,8 +529,6 @@ void main() {
         FeedLoaded(videos: refreshedVideos, nextCursor: refreshedCursor);
 
     setUp(() {
-      staleCompleter = Completer();
-      refreshCompleter = Completer();
       stubFeedFuture(seedCursor, () => staleCompleter.future);
       stubFeedFuture(
         const HomeFeedCursor.initial(),
@@ -513,6 +537,9 @@ void main() {
     });
 
     Future<void> startLoadMoreThenRefresh(HomeBloc bloc) async {
+      // Created inside `act` so completeError stays in the bloc's error zone.
+      staleCompleter = Completer();
+      refreshCompleter = Completer();
       bloc.add(const LoadMoreFeedEvent());
       await untilCalled(
         () => mockHomeFeedService.getHomeFeedContinuation(
@@ -555,6 +582,37 @@ void main() {
         );
         await bloc.stream.firstWhere((state) => state == refreshed());
         staleCompleter.complete(stalePage);
+        await Future<void>.delayed(Duration.zero);
+      },
+      expect: () => [loadingMore(), const FeedLoading(), refreshed()],
+    );
+
+    blocTest<HomeBloc, HomeState>(
+      'drops a stale failure that completes before the refresh',
+      build: buildBloc,
+      seed: () => seeded,
+      act: (bloc) async {
+        await startLoadMoreThenRefresh(bloc);
+        staleCompleter.completeError(Exception('stale'));
+        await Future<void>.delayed(Duration.zero);
+        refreshCompleter.complete(
+          page(refreshedVideos, nextCursor: refreshedCursor),
+        );
+      },
+      expect: () => [loadingMore(), const FeedLoading(), refreshed()],
+    );
+
+    blocTest<HomeBloc, HomeState>(
+      'drops a stale failure that completes after the refresh',
+      build: buildBloc,
+      seed: () => seeded,
+      act: (bloc) async {
+        await startLoadMoreThenRefresh(bloc);
+        refreshCompleter.complete(
+          page(refreshedVideos, nextCursor: refreshedCursor),
+        );
+        await bloc.stream.firstWhere((state) => state == refreshed());
+        staleCompleter.completeError(Exception('stale'));
         await Future<void>.delayed(Duration.zero);
       },
       expect: () => [loadingMore(), const FeedLoading(), refreshed()],
@@ -688,5 +746,41 @@ void main() {
       ),
       expect: () => <HomeState>[],
     );
+
+    blocTest<HomeBloc, HomeState>(
+      'ignores a session no longer than the grid',
+      build: buildBloc,
+      seed: () => seeded,
+      act: (bloc) => bloc.add(
+        MergeVideoFeedSessionEvent(
+          videos: sampleVideos,
+          nextCursor: sessionCursor,
+          hasMoreContent: false,
+        ),
+      ),
+      expect: () => <HomeState>[],
+    );
+
+    final unloadedSeeds = <String, HomeState Function()>{
+      'HomeInitial': () => const HomeInitial(),
+      'FeedLoading': () => const FeedLoading(),
+      'FeedError': () => const FeedError(),
+    };
+
+    for (final entry in unloadedSeeds.entries) {
+      blocTest<HomeBloc, HomeState>(
+        'ignores a session when seeded with ${entry.key}',
+        build: buildBloc,
+        seed: entry.value,
+        act: (bloc) => bloc.add(
+          MergeVideoFeedSessionEvent(
+            videos: [...sampleVideos, makeVideo('video-3')],
+            nextCursor: sessionCursor,
+            hasMoreContent: false,
+          ),
+        ),
+        expect: () => <HomeState>[],
+      );
+    }
   });
 }
