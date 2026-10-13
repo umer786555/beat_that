@@ -1,5 +1,4 @@
 import 'package:beat_that/models/home_feed_cursor.dart';
-import 'package:beat_that/models/user_personal_profile.dart';
 import 'package:beat_that/models/sport_video.dart';
 import 'package:beat_that/service_locator.dart';
 import 'package:beat_that/services/auth_service.dart';
@@ -7,18 +6,38 @@ import 'package:beat_that/services/preferences_service.dart';
 import 'package:beat_that/services/supabase_service.dart';
 import 'package:beat_that/services/home_feed_service.dart';
 import 'package:equatable/equatable.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 part 'home_event.dart';
 part 'home_state.dart';
 
 class HomeBloc extends Bloc<HomeEvent, HomeState> {
+  HomeBloc({
+    PreferencesService? preferencesService,
+    SupabaseService? supabaseService,
+    HomeFeedService? homeFeedService,
+    AuthService? authService,
+  }) : _preferencesService =
+           preferencesService ?? locator<PreferencesService>(),
+       _supabaseService = supabaseService ?? locator<SupabaseService>(),
+       _homeFeedService = homeFeedService ?? locator<HomeFeedService>(),
+       _authService = authService ?? locator<AuthService>(),
+       super(HomeInitial()) {
+    on<InitialEvent>(_onInitial);
+    on<FetchFeedEvent>(_onFetchFeed);
+    on<RefreshFeedEvent>(_onRefreshFeed);
+    on<LoadMoreFeedEvent>(_onLoadMoreFeed);
+    on<MergeVideoFeedSessionEvent>(_onMergeVideoFeedSession);
+  }
+
   static const int _homeFeedPageSize = 24;
 
-  final preferencesService = locator<PreferencesService>();
-  final supabaseService = locator<SupabaseService>();
-  final homeFeedService = locator<HomeFeedService>();
-  final authService = locator<AuthService>();
+  final PreferencesService _preferencesService;
+  final SupabaseService _supabaseService;
+  final HomeFeedService _homeFeedService;
+  final AuthService _authService;
+
   // Session-scoped feed state; `_seenFeedVideoIds` guards against rare repeats
   // when follows change mid-session.
   List<SportVideo> _allFeedVideos = [];
@@ -27,22 +46,12 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
   bool _hasMoreFeedContent = true;
   bool _isPaginationRequestInFlight = false;
 
-  HomeBloc() : super(HomeInitial()) {
-    on<InitialEvent>(_onInitial);
-    on<FetchFeedEvent>(_onFetchFeed);
-    on<RefreshFeedEvent>(_onRefreshFeed);
-    on<LoadMoreFeedEvent>(_onLoadMoreFeed);
-    on<MergeVideoFeedSessionEvent>(_onMergeVideoFeedSession);
-  }
-
   /// Handle InitialEvent - save user profile and fetch initial feed
   Future<void> _onInitial(InitialEvent event, Emitter<HomeState> emit) async {
-    print('✓ HomeBloc InitialEvent triggered');
-
     try {
-      await preferencesService.clearUserProfile();
+      await _preferencesService.clearUserProfile();
 
-      final hasFullAccountAccess = authService.hasFullAccountAccess();
+      final hasFullAccountAccess = _authService.hasFullAccountAccess();
 
       if (!hasFullAccountAccess) {
         add(const FetchFeedEvent(limit: _homeFeedPageSize, offset: 0));
@@ -50,22 +59,19 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
       }
 
       // Fetch user profile from Supabase
-      final userProfile = await supabaseService.fetchUserPersonalProfile();
+      final userProfile = await _supabaseService.fetchUserPersonalProfile();
 
       if (userProfile != null) {
         // Save to preferences for offline access
-        await preferencesService.saveUserProfile(userProfile);
-        print('✓ User profile found and saved: ${userProfile.username}');
-        emit(UserProfileLoaded(userProfile));
+        await _preferencesService.saveUserProfile(userProfile);
 
         // Automatically fetch initial feed after saving profile
         add(const FetchFeedEvent(limit: _homeFeedPageSize, offset: 0));
       } else {
-        print('✗ No user profile found');
         emit(const NoUserProfile());
       }
     } catch (e) {
-      print('✗ InitialEvent Error: $e');
+      debugPrint('[HOME] Failed to load user profile: $e');
       emit(FeedError(message: 'Failed to load user profile: $e'));
     }
   }
@@ -75,16 +81,12 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
     FetchFeedEvent event,
     Emitter<HomeState> emit,
   ) async {
-    print(
-      '📺 HomeBloc FetchFeedEvent: limit=${event.limit}, offset=${event.offset}',
-    );
-
     try {
       // Emit loading state
       final isFirstLoad = event.offset == 0;
       emit(FeedLoading(offset: event.offset, isFirstLoad: isFirstLoad));
 
-      final feedResult = await homeFeedService.getHomeFeedContinuation(
+      final feedResult = await _homeFeedService.getHomeFeedContinuation(
         cursor: event.offset == 0
             ? const HomeFeedCursor.initial()
             : _feedCursor,
@@ -98,7 +100,6 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
       _feedCursor = nextCursor;
 
       if (videos.isEmpty) {
-        print('⚠️ No videos available');
         _hasMoreFeedContent = hasMoreContent;
         emit(
           FeedLoaded(
@@ -127,10 +128,6 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
         _seenFeedVideoIds.addAll(uniqueVideos.map((video) => video.id));
       }
 
-      print(
-        '✓ Fetched ${videos.length} videos, ${uniqueVideos.length} unique, total feed size: ${_allFeedVideos.length}',
-      );
-
       _hasMoreFeedContent = hasMoreContent;
 
       emit(
@@ -142,7 +139,7 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
         ),
       );
     } catch (e) {
-      print('✗ FetchFeedEvent Error: $e');
+      debugPrint('[HOME] Failed to load feed: $e');
       emit(FeedError(message: 'Failed to load feed: $e', offset: event.offset));
     } finally {
       if (event.offset > 0) {
@@ -154,68 +151,30 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
   /// Handle RefreshFeedEvent - refresh feed from the top
   ///
   /// Clears cache and fetches fresh feed starting from offset=0
-  Future<void> _onRefreshFeed(
-    RefreshFeedEvent event,
-    Emitter<HomeState> emit,
-  ) async {
-    print('🔄 HomeBloc RefreshFeedEvent triggered');
+  void _onRefreshFeed(RefreshFeedEvent event, Emitter<HomeState> emit) {
+    // Clear cache and reset pagination
+    _allFeedVideos = [];
+    _seenFeedVideoIds.clear();
+    _feedCursor = const HomeFeedCursor.initial();
+    _hasMoreFeedContent = true;
+    _isPaginationRequestInFlight = false;
 
-    try {
-      // Clear cache and reset pagination
-      _allFeedVideos = [];
-      _seenFeedVideoIds.clear();
-      _feedCursor = const HomeFeedCursor.initial();
-      _hasMoreFeedContent = true;
-      _isPaginationRequestInFlight = false;
-
-      // Fetch fresh feed from top
-      add(const FetchFeedEvent(limit: _homeFeedPageSize, offset: 0));
-    } catch (e) {
-      print('✗ RefreshFeedEvent Error: $e');
-      emit(FeedError(message: 'Failed to refresh feed: $e'));
-    }
+    // Fetch fresh feed from top
+    add(const FetchFeedEvent(limit: _homeFeedPageSize, offset: 0));
   }
 
   /// Handle LoadMoreFeedEvent - load next page of feed
   ///
   /// Fetches next batch using current offset
-  Future<void> _onLoadMoreFeed(
-    LoadMoreFeedEvent event,
-    Emitter<HomeState> emit,
-  ) async {
-    print(
-      '⬇️ HomeBloc LoadMoreFeedEvent triggered, loadedVideos=${_allFeedVideos.length}',
+  void _onLoadMoreFeed(LoadMoreFeedEvent event, Emitter<HomeState> emit) {
+    if (!_hasMoreFeedContent || _isPaginationRequestInFlight) return;
+
+    _isPaginationRequestInFlight = true;
+
+    // Fetch next batch at current offset
+    add(
+      FetchFeedEvent(limit: _homeFeedPageSize, offset: _allFeedVideos.length),
     );
-
-    try {
-      if (!_hasMoreFeedContent) {
-        print('⚠️ No more feed content available, ignoring load more');
-        return;
-      }
-
-      if (_isPaginationRequestInFlight) {
-        print(
-          '⚠️ Pagination request already in flight, ignoring duplicate load more',
-        );
-        return;
-      }
-
-      _isPaginationRequestInFlight = true;
-
-      // Fetch next batch at current offset
-      add(
-        FetchFeedEvent(limit: _homeFeedPageSize, offset: _allFeedVideos.length),
-      );
-    } catch (e) {
-      _isPaginationRequestInFlight = false;
-      print('✗ LoadMoreFeedEvent Error: $e');
-      emit(
-        FeedError(
-          message: 'Failed to load more videos: $e',
-          offset: _allFeedVideos.length,
-        ),
-      );
-    }
   }
 
   void _onMergeVideoFeedSession(

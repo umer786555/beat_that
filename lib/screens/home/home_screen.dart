@@ -158,7 +158,7 @@ class _HomeScreenState extends State<HomeScreen> {
         /// Builder: Render UI based on state
         builder: (context, state) {
           // Initial state - not ready yet
-          if (state is HomeInitial || state is UserProfileLoaded) {
+          if (state is HomeInitial) {
             return const _FirstLoadSkeleton();
           }
 

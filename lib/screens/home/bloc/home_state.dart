@@ -10,16 +10,6 @@ sealed class HomeState extends Equatable {
 /// Initial state
 final class HomeInitial extends HomeState {}
 
-/// User profile has been loaded and saved
-final class UserProfileLoaded extends HomeState {
-  final UserPersonalProfile userProfile;
-
-  const UserProfileLoaded(this.userProfile);
-
-  @override
-  List<Object> get props => [userProfile];
-}
-
 /// No user profile found
 final class NoUserProfile extends HomeState {
   const NoUserProfile();
@@ -63,10 +53,7 @@ final class FeedError extends HomeState {
   final String message;
   final int? offset;
 
-  const FeedError({
-    required this.message,
-    this.offset,
-  });
+  const FeedError({required this.message, this.offset});
 
   @override
   List<Object> get props => [message, offset ?? 0];

@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:beat_that/models/sport_video.dart';
-import 'package:beat_that/models/user_personal_profile.dart';
 import 'package:beat_that/screens/home/bloc/home_bloc.dart';
 import 'package:beat_that/screens/home/home_screen.dart';
 import 'package:beat_that/service_locator.dart';
@@ -148,27 +147,22 @@ void main() {
     expect(skeleton.itemCount, 2);
   });
 
-  testWidgets(
-    'shows loading UI while user profile is loaded before feed fetch completes',
-    (tester) async {
-      final profileLoadedState = UserProfileLoaded(
-        UserPersonalProfile(username: 'user1'),
-      );
+  testWidgets('shows the skeleton in HomeInitial', (tester) async {
+    final initialState = HomeInitial();
 
-      when(() => homeBloc.state).thenReturn(profileLoadedState);
-      whenListen(
-        homeBloc,
-        Stream<HomeState>.value(profileLoadedState),
-        initialState: profileLoadedState,
-      );
+    when(() => homeBloc.state).thenReturn(initialState);
+    whenListen(
+      homeBloc,
+      const Stream<HomeState>.empty(),
+      initialState: initialState,
+    );
 
-      await tester.pumpWidget(buildTestApp(homeBloc));
-      await tester.pump();
+    await tester.pumpWidget(buildTestApp(homeBloc));
+    await tester.pump();
 
-      expect(find.byType(FeedGridSkeletonSliver), findsOneWidget);
-      expect(find.byType(VideoFeedCard), findsNothing);
-    },
-  );
+    expect(find.byType(FeedGridSkeletonSliver), findsOneWidget);
+    expect(find.byType(VideoFeedCard), findsNothing);
+  });
 
   testWidgets('refresh waits for the next terminal bloc state', (tester) async {
     final controller = StreamController<HomeState>();

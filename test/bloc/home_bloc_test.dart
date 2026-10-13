@@ -5,7 +5,6 @@ import 'package:beat_that/models/sport_video.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:bloc_test/bloc_test.dart';
 import 'package:mocktail/mocktail.dart';
-import 'package:get_it/get_it.dart';
 import 'package:beat_that/screens/home/bloc/home_bloc.dart';
 import 'package:beat_that/services/home_feed_service.dart';
 import 'package:beat_that/services/preferences_service.dart';
@@ -30,8 +29,13 @@ void main() {
   late MockPreferencesService mockPreferencesService;
   late MockSupabaseService mockSupabaseService;
   late MockAuthService mockAuthService;
-  late HomeBloc homeBloc;
-  late GetIt getIt;
+
+  HomeBloc buildBloc() => HomeBloc(
+    preferencesService: mockPreferencesService,
+    supabaseService: mockSupabaseService,
+    homeFeedService: mockHomeFeedService,
+    authService: mockAuthService,
+  );
 
   SportVideo makeVideo(
     String id, {
@@ -66,14 +70,6 @@ void main() {
     mockSupabaseService = MockSupabaseService();
     mockAuthService = MockAuthService();
 
-    // Setup GetIt with mocked services
-    getIt = GetIt.instance;
-    getIt.registerSingleton<HomeFeedService>(mockHomeFeedService);
-    getIt.registerSingleton<PreferencesService>(mockPreferencesService);
-    getIt.registerSingleton<SupabaseService>(mockSupabaseService);
-    getIt.registerSingleton<AuthService>(mockAuthService);
-
-    homeBloc = HomeBloc();
     sampleVideos = [
       makeVideo(
         'video-1',
@@ -96,14 +92,11 @@ void main() {
     ];
   });
 
-  tearDown(() {
-    homeBloc.close();
-    getIt.reset();
-  });
-
   group('HomeBloc', () {
     test('initial state is HomeInitial', () {
-      expect(homeBloc.state, isA<HomeInitial>());
+      final bloc = buildBloc();
+      addTearDown(bloc.close);
+      expect(bloc.state, isA<HomeInitial>());
     });
 
     blocTest<HomeBloc, HomeState>(
@@ -126,7 +119,7 @@ void main() {
           },
         );
       },
-      build: () => homeBloc,
+      build: buildBloc,
       act: (bloc) => bloc.add(const InitialEvent()),
       expect: () => [
         isA<FeedLoading>(),
@@ -164,7 +157,7 @@ void main() {
           },
         );
       },
-      build: () => homeBloc,
+      build: buildBloc,
       act: (bloc) => bloc.add(const FetchFeedEvent(limit: 50, offset: 0)),
       expect: () => [
         isA<FeedLoading>(),
@@ -201,7 +194,7 @@ void main() {
           },
         );
       },
-      build: () => homeBloc,
+      build: buildBloc,
       act: (bloc) => bloc.add(const FetchFeedEvent(limit: 50, offset: 0)),
       expect: () => [
         isA<FeedLoading>(),
@@ -219,7 +212,7 @@ void main() {
           ),
         ).thenThrow(Exception('Network error'));
       },
-      build: () => homeBloc,
+      build: buildBloc,
       act: (bloc) => bloc.add(const FetchFeedEvent(limit: 50, offset: 0)),
       expect: () => [isA<FeedLoading>(), isA<FeedError>()],
     );
@@ -240,7 +233,7 @@ void main() {
           },
         );
       },
-      build: () => homeBloc,
+      build: buildBloc,
       act: (bloc) => bloc.add(const RefreshFeedEvent()),
       expect: () => [isA<FeedLoading>(), isA<FeedLoaded>()],
       verify: (_) {
@@ -269,7 +262,7 @@ void main() {
           },
         );
       },
-      build: () => homeBloc,
+      build: buildBloc,
       act: (bloc) => bloc.add(const FetchFeedEvent(limit: 50, offset: 0)),
       verify: (bloc) {
         final state = bloc.state as FeedLoaded;
@@ -294,7 +287,7 @@ void main() {
           },
         );
       },
-      build: () => homeBloc,
+      build: buildBloc,
       act: (bloc) => bloc.add(const FetchFeedEvent(limit: 50, offset: 0)),
       verify: (bloc) {
         final state = bloc.state as FeedLoaded;
@@ -319,7 +312,7 @@ void main() {
           },
         );
       },
-      build: () => homeBloc,
+      build: buildBloc,
       act: (bloc) {
         bloc.add(const FetchFeedEvent(limit: 50, offset: 0));
         bloc.add(const FetchFeedEvent(limit: 50, offset: 50));
@@ -335,6 +328,8 @@ void main() {
     test(
       'ignores duplicate LoadMoreFeedEvent while pagination is in flight',
       () async {
+        final homeBloc = buildBloc();
+        addTearDown(homeBloc.close);
         final paginationCompleter = Completer<Map<String, dynamic>>();
 
         when(
@@ -414,7 +409,7 @@ void main() {
           },
         );
       },
-      build: () => homeBloc,
+      build: buildBloc,
       act: (bloc) => bloc.add(const FetchFeedEvent(limit: 50, offset: 25)),
       verify: (bloc) {
         verify(
@@ -453,7 +448,7 @@ void main() {
           },
         );
       },
-      build: () => homeBloc,
+      build: buildBloc,
       act: (bloc) => bloc.add(const FetchFeedEvent(limit: 100, offset: 0)),
       verify: (bloc) {
         final state = bloc.state as FeedLoaded;
@@ -495,7 +490,7 @@ void main() {
 
     blocTest<HomeBloc, HomeState>(
       'adds videos loaded in the full-screen feed to the grid',
-      build: () => homeBloc,
+      build: buildBloc,
       act: (bloc) async {
         await loadFirstPage(bloc);
         bloc.add(
@@ -518,7 +513,7 @@ void main() {
 
     blocTest<HomeBloc, HomeState>(
       'continues paging from the merged session cursor',
-      build: () => homeBloc,
+      build: buildBloc,
       act: (bloc) async {
         await loadFirstPage(bloc);
         bloc.add(
@@ -545,7 +540,7 @@ void main() {
 
     blocTest<HomeBloc, HomeState>(
       'ignores a session that does not continue the grid list',
-      build: () => homeBloc,
+      build: buildBloc,
       act: (bloc) async {
         await loadFirstPage(bloc);
         bloc.add(
