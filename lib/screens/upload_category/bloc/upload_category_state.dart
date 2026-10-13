@@ -1,4 +1,6 @@
-abstract class UploadCategoryState {
+import 'package:beat_that/screens/upload_category/models/upload_category.dart';
+
+sealed class UploadCategoryState {
   const UploadCategoryState();
 }
 
@@ -11,9 +13,9 @@ class UploadCategoryLoading extends UploadCategoryState {
 }
 
 class UploadCategoryLoaded extends UploadCategoryState {
-  final List<String> imageUrls;
+  final List<UploadCategory> categories;
 
-  const UploadCategoryLoaded({required this.imageUrls});
+  const UploadCategoryLoaded({required this.categories});
 }
 
 class UploadCategoryError extends UploadCategoryState {

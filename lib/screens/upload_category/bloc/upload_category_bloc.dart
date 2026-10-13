@@ -1,3 +1,5 @@
+import 'package:beat_that/constants/app_strings.dart';
+import 'package:beat_that/screens/upload_category/models/upload_category.dart';
 import 'package:beat_that/service_locator.dart';
 import 'package:beat_that/services/supabase_service.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -21,21 +23,23 @@ class UploadCategoryBloc
     emit(const UploadCategoryLoading());
 
     try {
-      final imageUrls = _supabaseService.getCategoryImages();
+      final categories = [
+        for (final imageUrl in _supabaseService.getCategoryImages())
+          ?UploadCategory.fromImageUrl(imageUrl),
+      ];
 
-      if (imageUrls.isEmpty) {
-        emit(
-          const UploadCategoryError(
-            message: 'No upload categories are available right now.',
-          ),
-        );
+      if (categories.isEmpty) {
+        emit(const UploadCategoryError(message: AppStrings.noUploadCategories));
         return;
       }
 
-      emit(UploadCategoryLoaded(imageUrls: imageUrls));
-    } catch (e) {
+      emit(UploadCategoryLoaded(categories: categories));
+    } catch (error, stackTrace) {
+      addError(error, stackTrace);
       emit(
-        UploadCategoryError(message: 'Failed to load upload categories: $e'),
+        const UploadCategoryError(
+          message: AppStrings.somethingWentWrongPleaseTryAgain,
+        ),
       );
     }
   }

@@ -1,7 +1,7 @@
 import 'package:beat_that/models/category.dart';
 
 /// Base state for SportsHubBloc
-abstract class SportsHubState {
+sealed class SportsHubState {
   const SportsHubState();
 }
 
@@ -27,11 +27,4 @@ class SportsHubError extends SportsHubState {
   final String message;
 
   const SportsHubError({required this.message});
-}
-
-/// Loaded state with subcategories for a specific sport
-class SubcategoriesLoaded extends SportsHubState {
-  final CategoryModel sport;
-
-  const SubcategoriesLoaded({required this.sport});
 }

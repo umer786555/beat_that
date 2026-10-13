@@ -926,7 +926,7 @@ class AppRouter {
                           },
                         ),
 
-                        /// Sports Hub Child Route
+                        /// Gaming Hub Child Route
                         GoRoute(
                           path: 'gaming-hub',
                           name: 'gaming-hub',
@@ -941,7 +941,7 @@ class AppRouter {
                                     secondaryAnimation,
                                     child,
                                   ) {
-                                    const begin = Offset(0.0, 1.0);
+                                    const begin = Offset(1.0, 0.0);
                                     const end = Offset.zero;
                                     final tween = Tween(begin: begin, end: end);
                                     final curvedAnimation = CurvedAnimation(
@@ -971,7 +971,7 @@ class AppRouter {
                                     secondaryAnimation,
                                     child,
                                   ) {
-                                    const begin = Offset(0.0, 1.0);
+                                    const begin = Offset(1.0, 0.0);
                                     const end = Offset.zero;
                                     final tween = Tween(begin: begin, end: end);
                                     final curvedAnimation = CurvedAnimation(
