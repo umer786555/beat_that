@@ -4,32 +4,14 @@ sealed class ProfileEvent extends Equatable {
   const ProfileEvent();
 
   @override
-  List<Object> get props => [];
+  List<Object?> get props => [];
 }
 
+/// Loads the profile and videos. When a profile is already on screen it is
+/// kept visible and refreshed in place.
 class LoadProfileEvent extends ProfileEvent {
   const LoadProfileEvent();
 }
-
-// class LogoutEvent extends ProfileEvent {
-//   const LogoutEvent();
-// }
-
-// class RequestCameraPermissionEvent extends ProfileEvent {
-//   const RequestCameraPermissionEvent();
-// }
-
-// class RequestGalleryPermissionEvent extends ProfileEvent {
-//   const RequestGalleryPermissionEvent();
-// }
-
-// class RecordVideoSelected extends ProfileEvent {
-//   const RecordVideoSelected();
-// }
-
-// class UploadFromGallerySelected extends ProfileEvent {
-//   const UploadFromGallerySelected();
-// }
 
 class AddProfileImageEvent extends ProfileEvent {
   const AddProfileImageEvent();
@@ -41,7 +23,7 @@ class DeleteVideoEvent extends ProfileEvent {
   const DeleteVideoEvent({required this.videoId});
 
   @override
-  List<Object> get props => [videoId];
+  List<Object?> get props => [videoId];
 }
 
 class RefreshVideosEvent extends ProfileEvent {
@@ -60,5 +42,5 @@ class VideoApprovalUpdatedEvent extends ProfileEvent {
   });
 
   @override
-  List<Object> get props => [videoId, approvalStatus ?? ''];
+  List<Object?> get props => [videoId, approvalStatus];
 }

@@ -47,6 +47,9 @@ class ProfileHeader extends StatelessWidget {
   /// Callback triggered when "Followers" stat is tapped
   final VoidCallback onFollowersTap;
 
+  /// Whether a new profile picture is being uploaded
+  final bool isUploadingProfileImage;
+
   /// Optional onboarding step for profile picture
   final OnboardingStepData? profilePictureOnboardingStep;
 
@@ -61,6 +64,7 @@ class ProfileHeader extends StatelessWidget {
     required this.onProfilePictureTap,
     required this.onFollowingTap,
     required this.onFollowersTap,
+    this.isUploadingProfileImage = false,
     this.profilePictureOnboardingStep,
     this.statsOnboardingStep,
   });
@@ -68,10 +72,12 @@ class ProfileHeader extends StatelessWidget {
   /// Builds the profile picture widget with a solid outer ring
   Widget _buildProfilePicture() {
     final picture = GestureDetector(
-      onTap: () {
-        HapticFeedback.mediumImpact();
-        onProfilePictureTap();
-      },
+      onTap: isUploadingProfileImage
+          ? null
+          : () {
+              HapticFeedback.mediumImpact();
+              onProfilePictureTap();
+            },
       child: Container(
         width: 72,
         height: 72,
@@ -142,6 +148,25 @@ class ProfileHeader extends StatelessWidget {
                       ),
                     ),
             ),
+            if (isUploadingProfileImage)
+              Container(
+                width: 68,
+                height: 68,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Colors.black.withValues(alpha: 0.45),
+                ),
+                child: const Center(
+                  child: SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.5,
+                      color: AppColors.white,
+                    ),
+                  ),
+                ),
+              ),
           ],
         ),
       ),

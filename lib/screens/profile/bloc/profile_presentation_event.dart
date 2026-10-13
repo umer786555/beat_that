@@ -1,15 +1,15 @@
 part of 'profile_bloc.dart';
 
-sealed class ProfilePresentationEvent {}
-
-final class ProfileDeleteVideoSuccessEvent extends ProfilePresentationEvent {
+sealed class ProfilePresentationEvent {
   final String message;
 
-  ProfileDeleteVideoSuccessEvent({required this.message});
+  const ProfilePresentationEvent({required this.message});
 }
 
-final class ProfileDeleteVideoErrorEvent extends ProfilePresentationEvent {
-  final String message;
+final class ProfileSuccessMessageEvent extends ProfilePresentationEvent {
+  const ProfileSuccessMessageEvent({required super.message});
+}
 
-  ProfileDeleteVideoErrorEvent({required this.message});
+final class ProfileErrorMessageEvent extends ProfilePresentationEvent {
+  const ProfileErrorMessageEvent({required super.message});
 }

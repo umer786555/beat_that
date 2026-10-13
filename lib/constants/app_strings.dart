@@ -143,6 +143,38 @@ class AppStrings {
   static const String failedToChangeTheme = 'Failed to change theme';
   static const String logoutFailed = 'Logout failed';
   static const String profile = 'Profile';
+  static const String loadingYourProfile = 'Loading your profile...';
+  static const String retry = 'Retry';
+  static const String failedToRefreshProfile =
+      'Couldn\'t refresh your profile. Please try again.';
+  static const String failedToRefreshVideos =
+      'Couldn\'t refresh your videos. Please try again.';
+  static const String failedToUpdateProfilePhoto =
+      'Couldn\'t update your profile photo. Please try again.';
+  static const String photoAccessRequired =
+      'Allow photo access in Settings to change your profile photo.';
+  static const String videoDeleted = 'Video deleted.';
+  static const String failedToDeleteVideo =
+      'Couldn\'t delete the video. Please try again.';
+  static const String sportsHub = 'Sports Hub';
+  static const String browseSports = 'Browse Sports';
+
+  // Profile Onboarding
+  static const String profileOnboardingIntroTitle = 'This is your profile';
+  static const String profileOnboardingIntroDescription =
+      'Profile is where you manage your identity, review your connections, and get back to the sports you want to compete in.';
+  static const String profileOnboardingPictureTitle = 'Edit your profile';
+  static const String profileOnboardingPictureDescription =
+      'Tap your profile image to add or change the photo people will see across Beat That.';
+  static const String profileOnboardingStatsTitle = 'Track your network';
+  static const String profileOnboardingStatsDescription =
+      'Use Following and Followers to see your connections and jump into those lists.';
+  static const String profileOnboardingSettingsTitle = 'Open settings';
+  static const String profileOnboardingSettingsDescription =
+      'Manage theme, safety controls, and account actions from here.';
+  static const String profileOnboardingSportsHubTitle = 'Go to Sports Hub';
+  static const String profileOnboardingSportsHubDescription =
+      'Pick a sport, upload your best move, and compete on the leaderboard from Sports Hub.';
   static const String settings = 'Settings';
   static const String darkTheme = 'Dark theme';
   static const String blockedUsers = 'Blocked users';
