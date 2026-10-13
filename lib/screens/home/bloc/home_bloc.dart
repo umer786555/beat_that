@@ -1,5 +1,4 @@
 import 'package:beat_that/models/home_feed_cursor.dart';
-import 'package:beat_that/models/user_personal_profile.dart';
 import 'package:beat_that/models/sport_video.dart';
 import 'package:beat_that/service_locator.dart';
 import 'package:beat_that/services/auth_service.dart';
@@ -7,214 +6,136 @@ import 'package:beat_that/services/preferences_service.dart';
 import 'package:beat_that/services/supabase_service.dart';
 import 'package:beat_that/services/home_feed_service.dart';
 import 'package:equatable/equatable.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 part 'home_event.dart';
 part 'home_state.dart';
 
 class HomeBloc extends Bloc<HomeEvent, HomeState> {
-  static const int _homeFeedPageSize = 24;
-
-  final preferencesService = locator<PreferencesService>();
-  final supabaseService = locator<SupabaseService>();
-  final homeFeedService = locator<HomeFeedService>();
-  final authService = locator<AuthService>();
-  // Session-scoped feed state; `_seenFeedVideoIds` guards against rare repeats
-  // when follows change mid-session.
-  List<SportVideo> _allFeedVideos = [];
-  final Set<String> _seenFeedVideoIds = <String>{};
-  HomeFeedCursor _feedCursor = const HomeFeedCursor.initial();
-  bool _hasMoreFeedContent = true;
-  bool _isPaginationRequestInFlight = false;
-
-  HomeBloc() : super(HomeInitial()) {
+  HomeBloc({
+    PreferencesService? preferencesService,
+    SupabaseService? supabaseService,
+    HomeFeedService? homeFeedService,
+    AuthService? authService,
+  }) : _preferencesService =
+           preferencesService ?? locator<PreferencesService>(),
+       _supabaseService = supabaseService ?? locator<SupabaseService>(),
+       _homeFeedService = homeFeedService ?? locator<HomeFeedService>(),
+       _authService = authService ?? locator<AuthService>(),
+       super(const HomeInitial()) {
     on<InitialEvent>(_onInitial);
-    on<FetchFeedEvent>(_onFetchFeed);
     on<RefreshFeedEvent>(_onRefreshFeed);
     on<LoadMoreFeedEvent>(_onLoadMoreFeed);
     on<MergeVideoFeedSessionEvent>(_onMergeVideoFeedSession);
   }
 
+  static const int _homeFeedPageSize = 24;
+
+  final PreferencesService _preferencesService;
+  final SupabaseService _supabaseService;
+  final HomeFeedService _homeFeedService;
+  final AuthService _authService;
+
+  /// Bumped on every first-page fetch so an older in-flight page is dropped.
+  int _feedGeneration = 0;
+
   /// Handle InitialEvent - save user profile and fetch initial feed
   Future<void> _onInitial(InitialEvent event, Emitter<HomeState> emit) async {
-    print('✓ HomeBloc InitialEvent triggered');
-
     try {
-      await preferencesService.clearUserProfile();
+      await _preferencesService.clearUserProfile();
 
-      final hasFullAccountAccess = authService.hasFullAccountAccess();
+      if (_authService.hasFullAccountAccess()) {
+        final userProfile = await _supabaseService.fetchUserPersonalProfile();
+        if (userProfile == null) {
+          emit(const NoUserProfile());
+          return;
+        }
 
-      if (!hasFullAccountAccess) {
-        add(const FetchFeedEvent(limit: _homeFeedPageSize, offset: 0));
-        return;
-      }
-
-      // Fetch user profile from Supabase
-      final userProfile = await supabaseService.fetchUserPersonalProfile();
-
-      if (userProfile != null) {
         // Save to preferences for offline access
-        await preferencesService.saveUserProfile(userProfile);
-        print('✓ User profile found and saved: ${userProfile.username}');
-        emit(UserProfileLoaded(userProfile));
-
-        // Automatically fetch initial feed after saving profile
-        add(const FetchFeedEvent(limit: _homeFeedPageSize, offset: 0));
-      } else {
-        print('✗ No user profile found');
-        emit(const NoUserProfile());
+        await _preferencesService.saveUserProfile(userProfile);
       }
     } catch (e) {
-      print('✗ InitialEvent Error: $e');
-      emit(FeedError(message: 'Failed to load user profile: $e'));
+      debugPrint('[HOME] Failed to load user profile: $e');
+      emit(const FeedError());
+      return;
     }
-  }
 
-  /// Handle FetchFeedEvent by requesting the next RPC-backed Home feed page.
-  Future<void> _onFetchFeed(
-    FetchFeedEvent event,
-    Emitter<HomeState> emit,
-  ) async {
-    print(
-      '📺 HomeBloc FetchFeedEvent: limit=${event.limit}, offset=${event.offset}',
-    );
-
-    try {
-      // Emit loading state
-      final isFirstLoad = event.offset == 0;
-      emit(FeedLoading(offset: event.offset, isFirstLoad: isFirstLoad));
-
-      final feedResult = await homeFeedService.getHomeFeedContinuation(
-        cursor: event.offset == 0
-            ? const HomeFeedCursor.initial()
-            : _feedCursor,
-        limit: event.limit,
-      );
-      final videos = List<SportVideo>.from(
-        feedResult['videos'] as List<dynamic>,
-      );
-      final nextCursor = feedResult['nextCursor'] as HomeFeedCursor;
-      final hasMoreContent = feedResult['hasMoreContent'] as bool;
-      _feedCursor = nextCursor;
-
-      if (videos.isEmpty) {
-        print('⚠️ No videos available');
-        _hasMoreFeedContent = hasMoreContent;
-        emit(
-          FeedLoaded(
-            videos: List<SportVideo>.from(_allFeedVideos),
-            offset: event.offset,
-            hasMoreContent: hasMoreContent,
-            nextCursor: nextCursor,
-          ),
-        );
-        return;
-      }
-
-      final uniqueVideos = videos.where((video) {
-        final videoId = video.id;
-        return !_seenFeedVideoIds.contains(videoId);
-      }).toList();
-
-      // For pagination: append new videos to existing list if offset > 0
-      if (event.offset == 0) {
-        _allFeedVideos = uniqueVideos;
-        _seenFeedVideoIds
-          ..clear()
-          ..addAll(uniqueVideos.map((video) => video.id));
-      } else {
-        _allFeedVideos = [..._allFeedVideos, ...uniqueVideos];
-        _seenFeedVideoIds.addAll(uniqueVideos.map((video) => video.id));
-      }
-
-      print(
-        '✓ Fetched ${videos.length} videos, ${uniqueVideos.length} unique, total feed size: ${_allFeedVideos.length}',
-      );
-
-      _hasMoreFeedContent = hasMoreContent;
-
-      emit(
-        FeedLoaded(
-          videos: List<SportVideo>.from(_allFeedVideos),
-          offset: event.offset,
-          hasMoreContent: hasMoreContent,
-          nextCursor: nextCursor,
-        ),
-      );
-    } catch (e) {
-      print('✗ FetchFeedEvent Error: $e');
-      emit(FeedError(message: 'Failed to load feed: $e', offset: event.offset));
-    } finally {
-      if (event.offset > 0) {
-        _isPaginationRequestInFlight = false;
-      }
-    }
+    await _fetchFeed(emit);
   }
 
   /// Handle RefreshFeedEvent - refresh feed from the top
-  ///
-  /// Clears cache and fetches fresh feed starting from offset=0
   Future<void> _onRefreshFeed(
     RefreshFeedEvent event,
     Emitter<HomeState> emit,
-  ) async {
-    print('🔄 HomeBloc RefreshFeedEvent triggered');
+  ) => _fetchFeed(emit);
 
-    try {
-      // Clear cache and reset pagination
-      _allFeedVideos = [];
-      _seenFeedVideoIds.clear();
-      _feedCursor = const HomeFeedCursor.initial();
-      _hasMoreFeedContent = true;
-      _isPaginationRequestInFlight = false;
-
-      // Fetch fresh feed from top
-      add(const FetchFeedEvent(limit: _homeFeedPageSize, offset: 0));
-    } catch (e) {
-      print('✗ RefreshFeedEvent Error: $e');
-      emit(FeedError(message: 'Failed to refresh feed: $e'));
-    }
-  }
-
-  /// Handle LoadMoreFeedEvent - load next page of feed
-  ///
-  /// Fetches next batch using current offset
+  /// Handle LoadMoreFeedEvent - append the next page to the loaded feed
   Future<void> _onLoadMoreFeed(
     LoadMoreFeedEvent event,
     Emitter<HomeState> emit,
   ) async {
-    print(
-      '⬇️ HomeBloc LoadMoreFeedEvent triggered, loadedVideos=${_allFeedVideos.length}',
+    final current = state;
+    if (current is! FeedLoaded ||
+        current.isLoadingMore ||
+        !current.hasMoreContent) {
+      return;
+    }
+
+    await _fetchFeed(emit, appendTo: current);
+  }
+
+  /// Fetches the first page, or the next page after [appendTo].
+  ///
+  /// Videos already in [appendTo] are filtered out of the new page.
+  Future<void> _fetchFeed(
+    Emitter<HomeState> emit, {
+    FeedLoaded? appendTo,
+  }) async {
+    final generation = appendTo == null ? ++_feedGeneration : _feedGeneration;
+
+    // Emitted before the first await so a second load-more sees the guard.
+    emit(
+      appendTo == null
+          ? const FeedLoading()
+          : FeedLoaded(
+              videos: appendTo.videos,
+              offset: appendTo.offset,
+              hasMoreContent: appendTo.hasMoreContent,
+              nextCursor: appendTo.nextCursor,
+              isLoadingMore: true,
+            ),
     );
 
     try {
-      if (!_hasMoreFeedContent) {
-        print('⚠️ No more feed content available, ignoring load more');
-        return;
-      }
-
-      if (_isPaginationRequestInFlight) {
-        print(
-          '⚠️ Pagination request already in flight, ignoring duplicate load more',
-        );
-        return;
-      }
-
-      _isPaginationRequestInFlight = true;
-
-      // Fetch next batch at current offset
-      add(
-        FetchFeedEvent(limit: _homeFeedPageSize, offset: _allFeedVideos.length),
+      final feedResult = await _homeFeedService.getHomeFeedContinuation(
+        cursor: appendTo?.nextCursor ?? const HomeFeedCursor.initial(),
+        limit: _homeFeedPageSize,
       );
-    } catch (e) {
-      _isPaginationRequestInFlight = false;
-      print('✗ LoadMoreFeedEvent Error: $e');
+      // A refresh started while this page was in flight.
+      if (generation != _feedGeneration) return;
+
+      final existing = appendTo?.videos ?? const <SportVideo>[];
+      final existingIds = {for (final video in existing) video.id};
+      final pageVideos = (feedResult['videos'] as List<dynamic>)
+          .cast<SportVideo>();
+      final newVideos = [
+        for (final video in pageVideos)
+          if (!existingIds.contains(video.id)) video,
+      ];
+
       emit(
-        FeedError(
-          message: 'Failed to load more videos: $e',
-          offset: _allFeedVideos.length,
+        FeedLoaded(
+          videos: [...existing, ...newVideos],
+          offset: existing.length,
+          hasMoreContent: feedResult['hasMoreContent'] as bool,
+          nextCursor: feedResult['nextCursor'] as HomeFeedCursor,
         ),
       );
+    } catch (e) {
+      if (generation != _feedGeneration) return;
+      debugPrint('[HOME] Failed to load feed: $e');
+      emit(const FeedError());
     }
   }
 
@@ -222,28 +143,23 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
     MergeVideoFeedSessionEvent event,
     Emitter<HomeState> emit,
   ) {
+    final current = state;
     final videos = event.videos;
-    if (state is! FeedLoaded ||
-        _isPaginationRequestInFlight ||
-        videos.length <= _allFeedVideos.length) {
+    if (current is! FeedLoaded ||
+        current.isLoadingMore ||
+        videos.length <= current.videos.length) {
       return;
     }
 
     // Only extend the grid if the session continues the grid's list exactly.
-    for (var i = 0; i < _allFeedVideos.length; i++) {
-      if (videos[i].id != _allFeedVideos[i].id) return;
+    for (var i = 0; i < current.videos.length; i++) {
+      if (videos[i].id != current.videos[i].id) return;
     }
-
-    final previousCount = _allFeedVideos.length;
-    _allFeedVideos = List<SportVideo>.from(videos);
-    _seenFeedVideoIds.addAll(videos.map((video) => video.id));
-    _feedCursor = event.nextCursor;
-    _hasMoreFeedContent = event.hasMoreContent;
 
     emit(
       FeedLoaded(
-        videos: List<SportVideo>.from(_allFeedVideos),
-        offset: previousCount,
+        videos: List<SportVideo>.of(videos),
+        offset: current.videos.length,
         hasMoreContent: event.hasMoreContent,
         nextCursor: event.nextCursor,
       ),

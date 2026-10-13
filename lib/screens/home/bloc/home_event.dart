@@ -7,29 +7,13 @@ sealed class HomeEvent extends Equatable {
   List<Object> get props => [];
 }
 
-/// Triggered on app initialization
+/// Added when HomeScreen creates the bloc
 /// Saves user profile and fetches initial feed
 final class InitialEvent extends HomeEvent {
   const InitialEvent();
 }
 
-/// Fetch the next weighted home-feed continuation
-/// [limit] - number of videos to fetch (default: 50)
-/// [offset] - pagination offset (default: 0)
-final class FetchFeedEvent extends HomeEvent {
-  final int limit;
-  final int offset;
-
-  const FetchFeedEvent({
-    this.limit = 50,
-    this.offset = 0,
-  });
-
-  @override
-  List<Object> get props => [limit, offset];
-}
-
-/// Refresh the feed from the top (offset=0)
+/// Reloads the feed from the first page
 final class RefreshFeedEvent extends HomeEvent {
   const RefreshFeedEvent();
 }
