@@ -316,7 +316,7 @@ void main() {
   });
 
   testWidgets('shows pull-to-refresh on error state', (tester) async {
-    const errorState = FeedError(message: 'network failed');
+    const errorState = FeedError();
 
     when(() => homeBloc.state).thenReturn(errorState);
     whenListen(
@@ -330,5 +330,27 @@ void main() {
 
     expect(find.byType(RefreshIndicator), findsOneWidget);
     expect(find.text('Failed to load videos'), findsOneWidget);
+  });
+
+  testWidgets('shows generic error copy', (tester) async {
+    const errorState = FeedError();
+
+    when(() => homeBloc.state).thenReturn(errorState);
+    whenListen(
+      homeBloc,
+      Stream<HomeState>.value(errorState),
+      initialState: errorState,
+    );
+
+    await tester.pumpWidget(buildTestApp(homeBloc));
+    await tester.pump();
+
+    expect(find.text('Failed to load videos'), findsOneWidget);
+    expect(
+      find.text('Something went wrong. Please try again.'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('Exception'), findsNothing);
+    expect(find.textContaining('Failed to load feed'), findsNothing);
   });
 }

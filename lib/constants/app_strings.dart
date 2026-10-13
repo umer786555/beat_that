@@ -138,6 +138,9 @@ class AppStrings {
   static const String accountEmailAddedCheckYourInbox =
       'Check your email to confirm this address. After that, use Forgot password to set a password.';
 
+  // Home Screen
+  static const String homeFeedErrorTitle = 'Failed to load videos';
+
   // Profile Screen
   static const String failedToLoadProfile = 'Failed to load profile';
   static const String failedToChangeTheme = 'Failed to change theme';

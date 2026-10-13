@@ -210,6 +210,27 @@ void main() {
         );
       },
     );
+
+    blocTest<HomeBloc, HomeState>(
+      'emits FeedError and skips the feed when the profile fetch throws',
+      setUp: () {
+        when(() => mockAuthService.hasFullAccountAccess()).thenReturn(true);
+        when(
+          () => mockSupabaseService.fetchUserPersonalProfile(),
+        ).thenThrow(Exception('Profile error'));
+      },
+      build: buildBloc,
+      act: (bloc) => bloc.add(const InitialEvent()),
+      expect: () => [const FeedError()],
+      verify: (_) {
+        verifyNever(
+          () => mockHomeFeedService.getHomeFeedContinuation(
+            cursor: any(named: 'cursor'),
+            limit: any(named: 'limit'),
+          ),
+        );
+      },
+    );
   });
 
   group('RefreshFeedEvent', () {
@@ -256,7 +277,7 @@ void main() {
       },
       build: buildBloc,
       act: (bloc) => bloc.add(const RefreshFeedEvent()),
-      expect: () => [const FeedLoading(), isA<FeedError>()],
+      expect: () => [const FeedLoading(), const FeedError()],
     );
 
     blocTest<HomeBloc, HomeState>(
@@ -368,7 +389,7 @@ void main() {
     final ignoredSeeds = <String, HomeState Function()>{
       'HomeInitial': HomeInitial.new,
       'FeedLoading': () => const FeedLoading(),
-      'FeedError': () => const FeedError(message: 'failed'),
+      'FeedError': () => const FeedError(),
       'no more content': () =>
           FeedLoaded(videos: sampleVideos, hasMoreContent: false),
       'already loading more': () =>
@@ -455,7 +476,7 @@ void main() {
           nextCursor: seedCursor,
           isLoadingMore: true,
         ),
-        isA<FeedError>(),
+        const FeedError(),
         const FeedLoading(),
         FeedLoaded(videos: sampleVideos),
       ],

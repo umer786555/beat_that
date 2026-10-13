@@ -1,3 +1,4 @@
+import 'package:beat_that/constants/app_strings.dart';
 import 'package:beat_that/models/home_feed_cursor.dart';
 import 'package:beat_that/models/sport_video.dart';
 import 'package:flutter/material.dart';
@@ -180,9 +181,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
           // Error state
           if (state is FeedError) {
-            return _buildRefreshableBody(
-              child: _buildErrorState(state.message),
-            );
+            return _buildRefreshableBody(child: _buildErrorState());
           }
 
           // Loaded state - show feed
@@ -387,7 +386,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   /// Build error state UI
-  Widget _buildErrorState(String message) {
+  Widget _buildErrorState() {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -395,14 +394,14 @@ class _HomeScreenState extends State<HomeScreen> {
           Icon(Icons.error_outline, size: 80, color: Colors.red[300]),
           const SizedBox(height: 24),
           Text(
-            'Failed to load videos',
+            AppStrings.homeFeedErrorTitle,
             style: Theme.of(context).textTheme.titleLarge,
           ),
           const SizedBox(height: 8),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 32),
             child: Text(
-              message,
+              AppStrings.somethingWentWrongPleaseTryAgain,
               textAlign: TextAlign.center,
               style: TextStyle(color: Colors.grey[600], fontSize: 14),
             ),

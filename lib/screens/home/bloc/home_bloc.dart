@@ -57,7 +57,7 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
       }
     } catch (e) {
       debugPrint('[HOME] Failed to load user profile: $e');
-      emit(FeedError(message: 'Failed to load user profile: $e'));
+      emit(const FeedError());
       return;
     }
 
@@ -133,7 +133,7 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
     } catch (e) {
       if (generation != _feedGeneration) return;
       debugPrint('[HOME] Failed to load feed: $e');
-      emit(FeedError(message: 'Failed to load feed: $e'));
+      emit(const FeedError());
     }
   }
 

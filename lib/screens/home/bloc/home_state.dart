@@ -53,11 +53,5 @@ final class FeedLoaded extends HomeState {
 
 /// Feed loading failed
 final class FeedError extends HomeState {
-  final String message;
-  final int? offset;
-
-  const FeedError({required this.message, this.offset});
-
-  @override
-  List<Object> get props => [message, offset ?? 0];
+  const FeedError();
 }
