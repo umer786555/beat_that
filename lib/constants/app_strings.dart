@@ -139,7 +139,25 @@ class AppStrings {
       'Check your email to confirm this address. After that, use Forgot password to set a password.';
 
   // Home Screen
+  static const String home = 'Home';
+  static const String explore = 'Explore';
   static const String homeFeedErrorTitle = 'Failed to load videos';
+  static const String homeEmptyTitle = 'No videos yet';
+  static const String homeEmptyMessage =
+      'Your Home feed will learn from what you watch\nand who you follow. Explore a few clips to start shaping it.';
+  static const String homeProfileNotFoundTitle = 'Profile not found';
+  static const String homeProfileNotFoundMessage =
+      'Please set up your profile to continue';
+
+  // Home Onboarding
+  static const String homeOnboardingIntroTitle = 'This is your Home feed';
+  static const String homeOnboardingIntroDescription =
+      'Home is where Beat That will surface clips based on what you watch, who you follow, and the sports you engage with.';
+  static const String homeOnboardingFirstVideoTitle = 'Open your feed';
+  static const String homeOnboardingFirstVideoStepDescription =
+      'Tap any clip to jump into the full feed. Home will learn from what you watch and show you more of it here.';
+  static const String homeOnboardingFirstVideoTargetDescription =
+      'Tap any clip to jump into the full feed. Home learns from what you watch and uses that to improve recommendations.';
 
   // Profile Screen
   static const String failedToLoadProfile = 'Failed to load profile';

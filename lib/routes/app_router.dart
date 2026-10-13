@@ -22,7 +22,6 @@ import 'package:beat_that/services/auth_service.dart';
 import 'package:beat_that/service_locator.dart';
 import 'package:beat_that/screens/navigation_shell.dart';
 import 'package:beat_that/screens/home/home_screen.dart';
-import 'package:beat_that/screens/home/bloc/home_bloc.dart';
 import 'package:beat_that/screens/explore/explore_screen.dart';
 import 'package:beat_that/screens/gaming_hub/gaming_hub_screen.dart';
 import 'package:beat_that/screens/sports_hub/sports_hub_screen.dart';
@@ -443,10 +442,7 @@ class AppRouter {
           pageBuilder: (context, state) {
             return NoTransitionPage(
               key: state.pageKey,
-              child: BlocProvider(
-                create: (context) => HomeBloc()..add(const InitialEvent()),
-                child: const HomeScreen(),
-              ),
+              child: const HomeScreen(),
             );
           },
         ),
@@ -679,11 +675,7 @@ class AppRouter {
                   pageBuilder: (context, state) {
                     return NoTransitionPage(
                       key: state.pageKey,
-                      child: BlocProvider(
-                        create: (context) =>
-                            HomeBloc()..add(const InitialEvent()),
-                        child: const HomeScreen(),
-                      ),
+                      child: const HomeScreen(),
                     );
                   },
                 ),

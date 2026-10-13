@@ -1,5 +1,4 @@
 import 'package:beat_that/constants/app_strings.dart';
-import 'package:beat_that/models/home_feed_cursor.dart';
 import 'package:beat_that/models/sport_video.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -8,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'package:beat_that/service_locator.dart';
 import 'package:beat_that/screens/home/bloc/home_bloc.dart';
 import 'package:beat_that/screens/home/video_feed/models/home_video_feed_route_extra.dart';
+import 'package:beat_that/screens/home/widgets/home_feed_message.dart';
 import 'package:beat_that/services/app_onboarding.dart';
 import 'package:beat_that/services/home_video_feed_session_store.dart';
 import 'package:beat_that/services/onboarding_service.dart';
@@ -17,19 +17,32 @@ import 'package:beat_that/widgets/feed_grid_skeleton_sliver.dart';
 import 'package:beat_that/widgets/home_feed_native_ad_card.dart';
 import 'package:beat_that/widgets/video_feed_card.dart';
 
+const int _firstAdInsertionIndex = 4;
+const int _subsequentAdInsertionInterval = 8;
+
 /// Home screen displayed when user is logged in
 /// Shows personalized video feed
-class HomeScreen extends StatefulWidget {
+class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
 
   @override
-  State<HomeScreen> createState() => _HomeScreenState();
+  Widget build(BuildContext context) {
+    return BlocProvider(
+      create: (_) => HomeBloc()..add(const InitialEvent()),
+      child: const HomeView(),
+    );
+  }
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class HomeView extends StatefulWidget {
+  const HomeView({super.key});
+
+  @override
+  State<HomeView> createState() => _HomeViewState();
+}
+
+class _HomeViewState extends State<HomeView> {
   static const int _homeOnboardingVersion = 1;
-  static const int _firstAdInsertionIndex = 4;
-  static const int _subsequentAdInsertionInterval = 8;
   late ScrollController _scrollController;
   static const double _scrollTriggerDistance = 500;
   final OnboardingService _onboardingService = locator<OnboardingService>();
@@ -100,9 +113,9 @@ class _HomeScreenState extends State<HomeScreen> {
             : <OnboardingStepData>[
                 OnboardingStepData(
                   key: _firstVideoCardOnboardingKey,
-                  title: 'Open your feed',
+                  title: AppStrings.homeOnboardingFirstVideoTitle,
                   description:
-                      'Tap any clip to jump into the full feed. Home will learn from what you watch and show you more of it here.',
+                      AppStrings.homeOnboardingFirstVideoStepDescription,
                 ),
               ],
       ),
@@ -114,212 +127,37 @@ class _HomeScreenState extends State<HomeScreen> {
     return showAppOnboardingIntroSheet(
       context,
       icon: Icons.ondemand_video_rounded,
-      title: 'This is your Home feed',
-      description:
-          'Home is where Beat That will surface clips based on what you watch, who you follow, and the sports you engage with.',
+      title: AppStrings.homeOnboardingIntroTitle,
+      description: AppStrings.homeOnboardingIntroDescription,
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        elevation: 0,
-        backgroundColor: Colors.transparent,
-        centerTitle: true,
-        title: Text(
-          'Home',
-          style: Theme.of(context).textTheme.titleLarge?.copyWith(
-            fontWeight: FontWeight.w800,
-            letterSpacing: -0.5,
-          ),
-        ),
-      ),
-      body: BlocConsumer<HomeBloc, HomeState>(
-        /// Listener: Handle navigation and side effects
-        listener: (context, state) {
-          if (state is NoUserProfile) {
-            // Navigate to username setup screen
-            context.go('/username-setup');
-          }
+  Future<void> _openVideoFeed(FeedLoaded feed, int index) async {
+    final homeBloc = context.read<HomeBloc>();
+    final sessionStore = locator<HomeVideoFeedSessionStore>();
+    final sessionId = sessionStore.createSession(
+      videos: List.of(feed.videos),
+      nextCursor: feed.nextCursor,
+      hasMoreContent: feed.hasMoreContent,
+      initialIndex: index,
+    );
 
-          if (state is FeedLoaded &&
-              state.offset == 0 &&
-              !state.isLoadingMore) {
-            _maybePresentHomeOnboarding(state.videos);
-          }
-        },
+    await context.pushNamed(
+      'home-video-feed',
+      extra: HomeVideoFeedExtra(sessionId: sessionId, initialIndex: index),
+    );
 
-        /// Builder: Render UI based on state
-        builder: (context, state) {
-          // Initial state or first-page load - show full shimmer
-          if (state is HomeInitial || state is FeedLoading) {
-            return const _FirstLoadSkeleton();
-          }
+    final session = sessionStore.takeSession(sessionId);
+    if (session == null || homeBloc.isClosed) return;
 
-          // No user profile state
-          if (state is NoUserProfile) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.person_outline, size: 80, color: Colors.grey[400]),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Profile not found',
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Please set up your profile to continue',
-                    style: TextStyle(color: Colors.grey[600]),
-                  ),
-                ],
-              ),
-            );
-          }
-
-          // Error state
-          if (state is FeedError) {
-            return _buildRefreshableBody(child: _buildErrorState());
-          }
-
-          // Loaded state - show feed
-          if (state is FeedLoaded) {
-            if (state.videos.isEmpty && state.offset == 0) {
-              return _buildRefreshableBody(child: _buildEmptyState());
-            }
-
-            return _buildFeedGrid(
-              state.videos,
-              hasMoreContent: state.hasMoreContent,
-              nextCursor: state.nextCursor,
-              isLoading: state.isLoadingMore,
-            );
-          }
-
-          // Fallback
-          return const SizedBox.shrink();
-        },
+    homeBloc.add(
+      MergeVideoFeedSessionEvent(
+        videos: List.of(session.videos),
+        nextCursor: session.nextCursor,
+        hasMoreContent: session.hasMoreContent,
       ),
     );
-  }
-
-  /// Build the main feed grid with videos and pull-to-refresh
-  Widget _buildFeedGrid(
-    List<SportVideo> videos, {
-    bool hasMoreContent = true,
-    HomeFeedCursor nextCursor = const HomeFeedCursor.initial(),
-    bool isLoading = false,
-  }) {
-    final sections = _buildFeedSections(videos);
-
-    return RefreshIndicator(
-      onRefresh: _onRefresh,
-      child: CustomScrollView(
-        controller: _scrollController,
-        physics: const AlwaysScrollableScrollPhysics(),
-        slivers: [
-          for (
-            var sectionIndex = 0;
-            sectionIndex < sections.length;
-            sectionIndex++
-          ) ...[
-            _buildVideoSectionSliver(
-              sections[sectionIndex],
-              allVideos: videos,
-              hasMoreContent: hasMoreContent,
-              nextCursor: nextCursor,
-            ),
-            if (sections[sectionIndex].showsAdAfter)
-              SliverToBoxAdapter(
-                child: HomeFeedNativeAdCard(slotIndex: sectionIndex),
-              ),
-          ],
-          if (isLoading && videos.isNotEmpty)
-            const FeedGridSkeletonSliver(
-              itemCount: 2,
-              padding: kFeedGridLoadMorePadding,
-            ),
-          const SliverToBoxAdapter(child: SizedBox(height: 24)),
-        ],
-      ),
-    );
-  }
-
-  SliverPadding _buildVideoSectionSliver(
-    _HomeFeedSection section, {
-    required List<SportVideo> allVideos,
-    required bool hasMoreContent,
-    required HomeFeedCursor nextCursor,
-  }) {
-    return SliverPadding(
-      padding: EdgeInsets.fromLTRB(
-        kFeedGridSpacing,
-        section.startVideoIndex == 0 ? kFeedGridSpacing : 0,
-        kFeedGridSpacing,
-        0,
-      ),
-      sliver: SliverGrid(
-        gridDelegate: kFeedGridDelegate,
-        delegate: SliverChildBuilderDelegate((context, localIndex) {
-          final globalIndex = section.startVideoIndex + localIndex;
-          final video = section.videos[localIndex];
-          final card = VideoFeedCard(
-            key: globalIndex == _revealIndex ? _revealKey : null,
-            videoId: video.id,
-            thumbnailUrl: video.thumbnailUrl ?? '',
-            title: video.title,
-            username: video.username ?? '',
-            sportId: video.sportId,
-            viewCount: video.viewCount,
-            rating: video.averageRating,
-            onTap: () async {
-              final homeBloc = context.read<HomeBloc>();
-              final sessionStore = locator<HomeVideoFeedSessionStore>();
-              final sessionId = sessionStore.createSession(
-                videos: List.of(allVideos),
-                nextCursor: nextCursor,
-                hasMoreContent: hasMoreContent,
-                initialIndex: globalIndex,
-              );
-
-              await context.pushNamed(
-                'home-video-feed',
-                extra: HomeVideoFeedExtra(
-                  sessionId: sessionId,
-                  initialIndex: globalIndex,
-                ),
-              );
-
-              final session = sessionStore.takeSession(sessionId);
-              if (session == null || homeBloc.isClosed) return;
-
-              homeBloc.add(
-                MergeVideoFeedSessionEvent(
-                  videos: List.of(session.videos),
-                  nextCursor: session.nextCursor,
-                  hasMoreContent: session.hasMoreContent,
-                ),
-              );
-              _revealVideo(session.currentIndex, homeBloc);
-            },
-          );
-
-          if (globalIndex == 0) {
-            return AppOnboardingTarget(
-              targetKey: _firstVideoCardOnboardingKey,
-              title: 'Open your feed',
-              description:
-                  'Tap any clip to jump into the full feed. Home learns from what you watch and uses that to improve recommendations.',
-              child: card,
-            );
-          }
-
-          return card;
-        }, childCount: section.videos.length),
-      ),
-    );
+    _revealVideo(session.currentIndex, homeBloc);
   }
 
   void _revealVideo(int index, HomeBloc homeBloc) {
@@ -343,109 +181,71 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  List<_HomeFeedSection> _buildFeedSections(List<SportVideo> videos) {
-    final sections = <_HomeFeedSection>[];
-    var start = 0;
-    var nextChunkLength = _firstAdInsertionIndex;
-
-    while (start < videos.length) {
-      final end = (start + nextChunkLength < videos.length)
-          ? start + nextChunkLength
-          : videos.length;
-
-      sections.add(
-        _HomeFeedSection(
-          startVideoIndex: start,
-          videos: videos.sublist(start, end),
-          showsAdAfter: end < videos.length,
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        elevation: 0,
+        backgroundColor: Colors.transparent,
+        centerTitle: true,
+        title: Text(
+          AppStrings.home,
+          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+            fontWeight: FontWeight.w800,
+            letterSpacing: -0.5,
+          ),
         ),
-      );
-
-      start = end;
-      nextChunkLength = _subsequentAdInsertionInterval;
-    }
-
-    return sections;
-  }
-
-  Widget _buildRefreshableBody({required Widget child}) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        return RefreshIndicator(
-          onRefresh: _onRefresh,
-          child: SingleChildScrollView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            child: ConstrainedBox(
-              constraints: BoxConstraints(minHeight: constraints.maxHeight),
-              child: child,
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  /// Build error state UI
-  Widget _buildErrorState() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.error_outline, size: 80, color: Colors.red[300]),
-          const SizedBox(height: 24),
-          Text(
-            AppStrings.homeFeedErrorTitle,
-            style: Theme.of(context).textTheme.titleLarge,
-          ),
-          const SizedBox(height: 8),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 32),
-            child: Text(
-              AppStrings.somethingWentWrongPleaseTryAgain,
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.grey[600], fontSize: 14),
-            ),
-          ),
-          const SizedBox(height: 32),
-          ElevatedButton.icon(
-            icon: const Icon(Icons.refresh),
-            label: const Text('Retry'),
-            onPressed: () {
-              HapticFeedback.mediumImpact();
-              context.read<HomeBloc>().add(const RefreshFeedEvent());
-            },
-          ),
-        ],
       ),
-    );
-  }
+      body: BlocConsumer<HomeBloc, HomeState>(
+        listener: (context, state) {
+          if (state is NoUserProfile) {
+            context.go('/username-setup');
+          }
 
-  /// Build empty state UI (no videos available)
-  Widget _buildEmptyState() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.video_library_outlined, size: 80, color: Colors.grey[400]),
-          const SizedBox(height: 24),
-          Text('No videos yet', style: Theme.of(context).textTheme.titleLarge),
-          const SizedBox(height: 8),
-          Text(
-            'Your Home feed will learn from what you watch\nand who you follow. Explore a few clips to start shaping it.',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.grey[600], fontSize: 14),
+          if (state is FeedLoaded &&
+              state.offset == 0 &&
+              !state.isLoadingMore) {
+            _maybePresentHomeOnboarding(state.videos);
+          }
+        },
+        builder: (context, state) => switch (state) {
+          HomeInitial() || FeedLoading() => const _FirstLoadSkeleton(),
+          NoUserProfile() => const _MissingProfileBody(),
+          FeedError() => _RefreshableBody(
+            onRefresh: _onRefresh,
+            child: HomeFeedMessage(
+              icon: Icons.error_outline,
+              iconColor: Colors.red[300],
+              title: AppStrings.homeFeedErrorTitle,
+              message: AppStrings.somethingWentWrongPleaseTryAgain,
+              actionIcon: Icons.refresh,
+              actionLabel: AppStrings.retry,
+              onAction: () =>
+                  context.read<HomeBloc>().add(const RefreshFeedEvent()),
+            ),
           ),
-          const SizedBox(height: 32),
-          ElevatedButton.icon(
-            icon: const Icon(Icons.explore),
-            label: const Text('Explore'),
-            onPressed: () {
-              HapticFeedback.mediumImpact();
-              // TODO: Navigate to explore/discovery screen
-              context.go('/explore');
-            },
+          FeedLoaded(videos: [], offset: 0) => _RefreshableBody(
+            onRefresh: _onRefresh,
+            child: HomeFeedMessage(
+              icon: Icons.video_library_outlined,
+              iconColor: Colors.grey[400],
+              title: AppStrings.homeEmptyTitle,
+              message: AppStrings.homeEmptyMessage,
+              actionIcon: Icons.explore,
+              actionLabel: AppStrings.explore,
+              onAction: () => context.go('/explore'),
+            ),
           ),
-        ],
+          FeedLoaded() => _HomeFeedGrid(
+            feed: state,
+            scrollController: _scrollController,
+            onRefresh: _onRefresh,
+            revealIndex: _revealIndex,
+            revealKey: _revealKey,
+            firstCardKey: _firstVideoCardOnboardingKey,
+            onVideoTap: (index) => _openVideoFeed(state, index),
+          ),
+        },
       ),
     );
   }
@@ -463,6 +263,173 @@ class _FirstLoadSkeleton extends StatelessWidget {
   }
 }
 
+class _MissingProfileBody extends StatelessWidget {
+  const _MissingProfileBody();
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.person_outline, size: 80, color: Colors.grey[400]),
+          const SizedBox(height: 16),
+          Text(
+            AppStrings.homeProfileNotFoundTitle,
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            AppStrings.homeProfileNotFoundMessage,
+            style: TextStyle(color: Colors.grey[600]),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Lets a non-scrolling body fill the viewport and still pull to refresh.
+class _RefreshableBody extends StatelessWidget {
+  const _RefreshableBody({required this.onRefresh, required this.child});
+
+  final RefreshCallback onRefresh;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return RefreshIndicator(
+          onRefresh: onRefresh,
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: constraints.maxHeight),
+              child: child,
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _HomeFeedGrid extends StatelessWidget {
+  const _HomeFeedGrid({
+    required this.feed,
+    required this.scrollController,
+    required this.onRefresh,
+    required this.revealIndex,
+    required this.revealKey,
+    required this.firstCardKey,
+    required this.onVideoTap,
+  });
+
+  final FeedLoaded feed;
+  final ScrollController scrollController;
+  final RefreshCallback onRefresh;
+  final int? revealIndex;
+  final GlobalKey revealKey;
+  final GlobalKey firstCardKey;
+  final ValueChanged<int> onVideoTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final sections = _chunkFeedSections(feed.videos);
+
+    return RefreshIndicator(
+      onRefresh: onRefresh,
+      child: CustomScrollView(
+        controller: scrollController,
+        physics: const AlwaysScrollableScrollPhysics(),
+        slivers: [
+          for (
+            var sectionIndex = 0;
+            sectionIndex < sections.length;
+            sectionIndex++
+          ) ...[
+            _HomeFeedSectionSliver(
+              section: sections[sectionIndex],
+              revealIndex: revealIndex,
+              revealKey: revealKey,
+              firstCardKey: firstCardKey,
+              onVideoTap: onVideoTap,
+            ),
+            if (sections[sectionIndex].showsAdAfter)
+              SliverToBoxAdapter(
+                child: HomeFeedNativeAdCard(slotIndex: sectionIndex),
+              ),
+          ],
+          if (feed.isLoadingMore && feed.videos.isNotEmpty)
+            const FeedGridSkeletonSliver(
+              itemCount: 2,
+              padding: kFeedGridLoadMorePadding,
+            ),
+          const SliverToBoxAdapter(child: SizedBox(height: 24)),
+        ],
+      ),
+    );
+  }
+}
+
+class _HomeFeedSectionSliver extends StatelessWidget {
+  const _HomeFeedSectionSliver({
+    required this.section,
+    required this.revealIndex,
+    required this.revealKey,
+    required this.firstCardKey,
+    required this.onVideoTap,
+  });
+
+  final _HomeFeedSection section;
+  final int? revealIndex;
+  final GlobalKey revealKey;
+  final GlobalKey firstCardKey;
+  final ValueChanged<int> onVideoTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return SliverPadding(
+      padding: EdgeInsets.fromLTRB(
+        kFeedGridSpacing,
+        section.startVideoIndex == 0 ? kFeedGridSpacing : 0,
+        kFeedGridSpacing,
+        0,
+      ),
+      sliver: SliverGrid(
+        gridDelegate: kFeedGridDelegate,
+        delegate: SliverChildBuilderDelegate((context, localIndex) {
+          final globalIndex = section.startVideoIndex + localIndex;
+          final video = section.videos[localIndex];
+          final card = VideoFeedCard(
+            key: globalIndex == revealIndex ? revealKey : null,
+            videoId: video.id,
+            thumbnailUrl: video.thumbnailUrl ?? '',
+            title: video.title,
+            username: video.username ?? '',
+            sportId: video.sportId,
+            viewCount: video.viewCount,
+            rating: video.averageRating,
+            onTap: () => onVideoTap(globalIndex),
+          );
+
+          if (globalIndex == 0) {
+            return AppOnboardingTarget(
+              targetKey: firstCardKey,
+              title: AppStrings.homeOnboardingFirstVideoTitle,
+              description: AppStrings.homeOnboardingFirstVideoTargetDescription,
+              child: card,
+            );
+          }
+
+          return card;
+        }, childCount: section.videos.length),
+      ),
+    );
+  }
+}
+
 class _HomeFeedSection {
   const _HomeFeedSection({
     required this.startVideoIndex,
@@ -473,4 +440,32 @@ class _HomeFeedSection {
   final int startVideoIndex;
   final List<SportVideo> videos;
   final bool showsAdAfter;
+}
+
+/// Splits [videos] into grid sections, each followed by an ad slot except the
+/// last: the first after [_firstAdInsertionIndex] videos, then every
+/// [_subsequentAdInsertionInterval].
+List<_HomeFeedSection> _chunkFeedSections(List<SportVideo> videos) {
+  final sections = <_HomeFeedSection>[];
+  var start = 0;
+  var nextChunkLength = _firstAdInsertionIndex;
+
+  while (start < videos.length) {
+    final end = (start + nextChunkLength < videos.length)
+        ? start + nextChunkLength
+        : videos.length;
+
+    sections.add(
+      _HomeFeedSection(
+        startVideoIndex: start,
+        videos: videos.sublist(start, end),
+        showsAdAfter: end < videos.length,
+      ),
+    );
+
+    start = end;
+    nextChunkLength = _subsequentAdInsertionInterval;
+  }
+
+  return sections;
 }
